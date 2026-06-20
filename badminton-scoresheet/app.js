@@ -6,9 +6,10 @@ class BadmintonScoreSheet {
         this.STORAGE_KEY = 'badminton-player-names';
         this.HISTORY_KEY = 'badminton-match-history';
         this.THEME_KEY = 'badminton-theme';
-        this.serviceSide = 'right'; // right or left
+        this.servingTeam = 'A';
         this.soundEnabled = true;
         this.initTheme();
+        this.initVoice();
         this.initEventListeners();
         this.loadPlayerNames();
         this.initSounds();
@@ -100,6 +101,204 @@ class BadmintonScoreSheet {
         } catch(e) {}
     }
 
+    // --- Voice Commands ---
+    initVoice() {
+        this.recognition = null;
+        this.isListening = false;
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (SpeechRecognition) {
+            this.recognition = new SpeechRecognition();
+            this.recognition.continuous = true;
+            this.recognition.interimResults = false;
+            this.recognition.lang = 'en-US';
+
+            this.recognition.onresult = (event) => {
+                // Get the latest result
+                const last = event.results.length - 1;
+                const transcript = event.results[last][0].transcript.toLowerCase().trim();
+                this.processVoiceCommand(transcript);
+            };
+
+            this.recognition.onend = () => {
+                // Auto-restart if still in listening mode (keeps mic open)
+                if (this.isListening) {
+                    try { this.recognition.start(); } catch(e) {}
+                } else {
+                    document.getElementById('btn-voice-error').classList.remove('listening');
+                    document.getElementById('btn-voice-error').textContent = '🎤 Voice Command';
+                }
+            };
+
+            this.recognition.onerror = (event) => {
+                if (event.error === 'no-speech' && this.isListening) {
+                    // No speech detected, keep listening
+                    return;
+                }
+                if (event.error === 'aborted' && this.isListening) {
+                    return;
+                }
+                this.isListening = false;
+                document.getElementById('btn-voice-error').classList.remove('listening');
+                document.getElementById('btn-voice-error').textContent = '🎤 Voice Command';
+                this.setVoiceStatus(`Error: ${event.error}`, 'error');
+            };
+        }
+    }
+
+    toggleVoice() {
+        if (!this.recognition) {
+            this.setVoiceStatus('Speech recognition not supported in this browser', 'error');
+            return;
+        }
+        if (this.isListening) {
+            this.isListening = false;
+            this.recognition.stop();
+            document.getElementById('btn-voice-error').classList.remove('listening');
+            document.getElementById('btn-voice-error').textContent = '🎤 Voice Command';
+            document.getElementById('voice-help').classList.add('hidden');
+            this.setVoiceStatus('Voice stopped', '');
+        } else {
+            this.recognition.start();
+            this.isListening = true;
+            document.getElementById('btn-voice-error').classList.add('listening');
+            document.getElementById('btn-voice-error').textContent = '⏹ Listening (tap to stop)';
+            document.getElementById('voice-help').classList.remove('hidden');
+            this.setVoiceStatus('Listening continuously... speak anytime', '');
+        }
+    }
+
+    setVoiceStatus(msg, type) {
+        const el = document.getElementById('voice-status');
+        el.textContent = msg;
+        el.className = 'voice-status' + (type ? ' ' + type : '');
+        if (type) setTimeout(() => { el.textContent = ''; el.className = 'voice-status'; }, 4000);
+    }
+
+    processVoiceCommand(transcript) {
+        this.setVoiceStatus(`Heard: "${transcript}"`, '');
+
+        // Check for point commands: "point A", "point B", "score A", "score B"
+        const pointMatch = transcript.match(/(point|score)\s*(a|b|team\s*a|team\s*b)/i);
+        if (pointMatch) {
+            const team = pointMatch[2].includes('a') ? 'A' : 'B';
+            this.addPoint(team);
+            this.setVoiceStatus(`✓ Point awarded to Team ${team}`, 'success');
+            return;
+        }
+
+        // Quick shortcodes: A1, A2, B1, B2 + error type
+        let team = null;
+        let playerIndex = 0;
+        let matchedPlayerName = null;
+
+        const shortcodeMatch = transcript.match(/\b(a1|a2|b1|b2)\b/i);
+        if (shortcodeMatch) {
+            const code = shortcodeMatch[1].toUpperCase();
+            team = code[0] === 'A' ? 'A' : 'B';
+            playerIndex = code[1] === '2' ? 1 : 0;
+            const teamObj = team === 'A' ? this.match.teamA : this.match.teamB;
+            matchedPlayerName = teamObj.players[playerIndex];
+        }
+
+        // Try to detect player name from transcript to auto-identify team (only if shortcode didn't match)
+        if (!matchedPlayerName && this.match) {
+            const allPlayers = [
+                { name: this.match.teamA.players[0], team: 'A', index: 0 },
+                { name: this.match.teamA.players[1], team: 'A', index: 1 },
+                { name: this.match.teamB.players[0], team: 'B', index: 0 },
+                { name: this.match.teamB.players[1], team: 'B', index: 1 }
+            ];
+
+            // Sort by name length descending to match longer names first
+            allPlayers.sort((a, b) => b.name.length - a.name.length);
+
+            // First pass: try full name match
+            for (const p of allPlayers) {
+                if (p.name && transcript.includes(p.name.toLowerCase())) {
+                    team = p.team;
+                    playerIndex = p.index;
+                    matchedPlayerName = p.name;
+                    break;
+                }
+            }
+
+            // Second pass: try matching individual words in player names (first name or last name)
+            if (!matchedPlayerName) {
+                for (const p of allPlayers) {
+                    if (!p.name) continue;
+                    const nameParts = p.name.toLowerCase().split(/\s+/);
+                    for (const part of nameParts) {
+                        if (part.length >= 3 && transcript.includes(part)) {
+                            team = p.team;
+                            playerIndex = p.index;
+                            matchedPlayerName = p.name;
+                            break;
+                        }
+                    }
+                    if (matchedPlayerName) break;
+                }
+            }
+        }
+
+        // Fallback: try explicit team mention if player name didn't match
+        if (!team) {
+            if (transcript.includes('team a') || transcript.match(/^a\s/)) team = 'A';
+            else if (transcript.includes('team b') || transcript.match(/^b\s/)) team = 'B';
+        }
+
+        if (!team) {
+            this.setVoiceStatus('Could not detect team or player. Say a player name or "Team A/B"', 'error');
+            return;
+        }
+
+        // Detect error type
+        const errorMap = {
+            'net': ['net', 'net fault'],
+            'out': ['out', 'shot out'],
+            'service': ['service', 'service fault', 'serve fault', 'serve'],
+            'double-hit': ['double hit', 'double'],
+            'carry': ['carry', 'sling'],
+            'obstruction': ['obstruction', 'block'],
+            'unforced': ['unforced', 'unforced error'],
+            'other': ['other', 'fault', 'error']
+        };
+
+        let detectedError = 'other';
+        let detectedErrorLabel = 'Other';
+        for (const [key, keywords] of Object.entries(errorMap)) {
+            for (const kw of keywords) {
+                if (transcript.includes(kw)) {
+                    detectedError = key;
+                    const opt = document.querySelector(`#error-type option[value="${key}"]`);
+                    detectedErrorLabel = opt ? opt.text : key;
+                    break;
+                }
+            }
+            if (detectedError !== 'other') break;
+        }
+
+        // If team was found by explicit mention but player wasn't matched by name, check for "player 2"
+        if (!matchedPlayerName) {
+            const teamObj = team === 'A' ? this.match.teamA : this.match.teamB;
+            if (transcript.includes('player 2') || transcript.includes('player two')) {
+                playerIndex = 1;
+            }
+            matchedPlayerName = teamObj.players[playerIndex];
+        }
+
+        // Record error directly without relying on dropdowns
+        this.recordErrorDirect(team, playerIndex, detectedError, detectedErrorLabel);
+
+        // Also sync the dropdowns visually
+        const teamSelect = document.getElementById('error-team');
+        teamSelect.value = team;
+        teamSelect.dispatchEvent(new Event('change'));
+        document.getElementById('error-player').value = String(playerIndex + 1);
+        document.getElementById('error-type').value = detectedError;
+
+        this.setVoiceStatus(`✓ ${detectedErrorLabel} by ${matchedPlayerName} (Team ${team})`, 'success');
+    }
+
     // --- Player Name Autocomplete ---
     getSavedPlayerNames() {
         try {
@@ -155,6 +354,18 @@ class BadmintonScoreSheet {
         document.getElementById('btn-scoreA').addEventListener('click', () => this.addPoint('A'));
         document.getElementById('btn-scoreB').addEventListener('click', () => this.addPoint('B'));
         document.getElementById('btn-record-error').addEventListener('click', () => this.recordError());
+        document.getElementById('btn-voice-error').addEventListener('click', () => this.toggleVoice());
+
+        // Quick error buttons
+        document.querySelectorAll('.btn-quick-error').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const team = e.target.dataset.team;
+                const playerIdx = parseInt(e.target.dataset.player);
+                const errorType = document.getElementById('quick-error-type').value;
+                const errorTypeLabel = document.getElementById('quick-error-type').selectedOptions[0].text;
+                this.recordErrorDirect(team, playerIdx, errorType, errorTypeLabel);
+            });
+        });
         document.getElementById('btn-undo').addEventListener('click', () => this.undoLast());
         document.getElementById('btn-end-match').addEventListener('click', () => this.endMatch());
         document.getElementById('btn-new-match').addEventListener('click', () => this.newMatch());
@@ -229,6 +440,7 @@ class BadmintonScoreSheet {
         document.getElementById('teamA-name').textContent = this.match.teamA.name;
         document.getElementById('teamB-name').textContent = this.match.teamB.name;
         this.updateErrorPlayerOptions();
+        this.updateQuickErrorLabels();
         this.updateServiceDisplay();
         this.showSection('scoreboard-section');
         this.updateDisplay();
@@ -237,15 +449,28 @@ class BadmintonScoreSheet {
     updateErrorPlayerOptions() {
         const teamSelect = document.getElementById('error-team');
         const playerSelect = document.getElementById('error-player');
-        const updatePlayers = () => {
+
+        // Remove previous listener if exists
+        if (this._errorTeamChangeHandler) {
+            teamSelect.removeEventListener('change', this._errorTeamChangeHandler);
+        }
+
+        this._errorTeamChangeHandler = () => {
             const team = teamSelect.value === 'A' ? this.match.teamA : this.match.teamB;
             playerSelect.innerHTML = `
                 <option value="1">${team.players[0]}</option>
                 <option value="2">${team.players[1]}</option>`;
         };
-        teamSelect.removeEventListener('change', updatePlayers);
-        teamSelect.addEventListener('change', updatePlayers);
-        updatePlayers();
+
+        teamSelect.addEventListener('change', this._errorTeamChangeHandler);
+        this._errorTeamChangeHandler();
+    }
+
+    updateQuickErrorLabels() {
+        const namesEl = document.getElementById('quick-error-names');
+        if (this.match) {
+            namesEl.innerHTML = `A1: ${this.match.teamA.players[0]} | A2: ${this.match.teamA.players[1]} | B1: ${this.match.teamB.players[0]} | B2: ${this.match.teamB.players[1]}`;
+        }
     }
 
     getCurrentSet() {
@@ -287,6 +512,11 @@ class BadmintonScoreSheet {
         const playerIndex = parseInt(document.getElementById('error-player').value) - 1;
         const errorType = document.getElementById('error-type').value;
         const errorTypeLabel = document.getElementById('error-type').selectedOptions[0].text;
+        this.recordErrorDirect(team, playerIndex, errorType, errorTypeLabel);
+    }
+
+    recordErrorDirect(team, playerIndex, errorType, errorTypeLabel) {
+        if (this.match.isFinished) return;
         const teamObj = team === 'A' ? this.match.teamA : this.match.teamB;
         const playerName = teamObj.players[playerIndex];
 
