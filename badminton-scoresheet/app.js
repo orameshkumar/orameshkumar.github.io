@@ -382,6 +382,11 @@ class BadmintonScoreSheet {
         document.getElementById('history-date').addEventListener('change', () => this.renderHistoryPage());
         document.getElementById('btn-clear-filters').addEventListener('click', () => this.clearHistoryFilters());
         document.getElementById('btn-clear-history').addEventListener('click', () => this.clearHistory());
+        document.getElementById('btn-select-all-history').addEventListener('click', () => this.toggleSelectAllHistory());
+        document.getElementById('btn-export-history').addEventListener('click', () => this.exportSelectedHistory());
+        document.getElementById('btn-import-history').addEventListener('change', (e) => this.importHistory(e));
+        document.getElementById('btn-leaderboard-filter').addEventListener('click', () => this.renderLeaderboard());
+        document.getElementById('btn-leaderboard-clear').addEventListener('click', () => this.clearLeaderboardFilters());
 
         // Nav tabs
         document.querySelectorAll('.nav-tab').forEach(tab => {
@@ -469,7 +474,7 @@ class BadmintonScoreSheet {
     updateQuickErrorLabels() {
         const namesEl = document.getElementById('quick-error-names');
         if (this.match) {
-            namesEl.innerHTML = `A1: ${this.match.teamA.players[0]} | A2: ${this.match.teamA.players[1]} | B1: ${this.match.teamB.players[0]} | B2: ${this.match.teamB.players[1]}`;
+            namesEl.innerHTML = `<span class="qe-label-a"><strong>A1:</strong> ${this.match.teamA.players[0]}</span> &nbsp;|&nbsp; <span class="qe-label-a"><strong>A2:</strong> ${this.match.teamA.players[1]}</span> &nbsp;|&nbsp; <span class="qe-label-b"><strong>B1:</strong> ${this.match.teamB.players[0]}</span> &nbsp;|&nbsp; <span class="qe-label-b"><strong>B2:</strong> ${this.match.teamB.players[1]}</span>`;
         }
     }
 
@@ -819,12 +824,33 @@ class BadmintonScoreSheet {
             const winnerName = m.winner === 'A' ? m.teamA.name : m.teamB.name;
             const scores = m.sets.map(s => `${s.scoreA}-${s.scoreB}`).join(', ');
             return `<div class="history-item">
-                <div class="match-date">${date} ${time} | Duration: ${m.duration}</div>
+                <div class="history-item-header">
+                    <label class="history-checkbox"><input type="checkbox" class="match-select" data-id="${m.id}"></label>
+                    <div class="match-date">${date} ${time} | Duration: ${m.duration}</div>
+                    <button class="btn-delete-match" data-id="${m.id}" title="Delete this match">✕</button>
+                </div>
                 <div class="match-teams">${m.teamA.name} vs ${m.teamB.name}</div>
                 <div class="match-score">Sets: ${m.setsWon.A}-${m.setsWon.B} (${scores})</div>
                 <div class="match-winner">🏆 Winner: ${winnerName}</div>
             </div>`;
         }).join('');
+
+        // Attach delete handlers
+        container.querySelectorAll('.btn-delete-match').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const id = parseInt(e.target.dataset.id);
+                this.deleteMatchFromHistory(id);
+            });
+        });
+    }
+
+    deleteMatchFromHistory(id) {
+        if (!confirm('Delete this match from history?')) return;
+        let history = this.getMatchHistory();
+        history = history.filter(m => m.id !== id);
+        localStorage.setItem(this.HISTORY_KEY, JSON.stringify(history));
+        this.renderHistoryPage();
     }
 
     clearHistoryFilters() {
@@ -840,6 +866,74 @@ class BadmintonScoreSheet {
         }
     }
 
+    toggleSelectAllHistory() {
+        const checkboxes = document.querySelectorAll('.match-select');
+        const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+        checkboxes.forEach(cb => cb.checked = !allChecked);
+    }
+
+    exportSelectedHistory() {
+        const selectedIds = Array.from(document.querySelectorAll('.match-select:checked'))
+            .map(cb => parseInt(cb.dataset.id));
+
+        if (selectedIds.length === 0) {
+            alert('Please select at least one match to export.');
+            return;
+        }
+
+        const history = this.getMatchHistory();
+        const selected = history.filter(m => selectedIds.includes(m.id));
+
+        const blob = new Blob([JSON.stringify(selected, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        const date = new Date().toISOString().split('T')[0];
+        a.href = url;
+        a.download = `badminton-history_${date}_${selected.length}matches.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }
+
+    importHistory(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const imported = JSON.parse(e.target.result);
+                if (!Array.isArray(imported)) {
+                    alert('Invalid file format. Expected a JSON array of matches.');
+                    return;
+                }
+
+                const history = this.getMatchHistory();
+                const existingIds = new Set(history.map(m => m.id));
+                let added = 0;
+
+                imported.forEach(m => {
+                    if (!existingIds.has(m.id)) {
+                        history.push(m);
+                        added++;
+                    }
+                });
+
+                // Sort by date descending
+                history.sort((a, b) => new Date(b.date) - new Date(a.date));
+                localStorage.setItem(this.HISTORY_KEY, JSON.stringify(history));
+                this.renderHistoryPage();
+                alert(`Imported ${added} new match(es). ${imported.length - added} duplicate(s) skipped.`);
+            } catch (err) {
+                alert('Error reading file. Please ensure it is a valid JSON export.');
+            }
+        };
+        reader.readAsText(file);
+        // Reset input so same file can be imported again
+        event.target.value = '';
+    }
+
     // --- Leaderboard ---
     showLeaderboard() {
         document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
@@ -850,9 +944,19 @@ class BadmintonScoreSheet {
 
     renderLeaderboard() {
         const history = this.getMatchHistory();
+        const fromDate = document.getElementById('leaderboard-from').value;
+        const toDate = document.getElementById('leaderboard-to').value;
+
+        const filtered = history.filter(m => {
+            const matchDate = m.date.split('T')[0];
+            if (fromDate && matchDate < fromDate) return false;
+            if (toDate && matchDate > toDate) return false;
+            return true;
+        });
+
         const playerStats = {};
 
-        history.forEach(m => {
+        filtered.forEach(m => {
             const allPlayers = [
                 { name: m.teamA.players[0], team: 'A' },
                 { name: m.teamA.players[1], team: 'A' },
@@ -878,13 +982,14 @@ class BadmintonScoreSheet {
             .sort((a, b) => b.wins - a.wins || b.winRate - a.winRate);
 
         const container = document.getElementById('leaderboard-content');
+        const dateInfo = (fromDate || toDate) ? `<p style="color:var(--text-muted); font-size:0.85rem; margin-bottom:12px;">Showing: ${fromDate || 'start'} → ${toDate || 'now'} (${filtered.length} matches)</p>` : '';
 
         if (sorted.length === 0) {
-            container.innerHTML = '<p style="text-align:center; color:var(--text-muted); padding:40px;">No match data yet. Play some matches to see the leaderboard!</p>';
+            container.innerHTML = dateInfo + '<p style="text-align:center; color:var(--text-muted); padding:40px;">No match data found for this date range.</p>';
             return;
         }
 
-        let html = `<table>
+        let html = dateInfo + `<table>
             <tr><th>#</th><th>Player</th><th>W</th><th>L</th><th>Played</th><th>Win %</th></tr>`;
         sorted.forEach((p, i) => {
             const rankClass = i < 3 ? `rank-${i+1}` : '';
@@ -896,6 +1001,12 @@ class BadmintonScoreSheet {
         });
         html += '</table>';
         container.innerHTML = html;
+    }
+
+    clearLeaderboardFilters() {
+        document.getElementById('leaderboard-from').value = '';
+        document.getElementById('leaderboard-to').value = '';
+        this.renderLeaderboard();
     }
 
     // --- Utilities ---

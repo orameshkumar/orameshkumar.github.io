@@ -208,13 +208,25 @@
             </div>
             <div id="history-list" class="history-list"></div>
             <div class="history-actions">
-                <button class="btn btn-error btn-sm" id="btn-clear-history">🗑 Clear All History</button>
+                <button class="btn btn-secondary btn-sm" id="btn-select-all-history">☑ Select All</button>
+                <button class="btn btn-secondary btn-sm" id="btn-export-history">📤 Export Selected</button>
+                <label class="btn btn-secondary btn-sm import-label">
+                    📥 Import
+                    <input type="file" id="btn-import-history" accept=".json" style="display:none;">
+                </label>
+                <button class="btn btn-error btn-sm" id="btn-clear-history">🗑 Clear All</button>
             </div>
         </section>
 
         <!-- Leaderboard Page -->
         <section id="leaderboard-page" class="section hidden">
             <h2>🏆 Player Leaderboard</h2>
+            <div class="leaderboard-filters">
+                <label>From: <input type="date" id="leaderboard-from" class="filter-input"></label>
+                <label>To: <input type="date" id="leaderboard-to" class="filter-input"></label>
+                <button class="btn btn-secondary btn-sm" id="btn-leaderboard-filter">Apply</button>
+                <button class="btn btn-secondary btn-sm" id="btn-leaderboard-clear">Clear</button>
+            </div>
             <div id="leaderboard-content" class="leaderboard-content"></div>
         </section>
     </div>

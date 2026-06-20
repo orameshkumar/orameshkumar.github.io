@@ -462,9 +462,31 @@ h3 {
 }
 
 .quick-error-names {
-    margin-top: 6px;
-    font-size: 0.8rem;
-    color: var(--text-faint);
+    margin-top: 10px;
+    font-size: 0.95rem;
+    color: var(--text-secondary);
+    font-weight: 500;
+    padding: 8px 12px;
+    background: var(--history-bg);
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    line-height: 1.6;
+}
+
+.qe-label-a {
+    color: #64ffda;
+}
+
+.qe-label-b {
+    color: #ffab40;
+}
+
+[data-theme="light"] .qe-label-a {
+    color: #00796b;
+}
+
+[data-theme="light"] .qe-label-b {
+    color: #e65100;
 }
 
 .error-details {
@@ -702,6 +724,47 @@ h3 {
     margin-bottom: 6px;
 }
 
+.history-item-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+    gap: 10px;
+}
+
+.history-checkbox {
+    display: flex;
+    align-items: center;
+}
+
+.history-checkbox input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+    accent-color: var(--accent-primary);
+}
+
+.btn-delete-match {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: 1px solid rgba(255, 82, 82, 0.3);
+    background: rgba(255, 82, 82, 0.1);
+    color: #ff5252;
+    font-size: 0.9rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+
+.btn-delete-match:hover {
+    background: rgba(255, 82, 82, 0.3);
+    border-color: #ff5252;
+    transform: scale(1.1);
+}
+
 .history-item .match-teams {
     font-size: 1rem;
     font-weight: 600;
@@ -723,9 +786,32 @@ h3 {
 .history-actions {
     margin-top: 16px;
     text-align: center;
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+.import-label {
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
 }
 
 /* Leaderboard */
+.leaderboard-filters {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.leaderboard-filters label {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+}
+
 .leaderboard-content table {
     width: 100%;
     border-collapse: collapse;
