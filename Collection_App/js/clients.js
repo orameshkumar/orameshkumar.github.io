@@ -16,6 +16,7 @@ var ClientMaster = (function() {
     var amountInput = document.getElementById('client-amount');
     var durationInput = document.getElementById('client-duration');
     var startDateInput = document.getElementById('client-start-date');
+    var searchInput = document.getElementById('client-search');
 
     if (addBtn) {
       addBtn.addEventListener('click', showAddForm);
@@ -43,6 +44,13 @@ var ClientMaster = (function() {
       startDateInput.addEventListener('input', autoRecalculate);
     }
 
+    // Search filter
+    if (searchInput) {
+      searchInput.addEventListener('input', function() {
+        renderClientList(searchInput.value.trim());
+      });
+    }
+
     renderClientList();
   }
 
@@ -68,7 +76,7 @@ var ClientMaster = (function() {
   /**
    * Render the list of all clients as card elements.
    */
-  async function renderClientList() {
+  async function renderClientList(searchTerm) {
     var listContainer = document.getElementById('client-list');
     if (!listContainer) return;
 
@@ -77,6 +85,19 @@ var ClientMaster = (function() {
 
       if (!clients || clients.length === 0) {
         listContainer.innerHTML = '<p class="empty-message">No clients added yet. Tap + to add a client.</p>';
+        return;
+      }
+
+      // Filter by search term
+      if (searchTerm) {
+        var lowerSearch = searchTerm.toLowerCase();
+        clients = clients.filter(function(c) {
+          return c.name.toLowerCase().indexOf(lowerSearch) !== -1;
+        });
+      }
+
+      if (clients.length === 0) {
+        listContainer.innerHTML = '<p class="empty-message">No clients match your search.</p>';
         return;
       }
 

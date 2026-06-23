@@ -12,6 +12,9 @@ var Collection = (function() {
    */
   function init() {
     var dateInput = document.getElementById('collection-date');
+    var searchInput = document.getElementById('collection-search');
+    var paidFilter = document.getElementById('collection-filter-paid');
+
     if (dateInput) {
       // Default to today
       if (!dateInput.value) {
@@ -20,6 +23,22 @@ var Collection = (function() {
       dateInput.addEventListener('change', function() {
         paidClientsToday = {}; // Reset paid tracking on date change
         renderCollectionList(dateInput.value);
+      });
+    }
+
+    // Search filter
+    if (searchInput) {
+      searchInput.addEventListener('input', function() {
+        var currentDate = dateInput ? dateInput.value : getTodayISO();
+        renderCollectionList(currentDate);
+      });
+    }
+
+    // Paid today filter
+    if (paidFilter) {
+      paidFilter.addEventListener('change', function() {
+        var currentDate = dateInput ? dateInput.value : getTodayISO();
+        renderCollectionList(currentDate);
       });
     }
 
@@ -40,11 +59,18 @@ var Collection = (function() {
   /**
    * Render the list of clients with pending payments for the given date.
    * Clients who have already paid on the selected date are highlighted.
+   * Supports search by client name and "paid today" filter.
    * @param {string} date - ISO date string (YYYY-MM-DD)
    */
   async function renderCollectionList(date) {
     var listContainer = document.getElementById('collection-list');
     if (!listContainer) return;
+
+    // Get filter values
+    var searchInput = document.getElementById('collection-search');
+    var paidFilter = document.getElementById('collection-filter-paid');
+    var searchTerm = searchInput ? searchInput.value.trim().toLowerCase() : '';
+    var showPaidOnly = paidFilter ? paidFilter.checked : false;
 
     try {
       var clients = await DB.getAllClients();
@@ -78,8 +104,25 @@ var Collection = (function() {
         }
       }
 
+      // Apply search filter
+      if (searchTerm) {
+        pendingClients = pendingClients.filter(function(item) {
+          return item.client.name.toLowerCase().indexOf(searchTerm) !== -1;
+        });
+      }
+
+      // Apply "not paid today" filter
+      if (showPaidOnly) {
+        pendingClients = pendingClients.filter(function(item) {
+          return !item.paidToday;
+        });
+      }
+
       if (pendingClients.length === 0) {
-        listContainer.innerHTML = '<p class="empty-message">No pending collections for this date.</p>';
+        var msg = searchTerm || showPaidOnly
+          ? 'No clients match your filter.'
+          : 'No pending collections for this date.';
+        listContainer.innerHTML = '<p class="empty-message">' + msg + '</p>';
         return;
       }
 

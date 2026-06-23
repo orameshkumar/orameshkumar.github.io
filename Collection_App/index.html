@@ -24,6 +24,9 @@
         <!-- Client Master Section -->
         <section id="clients-section" class="screen active" aria-label="Client Master">
             <div class="screen-content">
+                <div class="search-bar">
+                    <input type="text" id="client-search" placeholder="🔍 Search by client name..." aria-label="Search clients by name">
+                </div>
                 <div id="client-list" class="client-list" aria-live="polite"></div>
                 <button id="add-client-btn" class="fab" aria-label="Add new client">+</button>
 
@@ -83,6 +86,13 @@
                 <div class="collection-date-picker">
                     <label for="collection-date">Collection Date:</label>
                     <input type="date" id="collection-date" aria-label="Select collection date">
+                </div>
+                <div class="search-bar">
+                    <input type="text" id="collection-search" placeholder="🔍 Search by client name..." aria-label="Search collection by client name">
+                    <label class="filter-checkbox">
+                        <input type="checkbox" id="collection-filter-paid">
+                        <span>Not paid today</span>
+                    </label>
                 </div>
                 <div id="collection-list" class="collection-list" aria-live="polite"></div>
 
