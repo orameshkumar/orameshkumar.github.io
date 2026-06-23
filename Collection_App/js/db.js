@@ -329,6 +329,31 @@ const DB = (function () {
 
   // ─── Public API ────────────────────────────────────────────────────────────
 
+  /**
+   * Delete a single payment by ID.
+   * @param {string} id - The payment ID to delete
+   * @returns {Promise<undefined>}
+   */
+  function deletePayment(id) {
+    return new Promise((resolve, reject) => {
+      try {
+        const store = getStore('payments', 'readwrite');
+        const request = store.delete(id);
+
+        request.onsuccess = () => {
+          resolve();
+        };
+
+        request.onerror = (event) => {
+          const error = event.target.error;
+          reject(new Error('Failed to delete payment: ' + (error ? error.message : 'Unknown error')));
+        };
+      } catch (e) {
+        reject(new Error('Failed to delete payment: ' + e.message));
+      }
+    });
+  }
+
   return {
     init,
     addClient,
@@ -337,6 +362,7 @@ const DB = (function () {
     updateClient,
     deleteClient,
     addPayment,
+    deletePayment,
     getPaymentsByClient,
     getPaymentsByDateRange,
     getPaymentsByClientAndDate,

@@ -720,6 +720,22 @@ body {
   color: var(--color-primary);
 }
 
+.history-item .btn-delete-payment {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 0.875rem;
+  padding: 4px;
+  opacity: 0.6;
+  transition: opacity 0.2s;
+  flex-shrink: 0;
+}
+
+.history-item .btn-delete-payment:hover,
+.history-item .btn-delete-payment:focus {
+  opacity: 1;
+}
+
 /* --- Report Table --- */
 .report-table {
   width: 100%;

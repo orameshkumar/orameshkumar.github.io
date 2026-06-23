@@ -73,6 +73,7 @@ var PaymentHistory = (function() {
           // Use 'Unknown' if client lookup fails
         }
         enrichedPayments.push({
+          id: payment.id,
           date: payment.date,
           clientName: clientName,
           amount: payment.amount
@@ -86,7 +87,7 @@ var PaymentHistory = (function() {
         return 0;
       });
 
-      // Render as single-line rows
+      // Render as single-line rows with delete button
       var html = '';
       for (var j = 0; j < enrichedPayments.length; j++) {
         var p = enrichedPayments[j];
@@ -94,10 +95,20 @@ var PaymentHistory = (function() {
           '<span class="history-date">' + formatDate(p.date) + '</span>' +
           '<span class="history-client">' + escapeHtml(p.clientName) + '</span>' +
           '<span class="history-amount">₹' + p.amount.toFixed(2) + '</span>' +
+          '<button class="btn-delete-payment" data-payment-id="' + p.id + '" aria-label="Delete payment for ' + escapeHtml(p.clientName) + '">🗑️</button>' +
         '</div>';
       }
 
       listContainer.innerHTML = html;
+
+      // Attach delete handlers
+      var deleteBtns = listContainer.querySelectorAll('.btn-delete-payment');
+      deleteBtns.forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          var paymentId = btn.getAttribute('data-payment-id');
+          deletePayment(paymentId);
+        });
+      });
     } catch (e) {
       listContainer.innerHTML = '<p class="empty-message">Could not load data. Please try again.</p>';
       console.error('Error loading history:', e);
@@ -113,6 +124,23 @@ var PaymentHistory = (function() {
   function validateDateRange(start, end) {
     if (!start || !end) return true;
     return start <= end;
+  }
+
+  /**
+   * Delete a payment record after confirmation.
+   * @param {string} paymentId - The payment ID to delete
+   */
+  async function deletePayment(paymentId) {
+    var confirmed = confirm('Are you sure you want to delete this payment record?');
+    if (!confirmed) return;
+
+    try {
+      await DB.deletePayment(paymentId);
+      loadAndRenderHistory();
+    } catch (e) {
+      alert('Could not delete payment: ' + (e.message || 'Unknown error'));
+      console.error('Error deleting payment:', e);
+    }
   }
 
   // ─── Helpers ───
