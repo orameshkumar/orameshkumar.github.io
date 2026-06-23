@@ -1,282 +1,275 @@
-/**
- * ABC Provisional Store - Reports Module
- * Provides sales reporting with Total, Day-wise, and Item-wise views.
- * Depends on: DB, Utils
- */
-const Reports = (function () {
+// Reports module — day-wise and client-wise collection reports with print support
+
+var Reports = (function() {
   'use strict';
 
-  let currentReportType = 'total';
-
-  // ─── Initialization ─────────────────────────────────────────────────────────
+  var currentReportType = 'day-wise';
 
   /**
    * Initialize the Reports module.
-   * Sets up event listeners, default date range, and renders default view.
+   * Sets up date range, report type tabs, and print button.
    */
   function init() {
-    _setupTabNavigation();
-    _setupGenerateButton();
-    _setDefaultDateRange();
-  }
+    var startDateInput = document.getElementById('report-start-date');
+    var endDateInput = document.getElementById('report-end-date');
+    var printBtn = document.getElementById('print-report-btn');
 
-  /**
-   * Set up click listeners on .report-tab buttons for sub-tab navigation.
-   */
-  function _setupTabNavigation() {
-    var tabs = document.querySelectorAll('.report-tab');
-    tabs.forEach(function (tab) {
-      tab.addEventListener('click', function () {
-        // Update active state
-        tabs.forEach(function (t) { t.classList.remove('active'); });
-        tab.classList.add('active');
+    // Default: first of current month to today
+    var today = getTodayISO();
+    var firstOfMonth = getFirstOfMonthISO();
 
-        // Store selected type and generate report
-        currentReportType = tab.getAttribute('data-report');
-        _generateReport();
-      });
-    });
-  }
-
-  /**
-   * Set up click listener on the Generate button.
-   */
-  function _setupGenerateButton() {
-    var btn = document.getElementById('report-generate-btn');
-    if (btn) {
-      btn.addEventListener('click', function () {
-        _generateReport();
-      });
+    if (startDateInput && !startDateInput.value) {
+      startDateInput.value = firstOfMonth;
     }
-  }
-
-  /**
-   * Set date inputs to default range: 1st of current month to today.
-   */
-  function _setDefaultDateRange() {
-    var today = new Date();
-    var firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-
-    var fromInput = document.getElementById('report-date-from');
-    var toInput = document.getElementById('report-date-to');
-
-    if (fromInput) {
-      fromInput.value = _toISODate(firstOfMonth);
-    }
-    if (toInput) {
-      toInput.value = _toISODate(today);
-    }
-  }
-
-  // ─── Report Generation ──────────────────────────────────────────────────────
-
-  /**
-   * Generate report based on current report type and date range.
-   */
-  function _generateReport() {
-    var fromInput = document.getElementById('report-date-from');
-    var toInput = document.getElementById('report-date-to');
-    var startDate = fromInput ? fromInput.value : '';
-    var endDate = toInput ? toInput.value : '';
-
-    if (!startDate || !endDate) {
-      _renderContent('<p class="report-empty">Please select a date range.</p>');
-      return;
+    if (endDateInput && !endDateInput.value) {
+      endDateInput.value = today;
     }
 
-    DB.getBillsByDateRange(startDate, endDate).then(function (bills) {
-      switch (currentReportType) {
-        case 'total':
-          _renderTotalView(bills, startDate, endDate);
-          break;
-        case 'day-wise':
-          _renderDayWiseView(bills);
-          break;
-        case 'item-wise':
-          _renderItemWiseView(bills);
-          break;
-        default:
-          _renderTotalView(bills, startDate, endDate);
-      }
-    }).catch(function (err) {
-      _renderContent('<p class="report-empty">Error loading report data.</p>');
-      console.error('Reports: Error generating report', err);
-    });
-  }
-
-  // ─── Total Sales View (8.2) ─────────────────────────────────────────────────
-
-  /**
-   * Render total sales summary card.
-   * @param {Array} bills - Array of bill objects in date range
-   * @param {string} startDate - Start date (YYYY-MM-DD)
-   * @param {string} endDate - End date (YYYY-MM-DD)
-   */
-  function _renderTotalView(bills, startDate, endDate) {
-    var totalSales = 0;
-    bills.forEach(function (bill) {
-      totalSales += bill.total;
-    });
-
-    var formattedTotal = Utils.formatCurrency(totalSales);
-    var formattedFrom = Utils.formatDate(startDate);
-    var formattedTo = Utils.formatDate(endDate);
-    var billCount = bills.length;
-
-    var html = '<div class="report-summary">' +
-      '<div class="report-summary-amount">' + formattedTotal + '</div>' +
-      '<div class="report-summary-label">Total Sales</div>' +
-      '<div class="report-summary-subtext">' +
-        formattedFrom + ' to ' + formattedTo + ' &middot; ' + billCount + ' bill' + (billCount !== 1 ? 's' : '') +
-      '</div>' +
-    '</div>';
-
-    _renderContent(html);
-  }
-
-  // ─── Day-wise View (8.3) ────────────────────────────────────────────────────
-
-  /**
-   * Render day-wise report: grouped by date, sorted descending.
-   * @param {Array} bills - Array of bill objects in date range
-   */
-  function _renderDayWiseView(bills) {
-    if (bills.length === 0) {
-      _renderContent('<p class="report-empty">No bills found in the selected date range.</p>');
-      return;
-    }
-
-    // Group bills by date
-    var grouped = {};
-    bills.forEach(function (bill) {
-      var date = bill.date;
-      if (!grouped[date]) {
-        grouped[date] = { total: 0, count: 0 };
-      }
-      grouped[date].total += bill.total;
-      grouped[date].count += 1;
-    });
-
-    // Sort dates descending
-    var dates = Object.keys(grouped).sort(function (a, b) {
-      return b.localeCompare(a);
-    });
-
-    // Build table
-    var html = '<table class="report-table">' +
-      '<thead><tr>' +
-        '<th>Date</th>' +
-        '<th>Bills</th>' +
-        '<th>Daily Total</th>' +
-      '</tr></thead>' +
-      '<tbody>';
-
-    dates.forEach(function (date) {
-      var entry = grouped[date];
-      html += '<tr>' +
-        '<td>' + Utils.formatDate(date) + '</td>' +
-        '<td>' + entry.count + '</td>' +
-        '<td>' + Utils.formatCurrency(entry.total) + '</td>' +
-      '</tr>';
-    });
-
-    html += '</tbody></table>';
-
-    _renderContent(html);
-  }
-
-  // ─── Item-wise View (8.4) ───────────────────────────────────────────────────
-
-  /**
-   * Render item-wise report: aggregated quantities and revenue per item.
-   * @param {Array} bills - Array of bill objects in date range
-   */
-  function _renderItemWiseView(bills) {
-    if (bills.length === 0) {
-      _renderContent('<p class="report-empty">No bills found in the selected date range.</p>');
-      return;
-    }
-
-    // Flatten all lineItems and group by itemName
-    var grouped = {};
-    bills.forEach(function (bill) {
-      if (bill.lineItems && bill.lineItems.length > 0) {
-        bill.lineItems.forEach(function (item) {
-          var name = item.itemName;
-          if (!grouped[name]) {
-            grouped[name] = { totalGrams: 0, totalRevenue: 0 };
-          }
-          grouped[name].totalGrams += item.quantityGrams;
-          grouped[name].totalRevenue += item.lineTotal;
+    // Report type tabs
+    var reportTabs = document.querySelectorAll('.report-tab');
+    reportTabs.forEach(function(tab) {
+      tab.addEventListener('click', function() {
+        // Update active tab
+        reportTabs.forEach(function(t) {
+          t.classList.remove('active');
+          t.setAttribute('aria-pressed', 'false');
         });
-      }
+        tab.classList.add('active');
+        tab.setAttribute('aria-pressed', 'true');
+
+        currentReportType = tab.getAttribute('data-report');
+        loadReport();
+      });
     });
 
-    var itemNames = Object.keys(grouped);
+    // Date change listeners
+    if (startDateInput) {
+      startDateInput.addEventListener('change', loadReport);
+    }
+    if (endDateInput) {
+      endDateInput.addEventListener('change', loadReport);
+    }
 
-    if (itemNames.length === 0) {
-      _renderContent('<p class="report-empty">No line items found in the selected date range.</p>');
+    // Print button
+    if (printBtn) {
+      printBtn.addEventListener('click', printReport);
+    }
+
+    loadReport();
+  }
+
+  /**
+   * Load and render the currently selected report type.
+   */
+  async function loadReport() {
+    var start = document.getElementById('report-start-date').value;
+    var end = document.getElementById('report-end-date').value;
+
+    if (!start || !end || start > end) {
+      var tableContainer = document.getElementById('report-table');
+      if (tableContainer) tableContainer.innerHTML = '<p class="empty-message">Please select a valid date range.</p>';
       return;
     }
 
-    // Sort by revenue descending
-    itemNames.sort(function (a, b) {
-      return grouped[b].totalRevenue - grouped[a].totalRevenue;
-    });
-
-    // Build table
-    var html = '<table class="report-table">' +
-      '<thead><tr>' +
-        '<th>Item Name</th>' +
-        '<th>Total Qty (KG)</th>' +
-        '<th>Total Revenue</th>' +
-      '</tr></thead>' +
-      '<tbody>';
-
-    itemNames.forEach(function (name) {
-      var entry = grouped[name];
-      var kg = (entry.totalGrams / 1000).toFixed(2);
-      html += '<tr>' +
-        '<td>' + name + '</td>' +
-        '<td>' + kg + '</td>' +
-        '<td>' + Utils.formatCurrency(entry.totalRevenue) + '</td>' +
-      '</tr>';
-    });
-
-    html += '</tbody></table>';
-
-    _renderContent(html);
-  }
-
-  // ─── Helpers ────────────────────────────────────────────────────────────────
-
-  /**
-   * Render HTML content into the report container.
-   * @param {string} html - HTML string to render
-   */
-  function _renderContent(html) {
-    var container = document.getElementById('report-content');
-    if (container) {
-      container.innerHTML = html;
+    if (currentReportType === 'day-wise') {
+      var dayData = await generateDayWiseReport(start, end);
+      renderReport(dayData, 'day-wise');
+    } else {
+      var clientData = await generateClientWiseReport(start, end);
+      renderReport(clientData, 'client-wise');
     }
   }
 
   /**
-   * Convert a Date object to YYYY-MM-DD string.
-   * @param {Date} date - Date object
-   * @returns {string} ISO date string e.g. "2025-01-15"
+   * Generate a day-wise report: aggregate payments by date.
+   * @param {string} start - Start date ISO
+   * @param {string} end - End date ISO
+   * @returns {Array} [{date, total}] sorted by date descending
    */
-  function _toISODate(date) {
-    var y = date.getFullYear();
-    var m = String(date.getMonth() + 1).padStart(2, '0');
-    var d = String(date.getDate()).padStart(2, '0');
-    return y + '-' + m + '-' + d;
+  async function generateDayWiseReport(start, end) {
+    try {
+      var payments = await DB.getPaymentsByDateRange(start, end);
+
+      if (!payments || payments.length === 0) return [];
+
+      // Group by date
+      var dateMap = {};
+      for (var i = 0; i < payments.length; i++) {
+        var date = payments[i].date;
+        if (!dateMap[date]) {
+          dateMap[date] = 0;
+        }
+        dateMap[date] += payments[i].amount;
+      }
+
+      // Convert to array and sort descending by date
+      var result = [];
+      for (var d in dateMap) {
+        if (dateMap.hasOwnProperty(d)) {
+          result.push({ date: d, total: Math.round(dateMap[d] * 100) / 100 });
+        }
+      }
+
+      result.sort(function(a, b) {
+        if (a.date > b.date) return -1;
+        if (a.date < b.date) return 1;
+        return 0;
+      });
+
+      return result;
+    } catch (e) {
+      console.error('Error generating day-wise report:', e);
+      return [];
+    }
   }
 
-  // ─── Public API ─────────────────────────────────────────────────────────────
+  /**
+   * Generate a client-wise report: aggregate payments by client.
+   * @param {string} start - Start date ISO
+   * @param {string} end - End date ISO
+   * @returns {Array} [{name, total}] sorted alphabetically by name
+   */
+  async function generateClientWiseReport(start, end) {
+    try {
+      var payments = await DB.getPaymentsByDateRange(start, end);
+
+      if (!payments || payments.length === 0) return [];
+
+      // Group by clientId
+      var clientMap = {};
+      for (var i = 0; i < payments.length; i++) {
+        var clientId = payments[i].clientId;
+        if (!clientMap[clientId]) {
+          clientMap[clientId] = 0;
+        }
+        clientMap[clientId] += payments[i].amount;
+      }
+
+      // Resolve client names
+      var result = [];
+      for (var id in clientMap) {
+        if (clientMap.hasOwnProperty(id)) {
+          var name = 'Unknown';
+          try {
+            var client = await DB.getClient(id);
+            if (client) name = client.name;
+          } catch (e) {
+            // Use 'Unknown'
+          }
+          result.push({ name: name, total: Math.round(clientMap[id] * 100) / 100 });
+        }
+      }
+
+      // Sort alphabetically by name
+      result.sort(function(a, b) {
+        return a.name.localeCompare(b.name);
+      });
+
+      return result;
+    } catch (e) {
+      console.error('Error generating client-wise report:', e);
+      return [];
+    }
+  }
+
+  /**
+   * Render the report data as an HTML table.
+   * @param {Array} data - Report data array
+   * @param {string} type - 'day-wise' or 'client-wise'
+   */
+  function renderReport(data, type) {
+    var tableContainer = document.getElementById('report-table');
+    if (!tableContainer) return;
+
+    if (!data || data.length === 0) {
+      tableContainer.innerHTML = '<p class="empty-message">No collection data available for the selected period.</p>';
+      return;
+    }
+
+    var html = '<table>';
+
+    if (type === 'day-wise') {
+      html += '<thead><tr><th>Date</th><th class="amount-cell">Amount (₹)</th></tr></thead>';
+      html += '<tbody>';
+      var grandTotal = 0;
+      for (var i = 0; i < data.length; i++) {
+        html += '<tr><td>' + formatDate(data[i].date) + '</td>' +
+                '<td class="amount-cell">' + data[i].total.toFixed(2) + '</td></tr>';
+        grandTotal += data[i].total;
+      }
+      html += '<tr class="grand-total-row"><td><strong>Total</strong></td>' +
+              '<td class="amount-cell"><strong>' + grandTotal.toFixed(2) + '</strong></td></tr>';
+      html += '</tbody>';
+    } else {
+      html += '<thead><tr><th>Client Name</th><th class="amount-cell">Amount (₹)</th></tr></thead>';
+      html += '<tbody>';
+      var clientGrandTotal = 0;
+      for (var j = 0; j < data.length; j++) {
+        html += '<tr><td>' + escapeHtml(data[j].name) + '</td>' +
+                '<td class="amount-cell">' + data[j].total.toFixed(2) + '</td></tr>';
+        clientGrandTotal += data[j].total;
+      }
+      html += '<tr class="grand-total-row"><td><strong>Total</strong></td>' +
+              '<td class="amount-cell"><strong>' + clientGrandTotal.toFixed(2) + '</strong></td></tr>';
+      html += '</tbody>';
+    }
+
+    html += '</table>';
+    tableContainer.innerHTML = html;
+  }
+
+  /**
+   * Trigger the browser print dialog with print-optimized layout.
+   */
+  function printReport() {
+    // Add print header and date range temporarily
+    var appName = Settings.getAppName();
+    var start = document.getElementById('report-start-date').value;
+    var end = document.getElementById('report-end-date').value;
+
+    var printHeader = document.querySelector('.print-header');
+    var printDateRange = document.querySelector('.print-date-range');
+
+    if (printHeader) printHeader.textContent = appName;
+    if (printDateRange) printDateRange.textContent = formatDate(start) + ' to ' + formatDate(end);
+
+    window.print();
+  }
+
+  // ─── Helpers ───
+
+  function getTodayISO() {
+    return new Date().toISOString().split('T')[0];
+  }
+
+  function getFirstOfMonthISO() {
+    var now = new Date();
+    var first = new Date(now.getFullYear(), now.getMonth(), 1);
+    return first.toISOString().split('T')[0];
+  }
+
+  function formatDate(isoDate) {
+    if (!isoDate) return '';
+    var parts = isoDate.split('-');
+    if (parts.length === 3) {
+      return parts[2] + '/' + parts[1] + '/' + parts[0]; // DD/MM/YYYY
+    }
+    return isoDate;
+  }
+
+  function escapeHtml(str) {
+    if (!str) return '';
+    return str.replace(/&/g, '&amp;')
+              .replace(/</g, '&lt;')
+              .replace(/>/g, '&gt;')
+              .replace(/"/g, '&quot;');
+  }
 
   return {
-    init: init
+    init: init,
+    generateDayWiseReport: generateDayWiseReport,
+    generateClientWiseReport: generateClientWiseReport,
+    renderReport: renderReport,
+    printReport: printReport
   };
-
 })();

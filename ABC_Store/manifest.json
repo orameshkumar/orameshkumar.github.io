@@ -1,12 +1,12 @@
 {
-  "name": "ABC Provisional Store",
-  "short_name": "ABC Store",
-  "description": "Offline billing and inventory management for ABC Provisional Store",
+  "name": "ABC Debt Collection",
+  "short_name": "ABC Debt Collection",
+  "description": "Offline debt collection and EMI tracking PWA",
   "start_url": "./index.html",
   "scope": ".",
   "display": "standalone",
   "orientation": "portrait",
-  "theme_color": "#1a73e8",
+  "theme_color": "#1976d2",
   "background_color": "#ffffff",
   "icons": [
     {
@@ -34,5 +34,5 @@
       "purpose": "maskable"
     }
   ],
-  "categories": ["shopping", "business"]
+  "categories": ["finance", "business"]
 }

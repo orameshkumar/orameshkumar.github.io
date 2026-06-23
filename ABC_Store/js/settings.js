@@ -1,212 +1,223 @@
-/**
- * settings.js - UPI Settings Module for ABC Provisional Store
- *
- * Stores and retrieves UPI payment settings from localStorage.
- * Provides UPI QR code generation after bill finalization.
- */
+// Settings module — manages UPI_ID and AppName via localStorage
 
-const Settings = (function () {
+var Settings = (function() {
   'use strict';
 
-  const STORAGE_KEY = 'abcstore_upi_settings';
+  var KEYS = { UPI_ID: 'upi_id', APP_NAME: 'app_name', THEME: 'app_theme' };
+  var DEFAULTS = { APP_NAME: 'ABC Debt Collection', THEME: 'light' };
 
-  // ─── Initialization ─────────────────────────────────────────────────────────
+  var saveTimeout = null;
 
   /**
-   * Initialize the Settings module.
-   * Loads saved settings into the form and sets up save button.
+   * Check if localStorage is available.
+   * @returns {boolean}
+   */
+  function isLocalStorageAvailable() {
+    try {
+      var testKey = '__settings_test__';
+      localStorage.setItem(testKey, '1');
+      localStorage.removeItem(testKey);
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /**
+   * Initialize settings form fields with stored values or defaults.
+   * Attaches save button click handler and theme toggle handler.
    */
   function init() {
-    var saveBtn = document.getElementById('upi-save-btn');
+    var appNameInput = document.getElementById('settings-app-name');
+    var upiIdInput = document.getElementById('settings-upi-id');
+    var saveBtn = document.getElementById('settings-save-btn');
+    var themeToggle = document.getElementById('theme-toggle');
+
+    if (appNameInput) {
+      appNameInput.value = getAppName();
+    }
+
+    if (upiIdInput) {
+      upiIdInput.value = getUpiId() || '';
+    }
+
     if (saveBtn) {
-      saveBtn.addEventListener('click', saveSettings);
+      saveBtn.addEventListener('click', function(e) {
+        e.preventDefault();
+        save();
+      });
     }
 
-    // Load existing settings into form
-    loadSettingsIntoForm();
+    // Theme toggle
+    if (themeToggle) {
+      themeToggle.checked = getTheme() === 'dark';
+      themeToggle.addEventListener('change', function() {
+        var theme = themeToggle.checked ? 'dark' : 'light';
+        setTheme(theme);
+      });
+    }
   }
 
-  // ─── Load / Save ────────────────────────────────────────────────────────────
-
   /**
-   * Get saved UPI settings from localStorage.
-   * @returns {Object|null} { upiId, payeeName, merchantCode } or null
+   * Validate and save settings to localStorage.
+   * Validates UPI_ID is not empty/whitespace-only and respects max lengths.
+   * Shows success message for 3 seconds on valid save.
+   * Calls updateAppName() from app.js to immediately update header/title.
    */
-  function getSettings() {
-    try {
-      var raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        return JSON.parse(raw);
+  function save() {
+    var appNameInput = document.getElementById('settings-app-name');
+    var upiIdInput = document.getElementById('settings-upi-id');
+    var upiError = document.getElementById('settings-upi-error');
+    var saveMsg = document.getElementById('settings-save-msg');
+
+    // Clear previous errors
+    if (upiError) {
+      upiError.textContent = '';
+    }
+
+    var appNameValue = appNameInput ? appNameInput.value : '';
+    var upiIdValue = upiIdInput ? upiIdInput.value : '';
+
+    // Validate UPI_ID is not empty or whitespace-only
+    if (!upiIdValue || upiIdValue.trim() === '') {
+      if (upiError) {
+        upiError.textContent = 'UPI ID is required and cannot be empty.';
       }
-    } catch (e) {
-      console.error('Settings: Failed to read settings', e);
-    }
-    return null;
-  }
-
-  /**
-   * Save UPI settings from form to localStorage.
-   */
-  function saveSettings() {
-    var upiId = document.getElementById('upi-id-input');
-    var payeeName = document.getElementById('upi-name-input');
-    var merchantCode = document.getElementById('upi-merchant-code-input');
-    var msg = document.getElementById('upi-save-msg');
-
-    var settings = {
-      upiId: upiId ? upiId.value.trim() : '',
-      payeeName: payeeName ? payeeName.value.trim() : '',
-      merchantCode: merchantCode ? merchantCode.value.trim() : ''
-    };
-
-    if (!settings.upiId) {
-      alert('UPI ID is required.');
       return;
     }
 
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
-      if (msg) {
-        msg.style.display = 'block';
-        setTimeout(function () { msg.style.display = 'none'; }, 3000);
+    // Validate UPI_ID max 45 characters
+    if (upiIdValue.trim().length > 45) {
+      if (upiError) {
+        upiError.textContent = 'UPI ID must be 45 characters or less.';
       }
+      return;
+    }
+
+    // Validate AppName max 50 characters
+    if (appNameValue.length > 50) {
+      if (upiError) {
+        upiError.textContent = 'Application Name must be 50 characters or less.';
+      }
+      return;
+    }
+
+    // Check localStorage availability
+    if (!isLocalStorageAvailable()) {
+      if (upiError) {
+        upiError.textContent = 'Settings could not be saved. Local storage is unavailable.';
+      }
+      return;
+    }
+
+    // Persist values
+    try {
+      var trimmedUpiId = upiIdValue.trim();
+      var finalAppName = appNameValue.trim() === '' ? DEFAULTS.APP_NAME : appNameValue.trim();
+
+      localStorage.setItem(KEYS.UPI_ID, trimmedUpiId);
+      localStorage.setItem(KEYS.APP_NAME, finalAppName);
     } catch (e) {
-      console.error('Settings: Failed to save', e);
-      alert('Failed to save settings.');
+      if (upiError) {
+        upiError.textContent = 'Settings could not be saved. Storage error occurred.';
+      }
+      return;
+    }
+
+    // Show success message for 3 seconds
+    if (saveMsg) {
+      saveMsg.removeAttribute('hidden');
+
+      // Clear any existing timeout
+      if (saveTimeout) {
+        clearTimeout(saveTimeout);
+      }
+
+      saveTimeout = setTimeout(function() {
+        saveMsg.setAttribute('hidden', '');
+        saveTimeout = null;
+      }, 3000);
+    }
+
+    // Immediately update header/title via app.js
+    if (typeof updateAppName === 'function') {
+      updateAppName();
     }
   }
 
   /**
-   * Load saved settings into the form inputs.
+   * Get the stored UPI ID.
+   * @returns {string|null} The stored UPI_ID or null if not set
    */
-  function loadSettingsIntoForm() {
-    var settings = getSettings();
-    if (!settings) return;
-
-    var upiId = document.getElementById('upi-id-input');
-    var payeeName = document.getElementById('upi-name-input');
-    var merchantCode = document.getElementById('upi-merchant-code-input');
-
-    if (upiId) upiId.value = settings.upiId || '';
-    if (payeeName) payeeName.value = settings.payeeName || '';
-    if (merchantCode) merchantCode.value = settings.merchantCode || '';
-  }
-
-  // ─── UPI QR Code Generation ─────────────────────────────────────────────────
-
-  /**
-   * Generate a UPI payment URL string.
-   * Format: upi://pay?pa=<UPI_ID>&pn=<NAME>&am=<AMOUNT>&cu=INR&tn=<NOTE>
-   * @param {number} amount - Bill total amount
-   * @param {string} billNumber - Bill number for the transaction note
-   * @returns {string|null} UPI URL string, or null if UPI not configured
-   */
-  function generateUpiUrl(amount, billNumber) {
-    var settings = getSettings();
-    if (!settings || !settings.upiId) return null;
-
-    var params = [];
-    params.push('pa=' + encodeURIComponent(settings.upiId));
-
-    if (settings.payeeName) {
-      params.push('pn=' + encodeURIComponent(settings.payeeName));
+  function getUpiId() {
+    try {
+      return localStorage.getItem(KEYS.UPI_ID) || null;
+    } catch (e) {
+      return null;
     }
-
-    params.push('am=' + amount.toFixed(2));
-    params.push('cu=INR');
-    params.push('tn=' + encodeURIComponent('Bill: ' + billNumber));
-
-    if (settings.merchantCode) {
-      params.push('mc=' + encodeURIComponent(settings.merchantCode));
-    }
-
-    return 'upi://pay?' + params.join('&');
   }
 
   /**
-   * Show a QR code modal for UPI payment after bill finalization.
-   * @param {number} amount - Bill total
-   * @param {string} billNumber - Bill number
+   * Get the stored App Name.
+   * @returns {string} The stored AppName or the default "ABC Debt Collection"
    */
-  function showPaymentQR(amount, billNumber) {
-    var upiUrl = generateUpiUrl(amount, billNumber);
-    if (!upiUrl) return; // UPI not configured, skip silently
-
-    // Remove existing QR modal if any
-    var existing = document.getElementById('upi-qr-modal');
-    if (existing) existing.remove();
-
-    // Create modal overlay
-    var overlay = document.createElement('div');
-    overlay.id = 'upi-qr-modal';
-    overlay.className = 'modal-overlay';
-
-    overlay.innerHTML =
-      '<div class="modal" role="dialog" aria-labelledby="qr-modal-title" aria-modal="true">' +
-        '<div class="modal-header">' +
-          '<h2 class="modal-title" id="qr-modal-title">UPI Payment</h2>' +
-          '<button class="modal-close" id="qr-modal-close" aria-label="Close">&times;</button>' +
-        '</div>' +
-        '<div class="modal-body" style="text-align:center;">' +
-          '<p style="font-size:0.875rem;color:#5f6368;margin-bottom:8px;">Scan to pay for ' + billNumber + '</p>' +
-          '<p style="font-size:1.5rem;font-weight:700;color:#202124;margin-bottom:12px;">₹' + amount.toFixed(2) + '</p>' +
-          '<div id="upi-qr-canvas-container" style="display:inline-block;padding:12px;background:#fff;border-radius:8px;border:1px solid #dadce0;"></div>' +
-          '<p style="font-size:0.75rem;color:#5f6368;margin-top:8px;word-break:break-all;">' + upiUrl + '</p>' +
-        '</div>' +
-        '<div class="modal-footer">' +
-          '<button class="btn-primary" id="qr-modal-done" style="flex:1;">Done</button>' +
-        '</div>' +
-      '</div>';
-
-    document.body.appendChild(overlay);
-
-    // Render QR code
-    var container = document.getElementById('upi-qr-canvas-container');
-    if (container && typeof QRCode !== 'undefined') {
-      QRCode.toCanvas(container, upiUrl, { width: 200, margin: 2 }, function (error) {
-        if (error) {
-          console.error('QR generation failed:', error);
-          container.innerHTML = '<p style="color:#ea4335;font-size:0.8rem;">QR generation failed</p>';
-        }
-      });
-    } else if (container) {
-      container.innerHTML = '<p style="color:#ea4335;font-size:0.8rem;">QR library not loaded</p>';
+  function getAppName() {
+    try {
+      return localStorage.getItem(KEYS.APP_NAME) || DEFAULTS.APP_NAME;
+    } catch (e) {
+      return DEFAULTS.APP_NAME;
     }
-
-    // Show modal with animation
-    requestAnimationFrame(function () {
-      overlay.classList.add('active');
-    });
-
-    // Close handlers
-    document.getElementById('qr-modal-close').addEventListener('click', function () {
-      closeQrModal(overlay);
-    });
-    document.getElementById('qr-modal-done').addEventListener('click', function () {
-      closeQrModal(overlay);
-    });
-    overlay.addEventListener('click', function (e) {
-      if (e.target === overlay) closeQrModal(overlay);
-    });
   }
 
   /**
-   * Close and remove the QR modal.
+   * Get the stored theme preference.
+   * @returns {string} 'light' or 'dark'
    */
-  function closeQrModal(overlay) {
-    overlay.classList.remove('active');
-    setTimeout(function () {
-      if (overlay.parentNode) overlay.remove();
-    }, 300);
+  function getTheme() {
+    try {
+      return localStorage.getItem(KEYS.THEME) || DEFAULTS.THEME;
+    } catch (e) {
+      return DEFAULTS.THEME;
+    }
   }
 
-  // ─── Public API ─────────────────────────────────────────────────────────────
+  /**
+   * Set and apply the theme.
+   * @param {string} theme - 'light' or 'dark'
+   */
+  function setTheme(theme) {
+    try {
+      localStorage.setItem(KEYS.THEME, theme);
+    } catch (e) {
+      // Ignore storage errors
+    }
+    applyTheme(theme);
+  }
+
+  /**
+   * Apply theme to the document.
+   * @param {string} theme - 'light' or 'dark'
+   */
+  function applyTheme(theme) {
+    if (theme === 'dark') {
+      document.documentElement.setAttribute('data-theme', 'dark');
+    } else {
+      document.documentElement.removeAttribute('data-theme');
+    }
+    // Update meta theme-color
+    var metaTheme = document.querySelector('meta[name="theme-color"]');
+    if (metaTheme) {
+      metaTheme.setAttribute('content', theme === 'dark' ? '#1e1e1e' : '#1976d2');
+    }
+  }
 
   return {
     init: init,
-    getSettings: getSettings,
-    generateUpiUrl: generateUpiUrl,
-    showPaymentQR: showPaymentQR
+    save: save,
+    getUpiId: getUpiId,
+    getAppName: getAppName,
+    getTheme: getTheme,
+    setTheme: setTheme,
+    applyTheme: applyTheme
   };
-
 })();
