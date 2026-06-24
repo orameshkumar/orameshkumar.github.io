@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="globe-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1565c0"/>
+      <stop offset="50%" style="stop-color:#1e88e5"/>
+      <stop offset="100%" style="stop-color:#42a5f5"/>
+    </linearGradient>
+    <linearGradient id="wave-grad-1" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#ff6b6b"/>
+      <stop offset="100%" style="stop-color:#feca57"/>
+    </linearGradient>
+    <linearGradient id="wave-grad-2" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#a29bfe"/>
+      <stop offset="100%" style="stop-color:#fd79a8"/>
+    </linearGradient>
+    <linearGradient id="wave-grad-3" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#fdcb6e"/>
+      <stop offset="100%" style="stop-color:#e17055"/>
+    </linearGradient>
+    <filter id="shadow">
+      <feDropShadow dx="0" dy="4" stdDeviation="8" flood-opacity="0.25"/>
+    </filter>
+  </defs>
+
+  <!-- Globe body — solid deep blue -->
+  <circle cx="220" cy="260" r="150" fill="url(#globe-grad)" filter="url(#shadow)"/>
+
+  <!-- Ocean highlight (gives depth) -->
+  <circle cx="190" cy="230" r="100" fill="rgba(255,255,255,0.08)"/>
+
+  <!-- Continent shapes in white/green -->
+  <path d="M155 190 Q175 175 200 180 Q230 185 245 210 Q255 235 240 255 Q220 265 195 255 Q170 245 160 225 Q150 210 155 190 Z"
+        fill="#ffffff" opacity="0.85"/>
+  <path d="M250 265 Q275 255 290 270 Q300 290 290 310 Q275 325 255 315 Q240 300 245 280 Z"
+        fill="#ffffff" opacity="0.75"/>
+  <path d="M145 280 Q165 272 180 285 Q188 305 175 320 Q158 328 145 315 Q138 300 145 280 Z"
+        fill="#ffffff" opacity="0.7"/>
+  <path d="M185 310 Q200 305 210 315 Q215 330 205 340 Q192 345 185 335 Q180 322 185 310 Z"
+        fill="#ffffff" opacity="0.6"/>
+
+  <!-- Globe grid lines (latitude/longitude) -->
+  <ellipse cx="220" cy="260" rx="150" ry="150" fill="none" stroke="rgba(255,255,255,0.2)" stroke-width="1.5"/>
+  <ellipse cx="220" cy="260" rx="80" ry="150" fill="none" stroke="rgba(255,255,255,0.2)" stroke-width="1.2"/>
+  <ellipse cx="220" cy="260" rx="40" ry="150" fill="none" stroke="rgba(255,255,255,0.15)" stroke-width="1"/>
+  <line x1="70" y1="220" x2="370" y2="220" stroke="rgba(255,255,255,0.15)" stroke-width="1.2"/>
+  <line x1="70" y1="260" x2="370" y2="260" stroke="rgba(255,255,255,0.15)" stroke-width="1.2"/>
+  <line x1="70" y1="300" x2="370" y2="300" stroke="rgba(255,255,255,0.15)" stroke-width="1.2"/>
+
+  <!-- Globe rim highlight -->
+  <circle cx="220" cy="260" r="148" fill="none" stroke="rgba(255,255,255,0.3)" stroke-width="3"/>
+
+  <!-- Sound waves (right side) -->
+  <path d="M348 200 Q385 235 385 268 Q385 300 348 335"
+        fill="none" stroke="url(#wave-grad-1)" stroke-width="11" stroke-linecap="round"/>
+  <path d="M378 170 Q428 225 428 268 Q428 310 378 365"
+        fill="none" stroke="url(#wave-grad-2)" stroke-width="10" stroke-linecap="round"/>
+  <path d="M405 145 Q468 215 468 268 Q468 320 405 390"
+        fill="none" stroke="url(#wave-grad-3)" stroke-width="9" stroke-linecap="round"/>
+
+  <!-- Decorative dots -->
+  <circle cx="355" cy="165" r="5" fill="#ff6b6b" opacity="0.8"/>
+  <circle cx="435" cy="140" r="4" fill="#a29bfe" opacity="0.7"/>
+  <circle cx="475" cy="185" r="3.5" fill="#fdcb6e" opacity="0.8"/>
+  <circle cx="355" cy="370" r="4" fill="#feca57" opacity="0.7"/>
+  <circle cx="435" cy="395" r="3.5" fill="#fd79a8" opacity="0.6"/>
+
+  <!-- Microphone icon (bottom of globe, white) -->
+  <g transform="translate(200, 370)" opacity="0.95">
+    <rect x="0" y="0" width="20" height="32" rx="10" fill="#ffffff"/>
+    <path d="M-7 26 Q-7 46 10 46 Q27 46 27 26" fill="none" stroke="#ffffff" stroke-width="3.5" stroke-linecap="round"/>
+    <line x1="10" y1="46" x2="10" y2="56" stroke="#ffffff" stroke-width="3.5" stroke-linecap="round"/>
+    <line x1="2" y1="56" x2="18" y2="56" stroke="#ffffff" stroke-width="3.5" stroke-linecap="round"/>
+  </g>
+</svg>
