@@ -1,5 +1,5 @@
 // Service Worker for Debt Collection PWA
-const CACHE_NAME = 'debt-collection-v1';
+const CACHE_NAME = 'debt-collection-v2';
 
 // All app assets to pre-cache during install
 const FILES_TO_CACHE = [
