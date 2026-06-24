@@ -1,22 +1,22 @@
 /**
- * db.js - IndexedDB Wrapper for Debt Collection App
- *
- * Provides a global DB object with methods for managing clients and payments
+ * db.js - IndexedDB Wrapper for ABC Provisional Store
+ * 
+ * Provides a global DB object with methods for managing items and bills
  * using IndexedDB as the persistence layer.
- *
- * Database: "CollectionApp" (version 1)
+ * 
+ * Database: "ABCStore" (version 1)
  * Object Stores:
- *   - clients: keyPath "id", indexes on "name" (unique) and "mobile" (non-unique)
- *   - payments: keyPath "id", indexes on "clientId" (non-unique) and "date" (non-unique)
+ *   - items: keyPath "id", indexes on "name" and "voiceTag"
+ *   - bills: keyPath "id", indexes on "billNumber" and "date"
  */
 
 const DB = (function () {
-  const DB_NAME = 'CollectionApp';
+  const DB_NAME = 'ABCStore';
   const DB_VERSION = 1;
   let db = null;
 
   /**
-   * Opens/creates the CollectionApp database with required object stores and indexes.
+   * Opens/creates the ABCStore database with required object stores and indexes.
    * @returns {Promise<IDBDatabase>}
    */
   function init() {
@@ -28,13 +28,8 @@ const DB = (function () {
 
       const request = indexedDB.open(DB_NAME, DB_VERSION);
 
-      request.onerror = (event) => {
-        const error = event.target.error;
-        if (error && error.name === 'QuotaExceededError') {
-          reject(new Error('Device storage is full. Please free space to continue.'));
-        } else {
-          reject(new Error('Failed to open database: ' + (error ? error.message : 'Unknown error')));
-        }
+      request.onerror = () => {
+        reject(new Error('Failed to open database: ' + request.error));
       };
 
       request.onsuccess = (event) => {
@@ -45,30 +40,27 @@ const DB = (function () {
       request.onupgradeneeded = (event) => {
         const database = event.target.result;
 
-        // Create "clients" object store with keyPath "id"
-        if (!database.objectStoreNames.contains('clients')) {
-          const clientsStore = database.createObjectStore('clients', { keyPath: 'id' });
-          clientsStore.createIndex('name', 'name', { unique: true });
-          clientsStore.createIndex('mobile', 'mobile', { unique: false });
+        // Create "items" object store with keyPath "id"
+        if (!database.objectStoreNames.contains('items')) {
+          const itemsStore = database.createObjectStore('items', { keyPath: 'id' });
+          itemsStore.createIndex('name', 'name', { unique: false });
+          itemsStore.createIndex('voiceTag', 'voiceTag', { unique: false });
         }
 
-        // Create "payments" object store with keyPath "id"
-        if (!database.objectStoreNames.contains('payments')) {
-          const paymentsStore = database.createObjectStore('payments', { keyPath: 'id' });
-          paymentsStore.createIndex('clientId', 'clientId', { unique: false });
-          paymentsStore.createIndex('date', 'date', { unique: false });
+        // Create "bills" object store with keyPath "id"
+        if (!database.objectStoreNames.contains('bills')) {
+          const billsStore = database.createObjectStore('bills', { keyPath: 'id' });
+          billsStore.createIndex('billNumber', 'billNumber', { unique: true });
+          billsStore.createIndex('date', 'date', { unique: false });
         }
       };
     });
   }
 
-  // ─── Helpers ───────────────────────────────────────────────────────────────
+  // ─── Helper ────────────────────────────────────────────────────────────────
 
   /**
-   * Returns an object store for a given store name and mode.
-   * @param {string} storeName - Name of the object store
-   * @param {string} mode - Transaction mode: "readonly" or "readwrite"
-   * @returns {IDBObjectStore}
+   * Returns a promise-based transaction helper for a given store and mode.
    */
   function getStore(storeName, mode) {
     if (!db) {
@@ -80,292 +72,152 @@ const DB = (function () {
 
   /**
    * Wraps an IDBRequest in a Promise.
-   * @param {IDBRequest} request - The IndexedDB request to wrap
-   * @returns {Promise}
    */
   function requestToPromise(request) {
     return new Promise((resolve, reject) => {
       request.onsuccess = () => resolve(request.result);
-      request.onerror = (event) => {
-        const error = event.target.error;
-        if (error && error.name === 'QuotaExceededError') {
-          reject(new Error('Device storage is full. Please free space to continue.'));
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  // ─── Item CRUD Methods ─────────────────────────────────────────────────────
+
+  /**
+   * Add a new item to the items store.
+   * @param {Object} item - Item object with id, name, basePricePerKg, etc.
+   * @returns {Promise<string>} The key of the added item
+   */
+  function addItem(item) {
+    const store = getStore('items', 'readwrite');
+    return requestToPromise(store.add(item));
+  }
+
+  /**
+   * Get a single item by its id.
+   * @param {string} id - The item id
+   * @returns {Promise<Object|undefined>} The item object or undefined if not found
+   */
+  function getItem(id) {
+    const store = getStore('items', 'readonly');
+    return requestToPromise(store.get(id));
+  }
+
+  /**
+   * Get all items from the items store.
+   * @returns {Promise<Object[]>} Array of all item objects
+   */
+  function getAllItems() {
+    const store = getStore('items', 'readonly');
+    return requestToPromise(store.getAll());
+  }
+
+  /**
+   * Update an existing item (put operation - replaces the item with the same id).
+   * @param {Object} item - Item object with id and updated fields
+   * @returns {Promise<string>} The key of the updated item
+   */
+  function updateItem(item) {
+    const store = getStore('items', 'readwrite');
+    return requestToPromise(store.put(item));
+  }
+
+  /**
+   * Delete an item by its id.
+   * @param {string} id - The item id to delete
+   * @returns {Promise<undefined>}
+   */
+  function deleteItem(id) {
+    const store = getStore('items', 'readwrite');
+    return requestToPromise(store.delete(id));
+  }
+
+  // ─── Bill Methods ──────────────────────────────────────────────────────────
+
+  /**
+   * Save a bill to the bills store.
+   * @param {Object} bill - Bill object with id, billNumber, date, lineItems, total, etc.
+   * @returns {Promise<string>} The key of the saved bill
+   */
+  function saveBill(bill) {
+    const store = getStore('bills', 'readwrite');
+    return requestToPromise(store.put(bill));
+  }
+
+  /**
+   * Get a single bill by its id.
+   * @param {string} id - The bill id
+   * @returns {Promise<Object|undefined>} The bill object or undefined if not found
+   */
+  function getBill(id) {
+    const store = getStore('bills', 'readonly');
+    return requestToPromise(store.get(id));
+  }
+
+  /**
+   * Get all bills sorted by date descending (most recent first).
+   * @returns {Promise<Object[]>} Array of all bill objects sorted by date desc
+   */
+  function getAllBills() {
+    return new Promise((resolve, reject) => {
+      const store = getStore('bills', 'readonly');
+      const index = store.index('date');
+      const request = index.openCursor(null, 'prev');
+      const results = [];
+
+      request.onsuccess = (event) => {
+        const cursor = event.target.result;
+        if (cursor) {
+          results.push(cursor.value);
+          cursor.continue();
         } else {
-          reject(new Error(error ? error.message : 'Database operation failed'));
+          resolve(results);
         }
       };
-    });
-  }
 
-  // ─── Client CRUD Methods ───────────────────────────────────────────────────
-
-  /**
-   * Add a new client record to the clients store.
-   * @param {Object} client - Client object with id, name, mobile, totalAmount, etc.
-   * @returns {Promise<string>} The key of the added client
-   */
-  function addClient(client) {
-    try {
-      const store = getStore('clients', 'readwrite');
-      return requestToPromise(store.add(client));
-    } catch (e) {
-      return Promise.reject(new Error('Failed to add client: ' + e.message));
-    }
-  }
-
-  /**
-   * Get a single client by its id.
-   * @param {string} id - The client id
-   * @returns {Promise<Object|undefined>} The client object or undefined if not found
-   */
-  function getClient(id) {
-    try {
-      const store = getStore('clients', 'readonly');
-      return requestToPromise(store.get(id));
-    } catch (e) {
-      return Promise.reject(new Error('Failed to get client: ' + e.message));
-    }
-  }
-
-  /**
-   * Get all clients from the clients store.
-   * @returns {Promise<Object[]>} Array of all client objects
-   */
-  function getAllClients() {
-    try {
-      const store = getStore('clients', 'readonly');
-      return requestToPromise(store.getAll());
-    } catch (e) {
-      return Promise.reject(new Error('Failed to get all clients: ' + e.message));
-    }
-  }
-
-  /**
-   * Update an existing client record (put operation).
-   * @param {Object} client - Client object with id and updated fields
-   * @returns {Promise<string>} The key of the updated client
-   */
-  function updateClient(client) {
-    try {
-      const store = getStore('clients', 'readwrite');
-      return requestToPromise(store.put(client));
-    } catch (e) {
-      return Promise.reject(new Error('Failed to update client: ' + e.message));
-    }
-  }
-
-  /**
-   * Delete a client by its id.
-   * @param {string} id - The client id to delete
-   * @returns {Promise<undefined>}
-   */
-  function deleteClient(id) {
-    try {
-      const store = getStore('clients', 'readwrite');
-      return requestToPromise(store.delete(id));
-    } catch (e) {
-      return Promise.reject(new Error('Failed to delete client: ' + e.message));
-    }
-  }
-
-  // ─── Payment Methods ───────────────────────────────────────────────────────
-
-  /**
-   * Add a payment record to the payments store.
-   * @param {Object} payment - Payment object with id, clientId, date, amount, createdAt
-   * @returns {Promise<string>} The key of the added payment
-   */
-  function addPayment(payment) {
-    try {
-      const store = getStore('payments', 'readwrite');
-      return requestToPromise(store.add(payment));
-    } catch (e) {
-      return Promise.reject(new Error('Failed to add payment: ' + e.message));
-    }
-  }
-
-  /**
-   * Get all payments for a given client using the clientId index.
-   * @param {string} clientId - The client id to query payments for
-   * @returns {Promise<Object[]>} Array of payment objects for the client
-   */
-  function getPaymentsByClient(clientId) {
-    return new Promise((resolve, reject) => {
-      try {
-        const store = getStore('payments', 'readonly');
-        const index = store.index('clientId');
-        const range = IDBKeyRange.only(clientId);
-        const request = index.openCursor(range);
-        const results = [];
-
-        request.onsuccess = (event) => {
-          const cursor = event.target.result;
-          if (cursor) {
-            results.push(cursor.value);
-            cursor.continue();
-          } else {
-            resolve(results);
-          }
-        };
-
-        request.onerror = (event) => {
-          const error = event.target.error;
-          reject(new Error('Failed to get payments for client: ' + (error ? error.message : 'Unknown error')));
-        };
-      } catch (e) {
-        reject(new Error('Failed to get payments for client: ' + e.message));
-      }
+      request.onerror = () => reject(request.error);
     });
   }
 
   /**
-   * Get all payments within a date range (inclusive) using the date index.
-   * @param {string} start - ISO date string for range start (e.g., "2025-01-01")
-   * @param {string} end - ISO date string for range end (e.g., "2025-01-31")
-   * @returns {Promise<Object[]>} Array of payment objects within the date range
+   * Get bills within a date range (inclusive on both ends).
+   * @param {string} startDate - ISO date string (e.g., "2025-01-01")
+   * @param {string} endDate - ISO date string (e.g., "2025-01-31")
+   * @returns {Promise<Object[]>} Array of bill objects within the date range, sorted by date desc
    */
-  function getPaymentsByDateRange(start, end) {
+  function getBillsByDateRange(startDate, endDate) {
     return new Promise((resolve, reject) => {
-      try {
-        const store = getStore('payments', 'readonly');
-        const index = store.index('date');
-        const range = IDBKeyRange.bound(start, end);
-        const request = index.openCursor(range);
-        const results = [];
+      const store = getStore('bills', 'readonly');
+      const index = store.index('date');
+      const range = IDBKeyRange.bound(startDate, endDate);
+      const request = index.openCursor(range, 'prev');
+      const results = [];
 
-        request.onsuccess = (event) => {
-          const cursor = event.target.result;
-          if (cursor) {
-            results.push(cursor.value);
-            cursor.continue();
-          } else {
-            resolve(results);
-          }
-        };
+      request.onsuccess = (event) => {
+        const cursor = event.target.result;
+        if (cursor) {
+          results.push(cursor.value);
+          cursor.continue();
+        } else {
+          resolve(results);
+        }
+      };
 
-        request.onerror = (event) => {
-          const error = event.target.error;
-          reject(new Error('Failed to get payments by date range: ' + (error ? error.message : 'Unknown error')));
-        };
-      } catch (e) {
-        reject(new Error('Failed to get payments by date range: ' + e.message));
-      }
-    });
-  }
-
-  /**
-   * Get all payments for a specific client on a specific date.
-   * @param {string} clientId - The client id
-   * @param {string} date - ISO date string (e.g., "2025-01-15")
-   * @returns {Promise<Object[]>} Array of payment objects matching clientId and date
-   */
-  function getPaymentsByClientAndDate(clientId, date) {
-    return new Promise((resolve, reject) => {
-      try {
-        const store = getStore('payments', 'readonly');
-        const index = store.index('clientId');
-        const range = IDBKeyRange.only(clientId);
-        const request = index.openCursor(range);
-        const results = [];
-
-        request.onsuccess = (event) => {
-          const cursor = event.target.result;
-          if (cursor) {
-            if (cursor.value.date === date) {
-              results.push(cursor.value);
-            }
-            cursor.continue();
-          } else {
-            resolve(results);
-          }
-        };
-
-        request.onerror = (event) => {
-          const error = event.target.error;
-          reject(new Error('Failed to get payments for client and date: ' + (error ? error.message : 'Unknown error')));
-        };
-      } catch (e) {
-        reject(new Error('Failed to get payments for client and date: ' + e.message));
-      }
-    });
-  }
-
-  /**
-   * Delete all payments for a given client using the clientId index.
-   * @param {string} clientId - The client id whose payments to delete
-   * @returns {Promise<undefined>}
-   */
-  function deletePaymentsByClient(clientId) {
-    return new Promise((resolve, reject) => {
-      try {
-        const store = getStore('payments', 'readwrite');
-        const index = store.index('clientId');
-        const range = IDBKeyRange.only(clientId);
-        const request = index.openCursor(range);
-
-        request.onsuccess = (event) => {
-          const cursor = event.target.result;
-          if (cursor) {
-            cursor.delete();
-            cursor.continue();
-          } else {
-            resolve();
-          }
-        };
-
-        request.onerror = (event) => {
-          const error = event.target.error;
-          if (error && error.name === 'QuotaExceededError') {
-            reject(new Error('Device storage is full. Please free space to continue.'));
-          } else {
-            reject(new Error('Failed to delete payments for client: ' + (error ? error.message : 'Unknown error')));
-          }
-        };
-      } catch (e) {
-        reject(new Error('Failed to delete payments for client: ' + e.message));
-      }
+      request.onerror = () => reject(request.error);
     });
   }
 
   // ─── Public API ────────────────────────────────────────────────────────────
 
-  /**
-   * Delete a single payment by ID.
-   * @param {string} id - The payment ID to delete
-   * @returns {Promise<undefined>}
-   */
-  function deletePayment(id) {
-    return new Promise((resolve, reject) => {
-      try {
-        const store = getStore('payments', 'readwrite');
-        const request = store.delete(id);
-
-        request.onsuccess = () => {
-          resolve();
-        };
-
-        request.onerror = (event) => {
-          const error = event.target.error;
-          reject(new Error('Failed to delete payment: ' + (error ? error.message : 'Unknown error')));
-        };
-      } catch (e) {
-        reject(new Error('Failed to delete payment: ' + e.message));
-      }
-    });
-  }
-
   return {
     init,
-    addClient,
-    getClient,
-    getAllClients,
-    updateClient,
-    deleteClient,
-    addPayment,
-    deletePayment,
-    getPaymentsByClient,
-    getPaymentsByDateRange,
-    getPaymentsByClientAndDate,
-    deletePaymentsByClient
+    addItem,
+    getItem,
+    getAllItems,
+    updateItem,
+    deleteItem,
+    saveBill,
+    getBill,
+    getAllBills,
+    getBillsByDateRange
   };
 })();

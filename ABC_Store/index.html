@@ -3,224 +3,155 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <meta name="theme-color" content="#1976d2">
-    <meta name="description" content="ABC Debt Collection - Offline Debt Collection PWA">
+    <meta name="theme-color" content="#1a73e8">
+    <meta name="description" content="ABC Provisional Store - Offline Billing PWA">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="ABC Debt Collection">
+    <meta name="apple-mobile-web-app-title" content="ABC Store">
     <meta name="mobile-web-app-capable" content="yes">
     <link rel="manifest" href="manifest.json">
     <link rel="apple-touch-icon" href="icons/icon-192.png">
     <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
     <link rel="stylesheet" href="css/styles.css">
-    <title>ABC Debt Collection</title>
+    <title>ABC Store</title>
 </head>
 <body>
-    <header class="app-header" role="banner">
-        <h1 class="app-title" id="app-name-header">ABC Debt Collection</h1>
+    <header class="app-header">
+        <h1 class="app-title">ABC Store</h1>
     </header>
 
-    <main class="app-content" role="main">
-        <!-- Client Master Section -->
-        <section id="clients-section" class="screen active" aria-label="Client Master">
+    <main class="app-content">
+        <!-- Item Master Screen -->
+        <section id="item-master-screen" class="screen active" aria-label="Item Master">
             <div class="screen-content">
-                <div class="search-bar">
-                    <input type="text" id="client-search" placeholder="🔍 Search by client name..." aria-label="Search clients by name">
-                    <button id="export-clients-btn" class="btn-icon" aria-label="Export clients to CSV" title="Export CSV">📤</button>
-                    <button id="import-clients-btn" class="btn-icon" aria-label="Import clients from CSV" title="Import CSV">📥</button>
-                    <input type="file" id="import-clients-file" accept=".csv" hidden>
-                </div>
-                <div id="client-list" class="client-list" aria-live="polite"></div>
-                <button id="add-client-btn" class="fab" aria-label="Add new client">+</button>
-
-                <div id="client-form-container" class="form-container" hidden>
-                    <h2 class="section-heading" id="client-form-title">Add Client</h2>
-                    <form id="client-form" novalidate aria-label="Client form">
-                        <input type="hidden" id="client-id">
-                        <div class="form-group">
-                            <label for="client-name">Client Name *</label>
-                            <input type="text" id="client-name" maxlength="100" placeholder="Enter client name" required aria-required="true">
-                            <span class="error-message" id="client-name-error" role="alert"></span>
-                        </div>
-                        <div class="form-group">
-                            <label for="client-mobile">Mobile Number *</label>
-                            <input type="tel" id="client-mobile" maxlength="14" placeholder="10 digit mobile number" required aria-required="true">
-                            <span class="error-message" id="client-mobile-error" role="alert"></span>
-                        </div>
-                        <div class="form-group">
-                            <label for="client-amount">Total Borrowed Amount *</label>
-                            <input type="number" id="client-amount" min="0.01" max="9999999.99" step="0.01" placeholder="Enter total amount" required aria-required="true">
-                            <span class="error-message" id="client-amount-error" role="alert"></span>
-                        </div>
-                        <div class="form-group">
-                            <label for="client-start-date">Collection Start Date *</label>
-                            <input type="date" id="client-start-date" required aria-required="true">
-                            <span class="error-message" id="client-start-date-error" role="alert"></span>
-                        </div>
-                        <div class="form-group">
-                            <label for="client-duration">Duration (days)</label>
-                            <input type="number" id="client-duration" min="1" max="999" value="100" placeholder="Duration in days" aria-describedby="duration-help">
-                            <small id="duration-help">Default: 100 days</small>
-                            <span class="error-message" id="client-duration-error" role="alert"></span>
-                        </div>
-                        <div class="form-group">
-                            <label for="client-emi">EMI (Daily Installment)</label>
-                            <input type="number" id="client-emi" min="0.01" step="0.01" placeholder="Auto-calculated" aria-describedby="emi-help">
-                            <small id="emi-help">Auto-calculated: Amount ÷ Duration</small>
-                            <span class="error-message" id="client-emi-error" role="alert"></span>
-                        </div>
-                        <div class="form-group">
-                            <label for="client-end-date">End Date</label>
-                            <input type="date" id="client-end-date" readonly aria-describedby="end-date-help">
-                            <small id="end-date-help">Auto-calculated: Start Date + Duration</small>
-                        </div>
-                        <div class="form-actions">
-                            <button type="submit" id="client-save-btn" class="btn-primary">Save Client</button>
-                            <button type="button" id="client-cancel-btn" class="btn-secondary">Cancel</button>
-                        </div>
-                    </form>
-                </div>
+                <div id="item-list" class="item-list"></div>
+                <button id="add-item-btn" class="fab" aria-label="Add new item">+</button>
             </div>
         </section>
 
-        <!-- Daily Collection Section -->
-        <section id="collection-section" class="screen" aria-label="Daily Collection" hidden>
-            <div class="screen-content">
-                <div class="collection-date-picker">
-                    <label for="collection-date">Collection Date:</label>
-                    <input type="date" id="collection-date" aria-label="Select collection date">
-                </div>
-                <div class="search-bar">
-                    <input type="text" id="collection-search" placeholder="🔍 Search by client name..." aria-label="Search collection by client name">
-                    <label class="filter-checkbox">
-                        <input type="checkbox" id="collection-filter-paid">
-                        <span>Not paid today</span>
-                    </label>
-                </div>
-                <div id="collection-list" class="collection-list" aria-live="polite"></div>
-
-                <div id="payment-modal" class="modal-overlay" hidden aria-modal="true" role="dialog" aria-label="Payment confirmation">
-                    <div class="modal-content">
-                        <h2 id="payment-modal-title">Collect Payment</h2>
-                        <p id="payment-client-name" class="payment-client-name"></p>
-                        <div id="qr-code-container" class="qr-code-container" aria-label="UPI QR Code"></div>
-                        <div class="form-group">
-                            <label for="payment-amount">Amount (₹)</label>
-                            <input type="number" id="payment-amount" min="1" step="0.01" aria-required="true">
-                            <span class="error-message" id="payment-amount-error" role="alert"></span>
-                        </div>
-                        <div class="form-actions">
-                            <button id="confirm-payment-btn" class="btn-primary">Confirm Payment</button>
-                            <button id="cancel-payment-btn" class="btn-secondary">Cancel</button>
-                        </div>
+        <!-- Billing Screen -->
+        <section id="billing-screen" class="screen" aria-label="Billing" hidden>
+            <div class="screen-content billing-layout">
+                <div class="billing-bottom">
+                    <h2 class="section-heading">Current Bill</h2>
+                    <div id="current-bill-items" class="bill-items-list"></div>
+                    <div class="bill-footer">
+                        <span class="bill-total-label">Total:</span>
+                        <span id="bill-total" class="bill-total-amount">₹0.00</span>
+                        <button id="finalize-bill-btn" class="btn-primary">Finalize Bill</button>
                     </div>
                 </div>
+                <div class="billing-top">
+                    <div class="item-selector">
+                        <input type="search" id="billing-search" class="search-input" placeholder="Search items..." aria-label="Search items">
+                        <div id="billing-item-grid" class="item-grid"></div>
+                    </div>
+                    <div id="quick-entry-panel" class="quick-entry-panel">
+                        <button class="qty-btn" data-grams="50">50g</button>
+                        <button class="qty-btn" data-grams="100">100g</button>
+                        <button class="qty-btn" data-grams="250">250g</button>
+                        <button class="qty-btn" data-grams="500">500g</button>
+                        <button class="qty-btn" data-grams="750">750g</button>
+                        <button class="qty-btn" data-grams="1000">1KG</button>
+                        <input type="number" id="custom-qty" class="custom-qty-input" placeholder="Custom g" aria-label="Custom quantity in grams" min="1">
+                    </div>
+                    <button id="voice-btn" class="voice-btn" aria-label="Start voice billing">
+                        🎤
+                    </button>
+                </div>
             </div>
         </section>
 
-        <!-- Payment History Section -->
-        <section id="history-section" class="screen" aria-label="Payment History" hidden>
+        <!-- History Screen -->
+        <section id="history-screen" class="screen" aria-label="Bill History" hidden>
             <div class="screen-content">
                 <div class="history-filters">
-                    <div class="form-group">
-                        <label for="history-start-date">From:</label>
-                        <input type="date" id="history-start-date" class="date-input">
-                    </div>
-                    <div class="form-group">
-                        <label for="history-end-date">To:</label>
-                        <input type="date" id="history-end-date" class="date-input">
-                    </div>
-                    <button id="history-filter-btn" class="btn-secondary" aria-label="Filter payment history">Search</button>
-                    <span class="error-message" id="history-date-error" role="alert"></span>
+                    <label for="history-date-from">From:</label>
+                    <input type="date" id="history-date-from" class="date-input">
+                    <label for="history-date-to">To:</label>
+                    <input type="date" id="history-date-to" class="date-input">
+                    <button id="history-filter-btn" class="btn-secondary">Filter</button>
                 </div>
-                <div id="history-list" class="history-list" aria-live="polite"></div>
+                <div id="history-list" class="history-list"></div>
             </div>
         </section>
 
-        <!-- Reports Section -->
-        <section id="reports-section" class="screen" aria-label="Reports" hidden>
+        <!-- Reports Screen -->
+        <section id="reports-screen" class="screen" aria-label="Reports" hidden>
             <div class="screen-content">
-                <div class="reports-date-range">
-                    <div class="form-group">
-                        <label for="report-start-date">From:</label>
-                        <input type="date" id="report-start-date" class="date-input">
-                    </div>
-                    <div class="form-group">
-                        <label for="report-end-date">To:</label>
-                        <input type="date" id="report-end-date" class="date-input">
-                    </div>
-                </div>
                 <nav class="reports-sub-nav" aria-label="Report type navigation">
-                    <button class="report-tab active" data-report="day-wise" aria-pressed="true">Day-wise</button>
-                    <button class="report-tab" data-report="client-wise" aria-pressed="false">Client-wise</button>
+                    <button class="report-tab active" data-report="total">Total</button>
+                    <button class="report-tab" data-report="day-wise">Day-wise</button>
+                    <button class="report-tab" data-report="item-wise">Item-wise</button>
                 </nav>
-                <div class="print-header" aria-hidden="true"></div>
-                <div class="print-date-range" aria-hidden="true"></div>
-                <div id="report-table" class="report-table" aria-live="polite"></div>
-                <button id="print-report-btn" class="btn-primary print-btn" aria-label="Print report">🖨️ Print Report</button>
+                <div class="reports-date-range">
+                    <label for="report-date-from">From:</label>
+                    <input type="date" id="report-date-from" class="date-input">
+                    <label for="report-date-to">To:</label>
+                    <input type="date" id="report-date-to" class="date-input">
+                    <button id="report-generate-btn" class="btn-secondary">Generate</button>
+                </div>
+                <div id="report-content" class="report-content"></div>
             </div>
         </section>
 
-        <!-- Settings Section -->
-        <section id="settings-section" class="screen" aria-label="Settings" hidden>
+        <!-- Settings Screen -->
+        <section id="settings-screen" class="screen" aria-label="Settings" hidden>
             <div class="screen-content">
-                <h2 class="section-heading">Settings</h2>
+                <h2 class="section-heading" style="margin-bottom:12px;">UPI Payment Settings</h2>
                 <div class="settings-form">
-                    <div class="theme-toggle-group">
-                        <label for="theme-toggle">Dark Theme</label>
-                        <label class="theme-switch">
-                            <input type="checkbox" id="theme-toggle" aria-label="Toggle dark theme">
-                            <span class="theme-slider"></span>
-                        </label>
+                    <div class="form-group">
+                        <label for="upi-id-input">UPI ID *</label>
+                        <input type="text" id="upi-id-input" placeholder="e.g., abcstore@upi" autocomplete="off">
                     </div>
                     <div class="form-group">
-                        <label for="settings-app-name">Application Name</label>
-                        <input type="text" id="settings-app-name" maxlength="50" placeholder="ABC Debt Collection" autocomplete="off" aria-describedby="app-name-help">
-                        <small id="app-name-help">Max 50 characters. Displayed in headers and QR codes.</small>
+                        <label for="upi-name-input">Payee Name</label>
+                        <input type="text" id="upi-name-input" placeholder="e.g., ABC Provisional Store" autocomplete="off">
                     </div>
                     <div class="form-group">
-                        <label for="settings-upi-id">UPI ID *</label>
-                        <input type="text" id="settings-upi-id" maxlength="45" placeholder="e.g., yourname@upi" autocomplete="off" aria-describedby="upi-id-help">
-                        <small id="upi-id-help">Format: username@provider (max 45 characters)</small>
-                        <span class="error-message" id="settings-upi-error" role="alert"></span>
+                        <label for="upi-merchant-code-input">Merchant Code (optional)</label>
+                        <input type="text" id="upi-merchant-code-input" placeholder="e.g., 5411" autocomplete="off">
                     </div>
-                    <button id="settings-save-btn" class="btn-primary" aria-label="Save settings">Save Settings</button>
-                    <p id="settings-save-msg" class="save-confirmation" role="status" hidden>Settings saved successfully!</p>
+                    <button id="upi-save-btn" class="btn-primary" style="width:100%;margin-top:12px;">Save UPI Settings</button>
+                    <p id="upi-save-msg" style="color:#34a853;font-size:0.8rem;text-align:center;margin-top:8px;display:none;">Settings saved!</p>
                 </div>
             </div>
         </section>
     </main>
 
-    <nav class="bottom-nav" aria-label="Main navigation" role="navigation">
-        <button class="nav-tab active" data-screen="clients-section" aria-current="page" aria-label="Clients tab">
-            <span class="nav-icon" aria-hidden="true">👥</span>
-            <span class="nav-label">Clients</span>
+    <nav class="bottom-nav" aria-label="Main navigation">
+        <button class="nav-tab active" data-screen="item-master-screen" aria-current="page">
+            <span class="nav-icon">📦</span>
+            <span class="nav-label">Items</span>
         </button>
-        <button class="nav-tab" data-screen="collection-section" aria-label="Collection tab">
-            <span class="nav-icon" aria-hidden="true">💰</span>
-            <span class="nav-label">Collection</span>
+        <button class="nav-tab" data-screen="billing-screen">
+            <span class="nav-icon">🧾</span>
+            <span class="nav-label">Billing</span>
         </button>
-        <button class="nav-tab" data-screen="history-section" aria-label="History tab">
-            <span class="nav-icon" aria-hidden="true">📋</span>
+        <button class="nav-tab" data-screen="history-screen">
+            <span class="nav-icon">📋</span>
             <span class="nav-label">History</span>
         </button>
-        <button class="nav-tab" data-screen="reports-section" aria-label="Reports tab">
-            <span class="nav-icon" aria-hidden="true">📊</span>
+        <button class="nav-tab" data-screen="reports-screen">
+            <span class="nav-icon">📊</span>
             <span class="nav-label">Reports</span>
         </button>
-        <button class="nav-tab" data-screen="settings-section" aria-label="Settings tab">
-            <span class="nav-icon" aria-hidden="true">⚙️</span>
+        <button class="nav-tab" data-screen="settings-screen">
+            <span class="nav-icon">⚙️</span>
             <span class="nav-label">Settings</span>
         </button>
     </nav>
 
     <!-- Scripts -->
     <script src="js/qrcode-lib.js"></script>
+    <script src="js/qrcode.js"></script>
     <script src="js/db.js"></script>
+    <script src="js/utils.js"></script>
     <script src="js/settings.js"></script>
-    <script src="js/clients.js"></script>
-    <script src="js/collection.js"></script>
-    <script src="js/history.js"></script>
+    <script src="js/item-master.js"></script>
+    <script src="js/billing.js"></script>
+    <script src="js/voice-engine.js"></script>
+    <script src="js/bill-history.js"></script>
     <script src="js/reports.js"></script>
     <script src="js/app.js"></script>
 </body>
