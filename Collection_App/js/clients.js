@@ -51,6 +51,23 @@ var ClientMaster = (function() {
       });
     }
 
+    // Import/Export buttons
+    var exportBtn = document.getElementById('export-clients-btn');
+    var importBtn = document.getElementById('import-clients-btn');
+    var importFile = document.getElementById('import-clients-file');
+
+    if (exportBtn) {
+      exportBtn.addEventListener('click', exportClients);
+    }
+    if (importBtn) {
+      importBtn.addEventListener('click', function() {
+        if (importFile) importFile.click();
+      });
+    }
+    if (importFile) {
+      importFile.addEventListener('change', handleImportFile);
+    }
+
     renderClientList();
   }
 
@@ -271,8 +288,8 @@ var ClientMaster = (function() {
 
     if (!data.mobile || data.mobile === '') {
       errors.push({ field: 'client-mobile', message: 'Mobile number is required.' });
-    } else if (!/^\d{10}$/.test(data.mobile)) {
-      errors.push({ field: 'client-mobile', message: 'Enter exactly 10 digits.' });
+    } else if (!/^\d{10}$/.test(data.mobile.replace(/\s/g, ''))) {
+      errors.push({ field: 'client-mobile', message: 'Enter exactly 10 digits (spaces allowed).' });
     }
 
     if (isNaN(data.totalAmount) || data.totalAmount <= 0) {
@@ -316,7 +333,7 @@ var ClientMaster = (function() {
         var clientRecord = {
           id: editingClientId,
           name: data.name,
-          mobile: data.mobile,
+          mobile: data.mobile.replace(/\s/g, ''),
           totalAmount: data.totalAmount,
           startDate: data.startDate,
           duration: data.duration,
@@ -338,7 +355,7 @@ var ClientMaster = (function() {
         var newClient = {
           id: generateUUID(),
           name: data.name,
-          mobile: data.mobile,
+          mobile: data.mobile.replace(/\s/g, ''),
           totalAmount: data.totalAmount,
           startDate: data.startDate,
           duration: data.duration,
@@ -444,6 +461,197 @@ var ClientMaster = (function() {
               .replace(/"/g, '&quot;');
   }
 
+  /**
+   * Export all client records as a CSV file download.
+   */
+  async function exportClients() {
+    try {
+      var clients = await DB.getAllClients();
+      if (!clients || clients.length === 0) {
+        alert('No clients to export.');
+        return;
+      }
+
+      // CSV header
+      var csv = 'Client Name,Mobile Number,Total Borrowed Amount,Collection Start Date,Duration (days),EMI,End Date\n';
+
+      // CSV rows
+      for (var i = 0; i < clients.length; i++) {
+        var c = clients[i];
+        csv += '"' + (c.name || '').replace(/"/g, '""') + '",';
+        csv += '"' + (c.mobile || '') + '",';
+        csv += (c.totalAmount || 0) + ',';
+        csv += '"' + (c.startDate || '') + '",';
+        csv += (c.duration || 100) + ',';
+        csv += (c.emi || 0) + ',';
+        csv += '"' + (c.endDate || '') + '"\n';
+      }
+
+      // Create and trigger download
+      var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      var url = URL.createObjectURL(blob);
+      var link = document.createElement('a');
+      link.setAttribute('href', url);
+      link.setAttribute('download', 'clients_' + getTodayISO() + '.csv');
+      link.style.display = 'none';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      alert('Export failed: ' + (e.message || 'Unknown error'));
+      console.error('Export error:', e);
+    }
+  }
+
+  /**
+   * Handle the file input change for importing clients from CSV.
+   * @param {Event} event - The change event from the file input
+   */
+  function handleImportFile(event) {
+    var file = event.target.files && event.target.files[0];
+    if (!file) return;
+
+    var reader = new FileReader();
+    reader.onload = function(e) {
+      var content = e.target.result;
+      importClients(content);
+    };
+    reader.onerror = function() {
+      alert('Could not read the file. Please try again.');
+    };
+    reader.readAsText(file);
+
+    // Reset file input so same file can be re-selected
+    event.target.value = '';
+  }
+
+  /**
+   * Parse CSV content and import client records.
+   * Skips duplicates (by name, case-insensitive).
+   * @param {string} csvContent - Raw CSV text
+   */
+  async function importClients(csvContent) {
+    try {
+      var lines = csvContent.split(/\r?\n/).filter(function(line) {
+        return line.trim() !== '';
+      });
+
+      if (lines.length < 2) {
+        alert('CSV file is empty or has no data rows.');
+        return;
+      }
+
+      // Skip header row
+      var dataLines = lines.slice(1);
+      var existingClients = await DB.getAllClients();
+      var existingNames = existingClients.map(function(c) {
+        return c.name.trim().toLowerCase();
+      });
+
+      var imported = 0;
+      var skipped = 0;
+      var errors = 0;
+
+      for (var i = 0; i < dataLines.length; i++) {
+        var fields = parseCSVLine(dataLines[i]);
+        if (fields.length < 4) {
+          errors++;
+          continue;
+        }
+
+        var name = fields[0].trim();
+        var mobile = fields[1].trim();
+        var amount = parseFloat(fields[2]);
+        var startDate = fields[3].trim();
+        var duration = fields[4] ? parseInt(fields[4], 10) : 100;
+        var emi = fields[5] ? parseFloat(fields[5]) : 0;
+
+        // Validate essentials
+        if (!name || !mobile || isNaN(amount) || amount <= 0 || !startDate) {
+          errors++;
+          continue;
+        }
+
+        // Skip duplicates
+        if (existingNames.indexOf(name.toLowerCase()) !== -1) {
+          skipped++;
+          continue;
+        }
+
+        // Calculate EMI and endDate if not provided
+        if (!emi || emi <= 0) {
+          emi = calculateEMI(amount, duration);
+        }
+        var endDate = calculateEndDate(startDate, duration);
+
+        var client = {
+          id: generateUUID(),
+          name: name,
+          mobile: mobile,
+          totalAmount: amount,
+          startDate: startDate,
+          duration: duration,
+          emi: emi,
+          endDate: endDate,
+          createdAt: new Date().toISOString()
+        };
+
+        await DB.addClient(client);
+        existingNames.push(name.toLowerCase());
+        imported++;
+      }
+
+      var msg = 'Import complete: ' + imported + ' added';
+      if (skipped > 0) msg += ', ' + skipped + ' duplicates skipped';
+      if (errors > 0) msg += ', ' + errors + ' rows with errors';
+      alert(msg);
+
+      renderClientList();
+    } catch (e) {
+      alert('Import failed: ' + (e.message || 'Unknown error'));
+      console.error('Import error:', e);
+    }
+  }
+
+  /**
+   * Parse a single CSV line handling quoted fields.
+   * @param {string} line - A single CSV row
+   * @returns {Array<string>} Array of field values
+   */
+  function parseCSVLine(line) {
+    var fields = [];
+    var current = '';
+    var inQuotes = false;
+
+    for (var i = 0; i < line.length; i++) {
+      var ch = line[i];
+      if (inQuotes) {
+        if (ch === '"') {
+          if (i + 1 < line.length && line[i + 1] === '"') {
+            current += '"';
+            i++;
+          } else {
+            inQuotes = false;
+          }
+        } else {
+          current += ch;
+        }
+      } else {
+        if (ch === '"') {
+          inQuotes = true;
+        } else if (ch === ',') {
+          fields.push(current);
+          current = '';
+        } else {
+          current += ch;
+        }
+      }
+    }
+    fields.push(current);
+    return fields;
+  }
+
   return {
     init: init,
     renderClientList: renderClientList,
@@ -453,6 +661,8 @@ var ClientMaster = (function() {
     saveClient: saveClient,
     deleteClient: deleteClient,
     calculateEMI: calculateEMI,
-    calculateEndDate: calculateEndDate
+    calculateEndDate: calculateEndDate,
+    exportClients: exportClients,
+    importClients: importClients
   };
 })();
