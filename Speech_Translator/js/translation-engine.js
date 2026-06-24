@@ -1,23 +1,32 @@
 /**
- * TranslationEngine - Improved version with retry logic, longer timeout,
- * and better error recovery.
+ * TranslationEngine - Multi-provider translation with fallback.
  *
- * Key improvements:
- * - Timeout increased to 8 seconds (MyMemory can be slow)
- * - Retry logic: up to 2 retries on timeout/network errors
- * - Queues translation requests to avoid flooding the API
- * - Better text segmentation respecting word boundaries
+ * Primary: MyMemory API (with email for higher quota: 50K chars/day)
+ * Fallback: LibreTranslate free instance (no key needed)
+ *
+ * If MyMemory returns 403 (quota exceeded), automatically falls back
+ * to LibreTranslate for the remainder of the session.
  */
 (function () {
   'use strict';
+
+  // LibreTranslate free public instances
+  var LIBRE_ENDPOINTS = [
+    'https://libretranslate.com/translate',
+    'https://translate.argosopentech.com/translate',
+    'https://translate.terraprint.co/translate'
+  ];
 
   class TranslationEngine {
     constructor() {
       this._sourceLang = null;
       this._targetLang = null;
-      this._requestQueue = Promise.resolve();
+      this._timeout = 10000; // 10 seconds
       this._retryCount = 2;
-      this._timeout = 8000; // 8 seconds — MyMemory can be slow
+      this._useLibre = false; // Switch to LibreTranslate on MyMemory 403
+      this._libreEndpointIndex = 0;
+      // Email boosts MyMemory limit from 5K to 50K chars/day
+      this._email = 'speech.translator.app@gmail.com';
     }
 
     setLanguages(sourceLang, targetLang) {
@@ -28,17 +37,17 @@
     async translate(text) {
       if (this.isWhitespaceOnly(text)) return null;
 
-      // Trim and normalize whitespace
       text = text.trim().replace(/\s+/g, ' ');
       if (!text) return null;
 
       if (text.length > 500) {
-        // Split long text into manageable chunks for better translation quality
         var segments = this.splitText(text, 500);
         var results = [];
         for (var i = 0; i < segments.length; i++) {
           var translated = await this._translateWithRetry(segments[i]);
           results.push(translated);
+          // Small delay between segments to avoid rate limiting
+          if (i < segments.length - 1) await this._delay(300);
         }
         return results.join(' ');
       }
@@ -51,35 +60,64 @@
 
       for (var attempt = 0; attempt <= this._retryCount; attempt++) {
         try {
-          // Small delay between retries
-          if (attempt > 0) {
-            await this._delay(500 * attempt);
+          if (attempt > 0) await this._delay(600 * attempt);
+
+          if (this._useLibre) {
+            return await this._translateLibre(text);
+          } else {
+            return await this._translateMyMemory(text);
           }
-          return await this._translateSegment(text);
         } catch (error) {
           lastError = error;
-          // Only retry on timeout or network errors, not on API errors
-          if (error.message.indexOf('timeout') === -1 &&
-              error.message.indexOf('network') === -1) {
-            throw error;
+
+          // If MyMemory gives 403, switch to LibreTranslate and retry immediately
+          if (error.message.indexOf('403') !== -1 && !this._useLibre) {
+            console.warn('[TranslationEngine] MyMemory quota exceeded. Switching to LibreTranslate.');
+            this._useLibre = true;
+            attempt--; // Don't count this as a retry
+            continue;
           }
-          console.warn('[TranslationEngine] Retry ' + (attempt + 1) + '/' + this._retryCount + ': ' + error.message);
+
+          // Retry on timeout or network errors
+          if (error.message.indexOf('timeout') !== -1 || error.message.indexOf('network') !== -1) {
+            console.warn('[TranslationEngine] Retry ' + (attempt + 1) + ': ' + error.message);
+            continue;
+          }
+
+          // If LibreTranslate fails, try next endpoint
+          if (this._useLibre && error.message.indexOf('LibreTranslate') !== -1) {
+            this._libreEndpointIndex = (this._libreEndpointIndex + 1) % LIBRE_ENDPOINTS.length;
+            console.warn('[TranslationEngine] Trying next LibreTranslate endpoint');
+            continue;
+          }
+
+          throw error;
         }
       }
 
       throw lastError;
     }
 
-    async _translateSegment(text) {
+    /**
+     * Translate via MyMemory API (primary).
+     */
+    async _translateMyMemory(text) {
       var url = 'https://api.mymemory.translated.net/get?q=' +
-        encodeURIComponent(text) + '&langpair=' + this._sourceLang + '|' + this._targetLang;
+        encodeURIComponent(text) +
+        '&langpair=' + this._sourceLang + '|' + this._targetLang +
+        '&de=' + encodeURIComponent(this._email);
 
       var controller = new AbortController();
-      var timeoutId = setTimeout(function () { controller.abort(); }, this._timeout);
+      var self = this;
+      var timeoutId = setTimeout(function () { controller.abort(); }, self._timeout);
 
       try {
         var response = await fetch(url, { signal: controller.signal });
         clearTimeout(timeoutId);
+
+        if (response.status === 403) {
+          throw new Error('Translation API error: status 403');
+        }
 
         if (!response.ok) {
           throw new Error('Translation API HTTP error: ' + response.status);
@@ -91,31 +129,75 @@
           throw new Error('Empty translation result');
         }
 
-        // Check for MyMemory quota exceeded or error responses
-        if (data.responseStatus === 429) {
-          throw new Error('Translation API rate limit exceeded. Please wait a moment.');
-        }
-        if (data.responseStatus !== 200 && data.responseStatus !== undefined) {
+        if (data.responseStatus === 403 || data.responseStatus === 429) {
           throw new Error('Translation API error: status ' + data.responseStatus);
         }
 
+        // Check for "PLEASE SELECT TWO LANGUAGES" or similar error messages
         var translated = data.responseData.translatedText;
-
-        // MyMemory sometimes returns the source text unchanged — detect this
-        if (translated.toLowerCase() === text.toLowerCase() && this._sourceLang !== this._targetLang) {
-          // Still return it — might be a proper noun or untranslatable content
-          console.warn('[TranslationEngine] Translation identical to source, may be untranslatable');
+        if (translated.toUpperCase().indexOf('PLEASE SELECT') !== -1 ||
+            translated.toUpperCase().indexOf('MYMEMORY WARNING') !== -1) {
+          throw new Error('Translation API error: status 403');
         }
 
         return translated;
       } catch (error) {
         clearTimeout(timeoutId);
-
         if (error.name === 'AbortError') {
-          throw new Error('Translation timeout: request exceeded ' + (this._timeout / 1000) + ' seconds');
+          throw new Error('Translation timeout: request exceeded ' + (self._timeout / 1000) + ' seconds');
         }
-        if (error.message.indexOf('Empty translation') !== -1 ||
-            error.message.indexOf('Translation API') !== -1) {
+        if (error.message.indexOf('Translation API') !== -1 || error.message.indexOf('Empty translation') !== -1) {
+          throw error;
+        }
+        throw new Error('Translation failed: network error - ' + error.message);
+      }
+    }
+
+    /**
+     * Translate via LibreTranslate (fallback).
+     */
+    async _translateLibre(text) {
+      var endpoint = LIBRE_ENDPOINTS[this._libreEndpointIndex];
+
+      var controller = new AbortController();
+      var self = this;
+      var timeoutId = setTimeout(function () { controller.abort(); }, self._timeout);
+
+      try {
+        var response = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            q: text,
+            source: this._sourceLang,
+            target: this._targetLang,
+            format: 'text'
+          }),
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+          throw new Error('LibreTranslate HTTP error: ' + response.status);
+        }
+
+        var data = await response.json();
+
+        if (data.error) {
+          throw new Error('LibreTranslate error: ' + data.error);
+        }
+
+        if (!data.translatedText) {
+          throw new Error('LibreTranslate: empty result');
+        }
+
+        return data.translatedText;
+      } catch (error) {
+        clearTimeout(timeoutId);
+        if (error.name === 'AbortError') {
+          throw new Error('Translation timeout: request exceeded ' + (self._timeout / 1000) + ' seconds');
+        }
+        if (error.message.indexOf('LibreTranslate') !== -1) {
           throw error;
         }
         throw new Error('Translation failed: network error - ' + error.message);
@@ -124,8 +206,6 @@
 
     /**
      * Split text into segments respecting sentence and word boundaries.
-     * Prefers splitting at sentence end (. ! ?), then at comma/semicolon,
-     * then at word boundary (space).
      */
     splitText(text, maxLength) {
       maxLength = maxLength || 500;
@@ -142,7 +222,6 @@
 
         var splitIndex = -1;
 
-        // 1. Look for sentence boundary (. ! ?) within the allowed range
         for (var i = maxLength - 1; i >= maxLength * 0.5; i--) {
           var ch = remaining[i];
           if ((ch === '.' || ch === '!' || ch === '?') && (i + 1 >= remaining.length || remaining[i + 1] === ' ')) {
@@ -151,7 +230,6 @@
           }
         }
 
-        // 2. Look for comma/semicolon boundary
         if (splitIndex === -1) {
           for (var j = maxLength - 1; j >= maxLength * 0.5; j--) {
             if (remaining[j] === ',' || remaining[j] === ';') {
@@ -161,7 +239,6 @@
           }
         }
 
-        // 3. Look for word boundary (space)
         if (splitIndex === -1) {
           for (var k = maxLength - 1; k >= maxLength * 0.3; k--) {
             if (remaining[k] === ' ') {
@@ -171,10 +248,7 @@
           }
         }
 
-        // 4. Hard split as last resort
-        if (splitIndex === -1) {
-          splitIndex = maxLength;
-        }
+        if (splitIndex === -1) splitIndex = maxLength;
 
         segments.push(remaining.substring(0, splitIndex).trim());
         remaining = remaining.substring(splitIndex).trim();

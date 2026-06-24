@@ -516,23 +516,40 @@ input[type="range"] {
   display: none;
 }
 
-/* ── 14. OCR Preview ── */
+/* ── 14. OCR Preview & Crop ── */
 .ocr-preview-section {
   text-align: center;
 }
 .ocr-preview-section[hidden] { display: none; }
 
-.ocr-preview-img {
-  max-width: 100%;
-  max-height: 180px;
-  border-radius: var(--radius-sm);
+.ocr-crop-container {
+  position: relative;
+  display: inline-block;
   margin-bottom: 12px;
-  object-fit: contain;
-  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  border: 2px solid var(--border-color);
+  cursor: crosshair;
+  max-width: 100%;
+}
+
+.ocr-canvas {
+  display: block;
+  max-width: 100%;
+  border-radius: 4px;
+  touch-action: none; /* Prevent scroll while drawing */
+}
+
+.ocr-action-bar {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
 }
 
 .ocr-progress {
-  margin-bottom: 12px;
+  margin-top: 12px;
 }
 
 #ocr-progress-text {

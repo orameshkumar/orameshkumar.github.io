@@ -42,7 +42,7 @@
   var listeningIndicator, speakingIndicator;
   var offlineBanner, resumeBtn, toastContainer;
   var ocrCameraBtn, ocrGalleryBtn, ocrCameraInput, ocrGalleryInput;
-  var ocrPreviewSection, ocrPreviewImg, ocrProgress, ocrProgressText, ocrProgressFill, ocrCancelBtn;
+  var ocrPreviewSection, ocrProgress, ocrProgressText, ocrProgressFill, ocrCancelBtn;
 
   // ═══════════════════════════════════════════════════════════════
   // Theme Toggle
@@ -485,8 +485,11 @@
   }
 
   // ═══════════════════════════════════════════════════════════════
-  // OCR (Image to Text Translation)
+  // OCR (Image to Text Translation) with Crop Selection
   // ═══════════════════════════════════════════════════════════════
+
+  var imageCropper = null;
+  var currentOCRFile = null;
 
   function initOCR() {
     ocrEngine = new OCREngine();
@@ -497,65 +500,107 @@
     ocrCameraInput = document.getElementById('ocr-camera-input');
     ocrGalleryInput = document.getElementById('ocr-gallery-input');
     ocrPreviewSection = document.getElementById('ocr-preview-section');
-    ocrPreviewImg = document.getElementById('ocr-preview-img');
     ocrProgress = document.getElementById('ocr-progress');
     ocrProgressText = document.getElementById('ocr-progress-text');
     ocrProgressFill = document.getElementById('ocr-progress-fill');
     ocrCancelBtn = document.getElementById('ocr-cancel-btn');
 
-    // Bind OCR events
-    ocrCameraBtn.addEventListener('click', function () {
-      ocrCameraInput.click();
+    var ocrTranslateSelectionBtn = document.getElementById('ocr-translate-selection-btn');
+    var ocrTranslateAllBtn = document.getElementById('ocr-translate-all-btn');
+    var ocrResetSelectionBtn = document.getElementById('ocr-reset-selection-btn');
+
+    // Initialize image cropper
+    var canvas = document.getElementById('ocr-canvas');
+    imageCropper = new ImageCropper(canvas);
+
+    // Update button states when selection changes
+    imageCropper.onSelectionChange(function (hasSelection) {
+      ocrTranslateSelectionBtn.disabled = !hasSelection;
+      ocrResetSelectionBtn.disabled = !hasSelection;
     });
 
-    ocrGalleryBtn.addEventListener('click', function () {
-      ocrGalleryInput.click();
-    });
+    // Bind OCR events
+    ocrCameraBtn.addEventListener('click', function () { ocrCameraInput.click(); });
+    ocrGalleryBtn.addEventListener('click', function () { ocrGalleryInput.click(); });
 
     ocrCameraInput.addEventListener('change', function (e) {
-      if (e.target.files && e.target.files[0]) {
-        handleOCRImage(e.target.files[0]);
-      }
+      if (e.target.files && e.target.files[0]) handleOCRImageLoad(e.target.files[0]);
+    });
+    ocrGalleryInput.addEventListener('change', function (e) {
+      if (e.target.files && e.target.files[0]) handleOCRImageLoad(e.target.files[0]);
     });
 
-    ocrGalleryInput.addEventListener('change', function (e) {
-      if (e.target.files && e.target.files[0]) {
-        handleOCRImage(e.target.files[0]);
-      }
+    ocrTranslateSelectionBtn.addEventListener('click', function () {
+      translateCroppedRegion();
+    });
+
+    ocrTranslateAllBtn.addEventListener('click', function () {
+      translateFullImage();
+    });
+
+    ocrResetSelectionBtn.addEventListener('click', function () {
+      imageCropper.resetSelection();
     });
 
     ocrCancelBtn.addEventListener('click', function () {
       ocrPreviewSection.hidden = true;
       ocrProgress.hidden = true;
+      imageCropper.clear();
+      currentOCRFile = null;
       ocrCameraInput.value = '';
       ocrGalleryInput.value = '';
     });
   }
 
-  async function handleOCRImage(file) {
+  async function handleOCRImageLoad(file) {
     if (!sourceLang || !targetLang) {
       showNotification('Please select source and target languages first.', 'warning', true);
       return;
     }
 
-    // Show preview
-    var reader = new FileReader();
-    reader.onload = function (e) {
-      ocrPreviewImg.src = e.target.result;
-      ocrPreviewSection.hidden = false;
-    };
-    reader.readAsDataURL(file);
+    currentOCRFile = file;
+    ocrPreviewSection.hidden = false;
+    ocrProgress.hidden = true;
 
-    // Set OCR language to match source language
+    try {
+      await imageCropper.loadImage(file);
+      showNotification('Draw a rectangle on the image to select an area, or tap "Translate All".', 'info', true);
+    } catch (err) {
+      showNotification('Failed to load image: ' + err.message, 'error', true);
+    }
+  }
+
+  async function translateCroppedRegion() {
+    if (!imageCropper.hasSelection()) {
+      showNotification('Please draw a selection on the image first.', 'warning', true);
+      return;
+    }
+
+    var croppedCanvas = imageCropper.getCroppedCanvas();
+    if (!croppedCanvas) return;
+
+    // Convert canvas to blob and run OCR
+    await runOCROnCanvas(croppedCanvas);
+  }
+
+  async function translateFullImage() {
+    var fullCanvas = imageCropper.getFullCanvas();
+    if (!fullCanvas) return;
+
+    await runOCROnCanvas(fullCanvas);
+  }
+
+  async function runOCROnCanvas(sourceCanvas) {
     ocrEngine.setLanguage(sourceLang.code);
-
-    // Show progress
     ocrProgress.hidden = false;
     ocrProgressText.textContent = 'Extracting text...';
     ocrProgressFill.style.width = '0%';
 
     try {
-      var extractedText = await ocrEngine.recognize(file, function (progress) {
+      // Convert canvas to data URL for Tesseract
+      var dataUrl = sourceCanvas.toDataURL('image/png');
+
+      var extractedText = await ocrEngine.recognize(dataUrl, function (progress) {
         var pct = Math.round(progress * 100);
         ocrProgressFill.style.width = pct + '%';
         ocrProgressText.textContent = 'Extracting text... ' + pct + '%';
@@ -564,38 +609,26 @@
       ocrProgressText.textContent = 'Text extracted! Translating...';
       ocrProgressFill.style.width = '100%';
 
-      // Feed extracted text into the translation pipeline
+      // Feed into translation pipeline
       var srcLabel = sourceLang.code.toUpperCase();
       var tgtLabel = targetLang.code.toUpperCase();
 
       var translatedText = await translationEngine.translate(extractedText);
 
       if (translatedText) {
-        // Speak the translated text
         synthesizer.speak(translatedText);
-
-        // Add to transcript
         transcriptPanel.addEntry(extractedText, translatedText, srcLabel, tgtLabel);
         updateClearBtn();
-
         showNotification('Image translated successfully!', 'info', true);
       }
 
-      // Hide progress after short delay
-      setTimeout(function () {
-        ocrProgress.hidden = true;
-      }, 1500);
-
+      setTimeout(function () { ocrProgress.hidden = true; }, 1500);
     } catch (error) {
       ocrProgressText.textContent = 'Failed: ' + error.message;
       showNotification('OCR/Translation error: ' + error.message, 'error', true);
-
-      setTimeout(function () {
-        ocrProgress.hidden = true;
-      }, 3000);
+      setTimeout(function () { ocrProgress.hidden = true; }, 3000);
     }
 
-    // Reset file inputs
     ocrCameraInput.value = '';
     ocrGalleryInput.value = '';
   }

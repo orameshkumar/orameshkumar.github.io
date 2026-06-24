@@ -88,14 +88,22 @@
         </div>
       </section>
 
-      <!-- OCR Preview -->
+      <!-- OCR Preview with Crop Selection -->
       <div id="ocr-preview-section" class="card ocr-preview-section" hidden>
-        <img id="ocr-preview-img" class="ocr-preview-img" alt="Captured image">
+        <div class="card-label">Select area to translate (or tap Translate All)</div>
+        <div id="ocr-crop-container" class="ocr-crop-container">
+          <canvas id="ocr-canvas" class="ocr-canvas"></canvas>
+        </div>
+        <div class="ocr-action-bar">
+          <button id="ocr-translate-selection-btn" type="button" class="btn btn-start btn-sm" disabled>Translate Selection</button>
+          <button id="ocr-translate-all-btn" type="button" class="btn btn-outline btn-sm">Translate All</button>
+          <button id="ocr-reset-selection-btn" type="button" class="btn btn-neutral btn-sm" disabled>Reset</button>
+          <button id="ocr-cancel-btn" type="button" class="btn btn-neutral btn-sm">Cancel</button>
+        </div>
         <div id="ocr-progress" class="ocr-progress" hidden>
           <span id="ocr-progress-text">Extracting text...</span>
           <div class="progress-bar-mini"><div id="ocr-progress-fill" class="progress-bar-mini-fill"></div></div>
         </div>
-        <button id="ocr-cancel-btn" type="button" class="btn btn-neutral btn-sm">Cancel</button>
       </div>
 
       <!-- Status Indicators -->
@@ -152,6 +160,7 @@
   <script src="js/speech-recognizer.js"></script>
   <script src="js/speech-synthesizer.js"></script>
   <script src="js/ocr-engine.js"></script>
+  <script src="js/image-cropper.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>
