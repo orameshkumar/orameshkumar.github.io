@@ -66,7 +66,7 @@ const BarcodeModule = (function () {
     if (scanBtn) scanBtn.addEventListener('click', toggleScanner);
 
     if ('BarcodeDetector' in window) {
-      barcodeDetector = new BarcodeDetector({ formats: ['code_128', 'code_39', 'qr_code', 'ean_13', 'ean_8'] });
+      barcodeDetector = new BarcodeDetector({ formats: ['code_128', 'code_39', 'qr_code', 'data_matrix', 'aztec', 'ean_13', 'ean_8'] });
     }
   }
 
@@ -98,17 +98,17 @@ const BarcodeModule = (function () {
     }
 
     // Show selection modal
-    showItemSelectionModal(items, function (selectedItems) {
+    showItemSelectionModal(items, function (selectedItems, barcodeType) {
       if (selectedItems.length === 0) {
         alert('No items selected.');
         return;
       }
-      generateItemBarcodePrintPage(selectedItems);
+      generateItemBarcodePrintPage(selectedItems, barcodeType);
     });
   }
 
   /**
-   * Show a modal with checkboxes to select items for barcode printing.
+   * Show a modal with checkboxes to select items and barcode type.
    */
   function showItemSelectionModal(items, onConfirm) {
     var existing = document.getElementById('barcode-select-modal');
@@ -132,6 +132,17 @@ const BarcodeModule = (function () {
           '<button class="modal-close" id="bc-select-close" aria-label="Close">&times;</button>' +
         '</div>' +
         '<div class="modal-body" style="max-height:50vh;overflow-y:auto;">' +
+          '<div style="margin-bottom:12px;">' +
+            '<label style="font-size:0.75rem;font-weight:600;color:#5f6368;display:block;margin-bottom:6px;">Barcode Type:</label>' +
+            '<div style="display:flex;gap:8px;">' +
+              '<label style="flex:1;display:flex;align-items:center;gap:4px;padding:8px;border:1.5px solid #dadce0;border-radius:8px;cursor:pointer;font-size:0.8rem;">' +
+                '<input type="radio" name="bc-type" value="code128" checked> Code128 (1D)' +
+              '</label>' +
+              '<label style="flex:1;display:flex;align-items:center;gap:4px;padding:8px;border:1.5px solid #dadce0;border-radius:8px;cursor:pointer;font-size:0.8rem;">' +
+                '<input type="radio" name="bc-type" value="qr"> QR Code (2D)' +
+              '</label>' +
+            '</div>' +
+          '</div>' +
           '<div style="display:flex;gap:8px;margin-bottom:12px;">' +
             '<button id="bc-select-all" class="btn-secondary" style="flex:1;min-height:32px;font-size:0.75rem;">Select All</button>' +
             '<button id="bc-deselect-all" class="btn-secondary" style="flex:1;min-height:32px;font-size:0.75rem;">Deselect All</button>' +
@@ -164,8 +175,10 @@ const BarcodeModule = (function () {
         var idx = parseInt(cb.getAttribute('data-idx'), 10);
         selected.push(items[idx]);
       });
+      var typeRadio = overlay.querySelector('input[name="bc-type"]:checked');
+      var barcodeType = typeRadio ? typeRadio.value : 'code128';
       closeSelectionModal(overlay);
-      onConfirm(selected);
+      onConfirm(selected, barcodeType);
     });
   }
 
@@ -175,34 +188,56 @@ const BarcodeModule = (function () {
   }
 
   /**
-   * Generate the printable barcode page for selected items (no price shown).
+   * Get the base URL of the app for script references in print pages.
    */
-  function generateItemBarcodePrintPage(items) {
+  function getBaseUrl() {
+    var loc = window.location;
+    var path = loc.pathname.substring(0, loc.pathname.lastIndexOf('/') + 1);
+    return loc.origin + path;
+  }
+
+  /**
+   * Generate the printable barcode page for selected items.
+   * @param {Array} items - Selected items
+   * @param {string} barcodeType - 'code128' or 'qr'
+   */
+  function generateItemBarcodePrintPage(items, barcodeType) {
     var storeName = (typeof Settings !== 'undefined') ? Settings.getStoreName() : 'ABC Store';
+    var isQR = barcodeType === 'qr';
+    var baseUrl = getBaseUrl();
 
     var html = '<!DOCTYPE html><html><head><meta charset="UTF-8">';
     html += '<title>' + storeName + ' - Item Barcodes</title>';
     html += '<style>';
     html += 'body { font-family: Arial, sans-serif; padding: 20px; }';
     html += 'h1 { text-align: center; font-size: 18px; margin-bottom: 20px; }';
-    html += '.barcode-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }';
+    html += '.barcode-grid { display: grid; grid-template-columns: repeat(' + (isQR ? '4' : '3') + ', 1fr); gap: 16px; }';
     html += '.barcode-card { border: 1px solid #ccc; padding: 12px; text-align: center; border-radius: 4px; page-break-inside: avoid; }';
     html += '.barcode-card .item-name { font-size: 18px; font-weight: bold; margin-bottom: 10px; text-transform: uppercase; }';
-    html += '.barcode-card svg { max-width: 100%; height: 50px; }';
+    html += '.barcode-card svg, .barcode-card canvas { max-width: 100%; }';
     html += '.barcode-card .barcode-text { font-size: 9px; color: #999; margin-top: 4px; }';
     html += '@media print { .no-print { display: none; } body { padding: 10px; } }';
     html += '</style>';
-    html += '<script src="js/jsbarcode.min.js"><\/script>';
+    if (!isQR) {
+      html += '<script src="' + baseUrl + 'js/jsbarcode.min.js"><\/script>';
+    } else {
+      html += '<script src="' + baseUrl + 'js/qrcode-lib.js"><\/script>';
+    }
     html += '</head><body>';
-    html += '<h1>' + storeName + ' - Item Barcodes</h1>';
+    html += '<h1>' + storeName + ' - Item Barcodes (' + (isQR ? 'QR' : 'Code128') + ')</h1>';
     html += '<button class="no-print" onclick="window.print()" style="margin-bottom:16px;padding:8px 16px;font-size:14px;">&#x1F5A8; Print</button>';
     html += '<div class="barcode-grid">';
 
     items.forEach(function (item) {
       var barcodeVal = getItemBarcodeValue(item);
+      var safeId = barcodeVal.replace(/[^a-zA-Z0-9]/g, '_');
       html += '<div class="barcode-card">';
       html += '<div class="item-name">' + item.name + '</div>';
-      html += '<svg id="bc-' + barcodeVal + '"></svg>';
+      if (isQR) {
+        html += '<canvas id="bc-' + safeId + '"></canvas>';
+      } else {
+        html += '<svg id="bc-' + safeId + '"></svg>';
+      }
       html += '<div class="barcode-text">' + barcodeVal + '</div>';
       html += '</div>';
     });
@@ -210,10 +245,26 @@ const BarcodeModule = (function () {
     html += '</div>';
     html += '<script>';
     html += 'document.addEventListener("DOMContentLoaded", function() {';
-    items.forEach(function (item) {
-      var barcodeVal = getItemBarcodeValue(item);
-      html += 'try { JsBarcode("#bc-' + barcodeVal + '", "' + barcodeVal + '", { format: "CODE128", height: 60, fontSize: 12, margin: 10, width: 2 }); } catch(e) {}';
-    });
+    if (isQR) {
+      items.forEach(function (item) {
+        var barcodeVal = getItemBarcodeValue(item);
+        var safeId = barcodeVal.replace(/[^a-zA-Z0-9]/g, '_');
+        html += 'try { var qr = qrcode(0, "M"); qr.addData("' + barcodeVal + '"); qr.make();';
+        html += 'var canvas = document.getElementById("bc-' + safeId + '");';
+        html += 'var modules = qr.getModuleCount(); var cell = Math.max(4, Math.floor(200 / modules)); var quiet = cell * 2;';
+        html += 'canvas.width = cell * modules + quiet * 2; canvas.height = cell * modules + quiet * 2;';
+        html += 'var ctx = canvas.getContext("2d"); ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, canvas.width, canvas.height);';
+        html += 'ctx.fillStyle = "#000";';
+        html += 'for (var r = 0; r < modules; r++) { for (var c = 0; c < modules; c++) { if (qr.isDark(r, c)) ctx.fillRect(quiet + c * cell, quiet + r * cell, cell, cell); } }';
+        html += '} catch(e) { console.error(e); }';
+      });
+    } else {
+      items.forEach(function (item) {
+        var barcodeVal = getItemBarcodeValue(item);
+        var safeId = barcodeVal.replace(/[^a-zA-Z0-9]/g, '_');
+        html += 'try { JsBarcode("#bc-' + safeId + '", "' + barcodeVal + '", { format: "CODE128", height: 60, fontSize: 12, margin: 10, width: 2 }); } catch(e) {}';
+      });
+    }
     html += '});';
     html += '<\/script>';
     html += '</body></html>';
@@ -226,7 +277,61 @@ const BarcodeModule = (function () {
   // ─── Print Quantity Barcodes ────────────────────────────────────────────────
 
   function printQuantityBarcodes() {
+    // Ask for barcode type
+    showBarcodeTypeChoice(function (barcodeType) {
+      generateQtyBarcodePrintPage(barcodeType);
+    });
+  }
+
+  /**
+   * Show a simple barcode type chooser modal.
+   */
+  function showBarcodeTypeChoice(onConfirm) {
+    var existing = document.getElementById('bc-type-modal');
+    if (existing) existing.remove();
+
+    var overlay = document.createElement('div');
+    overlay.id = 'bc-type-modal';
+    overlay.className = 'modal-overlay';
+
+    overlay.innerHTML =
+      '<div class="modal" role="dialog" aria-modal="true">' +
+        '<div class="modal-header">' +
+          '<h2 class="modal-title">Barcode Type</h2>' +
+          '<button class="modal-close" id="bct-close" aria-label="Close">&times;</button>' +
+        '</div>' +
+        '<div class="modal-body" style="text-align:center;">' +
+          '<p style="font-size:0.8rem;color:#5f6368;margin-bottom:12px;">Choose barcode format for quantity barcodes:</p>' +
+          '<div style="display:flex;gap:12px;justify-content:center;">' +
+            '<button id="bct-code128" class="btn-primary" style="flex:1;">Code128 (1D)</button>' +
+            '<button id="bct-qr" class="btn-primary" style="flex:1;background:#34a853;">QR Code (2D)</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+
+    document.body.appendChild(overlay);
+    requestAnimationFrame(function () { overlay.classList.add('active'); });
+
+    document.getElementById('bct-close').addEventListener('click', function () { closeSelectionModal(overlay); });
+    overlay.addEventListener('click', function (e) { if (e.target === overlay) closeSelectionModal(overlay); });
+
+    document.getElementById('bct-code128').addEventListener('click', function () {
+      closeSelectionModal(overlay);
+      onConfirm('code128');
+    });
+    document.getElementById('bct-qr').addEventListener('click', function () {
+      closeSelectionModal(overlay);
+      onConfirm('qr');
+    });
+  }
+
+  /**
+   * Generate quantity barcode print page.
+   */
+  function generateQtyBarcodePrintPage(barcodeType) {
     var storeName = (typeof Settings !== 'undefined') ? Settings.getStoreName() : 'ABC Store';
+    var isQR = barcodeType === 'qr';
+    var baseUrl = getBaseUrl();
 
     var html = '<!DOCTYPE html><html><head><meta charset="UTF-8">';
     html += '<title>' + storeName + ' - Quantity Barcodes</title>';
@@ -234,16 +339,20 @@ const BarcodeModule = (function () {
     html += 'body { font-family: Arial, sans-serif; padding: 20px; }';
     html += 'h1 { text-align: center; font-size: 18px; margin-bottom: 10px; }';
     html += 'h2 { font-size: 14px; margin: 16px 0 8px; border-bottom: 1px solid #ccc; padding-bottom: 4px; }';
-    html += '.barcode-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-bottom: 20px; }';
+    html += '.barcode-grid { display: grid; grid-template-columns: repeat(' + (isQR ? '4' : '2') + ', 1fr); gap: 16px; margin-bottom: 20px; }';
     html += '.barcode-card { border: 1px solid #ccc; padding: 14px; text-align: center; border-radius: 4px; page-break-inside: avoid; }';
     html += '.barcode-card .qty-label { font-size: 18px; font-weight: bold; margin-bottom: 8px; text-transform: uppercase; }';
-    html += '.barcode-card svg { max-width: 100%; height: 70px; }';
+    html += '.barcode-card svg, .barcode-card canvas { max-width: 100%; }';
     html += '.barcode-card .barcode-text { font-size: 8px; color: #999; margin-top: 4px; }';
     html += '@media print { .no-print { display: none; } }';
     html += '</style>';
-    html += '<script src="js/jsbarcode.min.js"><\/script>';
+    if (!isQR) {
+      html += '<script src="' + baseUrl + 'js/jsbarcode.min.js"><\/script>';
+    } else {
+      html += '<script src="' + baseUrl + 'js/qrcode-lib.js"><\/script>';
+    }
     html += '</head><body>';
-    html += '<h1>' + storeName + ' - Quantity Barcodes</h1>';
+    html += '<h1>' + storeName + ' - Quantity Barcodes (' + (isQR ? 'QR' : 'Code128') + ')</h1>';
     html += '<button class="no-print" onclick="window.print()" style="margin-bottom:16px;padding:8px 16px;font-size:14px;">&#x1F5A8; Print</button>';
 
     var allBarcodes = [];
@@ -258,7 +367,11 @@ const BarcodeModule = (function () {
         allBarcodes.push({ id: safeId, value: barcodeVal });
         html += '<div class="barcode-card">';
         html += '<div class="qty-label">' + preset.label + '</div>';
-        html += '<svg id="bc-' + safeId + '"></svg>';
+        if (isQR) {
+          html += '<canvas id="bc-' + safeId + '"></canvas>';
+        } else {
+          html += '<svg id="bc-' + safeId + '"></svg>';
+        }
         html += '<div class="barcode-text">' + barcodeVal + '</div>';
         html += '</div>';
       });
@@ -267,9 +380,22 @@ const BarcodeModule = (function () {
 
     html += '<script>';
     html += 'document.addEventListener("DOMContentLoaded", function() {';
-    allBarcodes.forEach(function (bc) {
-      html += 'try { JsBarcode("#bc-' + bc.id + '", "' + bc.value + '", { format: "CODE128", height: 60, fontSize: 12, margin: 10, width: 2 }); } catch(e) {}';
-    });
+    if (isQR) {
+      allBarcodes.forEach(function (bc) {
+        html += 'try { var qr = qrcode(0, "M"); qr.addData("' + bc.value + '"); qr.make();';
+        html += 'var canvas = document.getElementById("bc-' + bc.id + '");';
+        html += 'var modules = qr.getModuleCount(); var cell = Math.max(4, Math.floor(160 / modules)); var quiet = cell * 2;';
+        html += 'canvas.width = cell * modules + quiet * 2; canvas.height = cell * modules + quiet * 2;';
+        html += 'var ctx = canvas.getContext("2d"); ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, canvas.width, canvas.height);';
+        html += 'ctx.fillStyle = "#000";';
+        html += 'for (var r = 0; r < modules; r++) { for (var c = 0; c < modules; c++) { if (qr.isDark(r, c)) ctx.fillRect(quiet + c * cell, quiet + r * cell, cell, cell); } }';
+        html += '} catch(e) { console.error(e); }';
+      });
+    } else {
+      allBarcodes.forEach(function (bc) {
+        html += 'try { JsBarcode("#bc-' + bc.id + '", "' + bc.value + '", { format: "CODE128", height: 60, fontSize: 12, margin: 10, width: 2 }); } catch(e) {}';
+      });
+    }
     html += '});';
     html += '<\/script>';
     html += '</body></html>';
@@ -384,21 +510,29 @@ const BarcodeModule = (function () {
 
   async function handleScannedBarcode(value) {
     if (!value) return;
-    var upperVal = value.toUpperCase();
+    var upperVal = value.toUpperCase().trim();
 
     if (upperVal.startsWith(BARCODE_PREFIX_ITEM)) {
-      var itemIdFragment = upperVal.substring(BARCODE_PREFIX_ITEM.length).toLowerCase();
+      var itemIdFragment = upperVal.substring(BARCODE_PREFIX_ITEM.length).toLowerCase().trim();
       var items = await DB.getAllItems();
       var matchedItem = items.find(function (item) {
+        // Match first 8 chars of ID (barcode stores first 8 uppercase hex chars)
         return item.id.substring(0, 8).toLowerCase() === itemIdFragment;
       });
+
+      // If no match by first 8, try matching by full ID containing the fragment
+      if (!matchedItem) {
+        matchedItem = items.find(function (item) {
+          return item.id.toLowerCase().indexOf(itemIdFragment) === 0;
+        });
+      }
 
       if (matchedItem) {
         pendingItemId = matchedItem.id;
         showScanNotification('✓ ' + matchedItem.name + ' — scan quantity');
         if (navigator.vibrate) navigator.vibrate(100);
       } else {
-        showScanNotification('Unknown item barcode');
+        showScanNotification('Unknown item: ' + value + ' (no match for ' + itemIdFragment + ')');
       }
 
     } else if (upperVal.startsWith(BARCODE_PREFIX_QTY)) {
