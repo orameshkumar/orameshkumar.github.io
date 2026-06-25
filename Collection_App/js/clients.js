@@ -300,6 +300,7 @@ var ClientMaster = (function() {
       document.getElementById('client-duration').value = client.duration || '';
       document.getElementById('client-emi').value = client.emi || '';
       document.getElementById('client-end-date').value = client.endDate || '';
+      document.getElementById('client-notes').value = client.notes || '';
 
       // Set loan type selector and toggle fields
       var loanType = client.loanType || 'daily_emi';
@@ -364,7 +365,8 @@ var ClientMaster = (function() {
       duration: parseInt(document.getElementById('client-duration').value, 10),
       emi: parseFloat(document.getElementById('client-emi').value),
       loanType: loanType,
-      interestRate: loanType === 'interest_only' ? interestRate : null
+      interestRate: loanType === 'interest_only' ? interestRate : null,
+      notes: (document.getElementById('client-notes').value || '').trim()
     };
 
     var errors = await validateForm(data);
@@ -479,6 +481,7 @@ var ClientMaster = (function() {
           loanType: data.loanType,
           interestRate: data.interestRate,
           principalBalance: data.principalBalance,
+          notes: data.notes || '',
           createdAt: undefined
         };
 
@@ -508,6 +511,7 @@ var ClientMaster = (function() {
           loanType: data.loanType,
           interestRate: data.interestRate,
           principalBalance: data.principalBalance,
+          notes: data.notes || '',
           createdAt: new Date().toISOString()
         };
 
@@ -759,7 +763,7 @@ var ClientMaster = (function() {
       }
 
       // CSV header
-      var csv = 'Client Name,Mobile Number,Total Borrowed Amount,Collection Start Date,Duration (days),EMI,End Date\n';
+      var csv = 'Client Name,Mobile Number,Total Borrowed Amount,Collection Start Date,Duration (days),EMI,End Date,Notes\n';
 
       // CSV rows
       for (var i = 0; i < clients.length; i++) {
@@ -770,7 +774,8 @@ var ClientMaster = (function() {
         csv += '"' + (c.startDate || '') + '",';
         csv += (c.duration || 100) + ',';
         csv += (c.emi || 0) + ',';
-        csv += '"' + (c.endDate || '') + '"\n';
+        csv += '"' + (c.endDate || '') + '",';
+        csv += '"' + (c.notes || '').replace(/"/g, '""') + '"\n';
       }
 
       // Create and trigger download
@@ -852,6 +857,7 @@ var ClientMaster = (function() {
         var startDate = fields[3].trim();
         var duration = fields[4] ? parseInt(fields[4], 10) : 100;
         var emi = fields[5] ? parseFloat(fields[5]) : 0;
+        var notes = fields[7] ? fields[7].trim() : '';
 
         // Validate essentials
         if (!name || !mobile || isNaN(amount) || amount <= 0 || !startDate) {
@@ -880,6 +886,7 @@ var ClientMaster = (function() {
           duration: duration,
           emi: emi,
           endDate: endDate,
+          notes: notes,
           createdAt: new Date().toISOString()
         };
 
