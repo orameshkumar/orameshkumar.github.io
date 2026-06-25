@@ -45,7 +45,14 @@
       var self = this;
       utterance.onstart = function () { self._onSpeakStart(); };
       utterance.onend = function () { self._onSpeakEnd(); };
-      utterance.onerror = function (event) { self._onError('Speech synthesis failed: ' + event.error); };
+      utterance.onerror = function (event) {
+        // "interrupted" and "canceled" are NOT real errors — they fire when
+        // speechSynthesis.cancel() is called before new speech (by design).
+        if (event.error === 'interrupted' || event.error === 'canceled') {
+          return;
+        }
+        self._onError('Speech synthesis failed: ' + event.error);
+      };
 
       speechSynthesis.speak(utterance);
     }
