@@ -901,6 +901,33 @@ body {
   display: none;
 }
 
+/* --- Backup & Restore --- */
+.settings-divider {
+  border: none;
+  border-top: 1px solid var(--color-border);
+  margin: var(--spacing-lg) 0;
+}
+
+.section-subheading {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--color-text);
+  margin-bottom: var(--spacing-md);
+}
+
+.backup-actions {
+  display: flex;
+  gap: var(--spacing-sm);
+  margin-top: var(--spacing-md);
+  flex-wrap: wrap;
+}
+
+.backup-info {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+  margin-top: var(--spacing-sm);
+}
+
 @keyframes toastFadeIn {
   from { opacity: 0; transform: translateX(-50%) translateY(10px); }
   to { opacity: 1; transform: translateX(-50%) translateY(0); }
@@ -959,6 +986,151 @@ body {
 
 .date-input:focus {
   border-color: var(--color-primary);
+}
+
+/* --- Loan Type Badge on Client Cards --- */
+.loan-type-badge {
+  display: inline-block;
+  font-size: 0.625rem;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.badge-daily-emi {
+  background-color: #e3f2fd;
+  color: #1565c0;
+}
+.badge-interest-only {
+  background-color: #fff3e0;
+  color: #e65100;
+}
+
+/* --- Payment Type Badges in History --- */
+.payment-type-badge {
+  display: inline-block;
+  font-size: 0.625rem;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.badge-emi {
+  background-color: #e8f5e9;
+  color: #2e7d32;
+}
+.badge-interest {
+  background-color: #e3f2fd;
+  color: #1565c0;
+}
+.badge-principal {
+  background-color: #fce4ec;
+  color: #c62828;
+}
+
+/* --- Collection Page Dual Buttons --- */
+.collection-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.btn-collect-interest,
+.btn-collect-principal {
+  padding: 6px 10px;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.btn-collect-interest {
+  background-color: #e3f2fd;
+  color: #1565c0;
+}
+.btn-collect-principal {
+  background-color: #fce4ec;
+  color: #c62828;
+}
+.btn-collect-interest:active,
+.btn-collect-principal:active {
+  transform: scale(0.95);
+}
+
+/* Pay Principal button on client cards */
+.btn-pay-principal {
+  background: none;
+  border: 1.5px solid #c62828;
+  border-radius: var(--radius-sm);
+  color: #c62828;
+  cursor: pointer;
+  font-size: 0.875rem;
+  padding: 4px 6px;
+  transition: background-color 0.2s;
+}
+.btn-pay-principal:hover {
+  background-color: #fce4ec;
+}
+[data-theme="dark"] .btn-pay-principal {
+  border-color: #ef9a9a;
+  color: #ef9a9a;
+}
+[data-theme="dark"] .btn-pay-principal:hover {
+  background-color: #4a1c22;
+}
+
+/* --- Interest Due Display --- */
+.collection-interest-due {
+  font-size: 0.6875rem;
+  color: #1565c0;
+  margin-top: 2px;
+}
+
+/* --- Read-only Field --- */
+.readonly-field {
+  padding: 10px 12px;
+  background-color: var(--color-bg);
+  border: 1.5px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-size: 0.875rem;
+  color: var(--color-text);
+}
+
+/* --- Dark Theme Overrides for Loan Type Feature --- */
+[data-theme="dark"] .badge-daily-emi {
+  background-color: #1a237e;
+  color: #90caf9;
+}
+[data-theme="dark"] .badge-interest-only {
+  background-color: #3e2723;
+  color: #ffcc80;
+}
+[data-theme="dark"] .badge-emi {
+  background-color: #1b5e20;
+  color: #a5d6a7;
+}
+[data-theme="dark"] .badge-interest {
+  background-color: #0d47a1;
+  color: #90caf9;
+}
+[data-theme="dark"] .badge-principal {
+  background-color: #4a1c22;
+  color: #ef9a9a;
+}
+[data-theme="dark"] .btn-collect-interest {
+  background-color: #1a237e;
+  color: #90caf9;
+}
+[data-theme="dark"] .btn-collect-principal {
+  background-color: #4a1c22;
+  color: #ef9a9a;
+}
+[data-theme="dark"] .collection-interest-due {
+  color: #90caf9;
 }
 
 /* --- Print Media Query --- */

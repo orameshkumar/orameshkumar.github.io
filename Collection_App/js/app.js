@@ -112,6 +112,12 @@ function navigateToScreen(screenId) {
       console.error('Error initializing Reports:', e);
     }
   }
+
+  if (screenId === 'interest-section') {
+    if (typeof InterestCollection !== 'undefined' && InterestCollection.renderInterestList) {
+      InterestCollection.renderInterestList();
+    }
+  }
 }
 
 /**
@@ -199,6 +205,15 @@ async function initApp() {
     console.error('Error initializing Collection:', e);
   }
 
+  // Initialize InterestCollection module
+  try {
+    if (typeof InterestCollection !== 'undefined' && InterestCollection.init) {
+      InterestCollection.init();
+    }
+  } catch (e) {
+    console.error('Error initializing InterestCollection:', e);
+  }
+
   // Initialize PaymentHistory module
   try {
     if (typeof PaymentHistory !== 'undefined' && PaymentHistory.init) {
@@ -219,6 +234,16 @@ async function initApp() {
 
   // Update app name from settings
   updateAppName();
+
+  // Initialize Backup module and check reminder
+  try {
+    if (typeof Backup !== 'undefined' && Backup.init) {
+      Backup.init();
+      Backup.checkBackupReminder();
+    }
+  } catch (e) {
+    console.error('Error initializing Backup:', e);
+  }
 
   // Register service worker
   registerServiceWorker();

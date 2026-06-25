@@ -55,6 +55,12 @@ var Reports = (function() {
       printBtn.addEventListener('click', printReport);
     }
 
+    // Client name search filter
+    var clientSearchInput = document.getElementById('report-client-search');
+    if (clientSearchInput) {
+      clientSearchInput.addEventListener('input', loadReport);
+    }
+
     loadReport();
   }
 
@@ -125,9 +131,10 @@ var Reports = (function() {
 
   /**
    * Generate a client-wise report: aggregate payments by client.
+   * For interest-only clients, computes separate interest and principal totals.
    * @param {string} start - Start date ISO
    * @param {string} end - End date ISO
-   * @returns {Array} [{name, total}] sorted alphabetically by name
+   * @returns {Array} [{name, total, loanType, principalBalance, interestTotal, principalTotal}] sorted alphabetically by name
    */
   async function generateClientWiseReport(start, end) {
     try {
@@ -135,28 +142,48 @@ var Reports = (function() {
 
       if (!payments || payments.length === 0) return [];
 
-      // Group by clientId
+      // Group by clientId with payment type breakdown
       var clientMap = {};
       for (var i = 0; i < payments.length; i++) {
         var clientId = payments[i].clientId;
         if (!clientMap[clientId]) {
-          clientMap[clientId] = 0;
+          clientMap[clientId] = { total: 0, interestTotal: 0, principalTotal: 0 };
         }
-        clientMap[clientId] += payments[i].amount;
+        clientMap[clientId].total += payments[i].amount;
+        if (payments[i].paymentType === 'interest') {
+          clientMap[clientId].interestTotal += payments[i].amount;
+        } else if (payments[i].paymentType === 'principal') {
+          clientMap[clientId].principalTotal += payments[i].amount;
+        }
       }
 
-      // Resolve client names
+      // Resolve client names, loanType, and principalBalance
       var result = [];
       for (var id in clientMap) {
         if (clientMap.hasOwnProperty(id)) {
           var name = 'Unknown';
+          var loanType = 'daily_emi';
+          var principalBalance = null;
           try {
             var client = await DB.getClient(id);
-            if (client) name = client.name;
+            if (client) {
+              name = client.name;
+              loanType = client.loanType || 'daily_emi';
+              principalBalance = client.principalBalance != null ? client.principalBalance : null;
+            }
           } catch (e) {
-            // Use 'Unknown'
+            // Use defaults
           }
-          result.push({ name: name, total: Math.round(clientMap[id] * 100) / 100 });
+
+          var entry = {
+            name: name,
+            total: Math.round(clientMap[id].total * 100) / 100,
+            loanType: loanType,
+            principalBalance: principalBalance,
+            interestTotal: loanType === 'interest_only' ? Math.round(clientMap[id].interestTotal * 100) / 100 : null,
+            principalTotal: loanType === 'interest_only' ? Math.round(clientMap[id].principalTotal * 100) / 100 : null
+          };
+          result.push(entry);
         }
       }
 
@@ -186,6 +213,20 @@ var Reports = (function() {
       return;
     }
 
+    // Apply client name filter for client-wise report
+    var clientSearchInput = document.getElementById('report-client-search');
+    var clientSearchTerm = clientSearchInput ? clientSearchInput.value.trim().toLowerCase() : '';
+
+    if (clientSearchTerm && type === 'client-wise') {
+      data = data.filter(function(item) {
+        return item.name.toLowerCase().indexOf(clientSearchTerm) !== -1;
+      });
+      if (data.length === 0) {
+        tableContainer.innerHTML = '<p class="empty-message">No clients match your filter.</p>';
+        return;
+      }
+    }
+
     var html = '<table>';
 
     if (type === 'day-wise') {
@@ -201,15 +242,38 @@ var Reports = (function() {
               '<td class="amount-cell"><strong>' + grandTotal.toFixed(2) + '</strong></td></tr>';
       html += '</tbody>';
     } else {
-      html += '<thead><tr><th>Client Name</th><th class="amount-cell">Amount (₹)</th></tr></thead>';
+      // Check if any interest-only clients exist to show extra columns
+      var hasInterestOnly = data.some(function(d) { return d.loanType === 'interest_only'; });
+
+      if (hasInterestOnly) {
+        html += '<thead><tr><th>Client Name</th><th class="amount-cell">Amount (₹)</th>' +
+                '<th class="amount-cell">Interest (₹)</th><th class="amount-cell">Principal (₹)</th>' +
+                '<th class="amount-cell">Balance (₹)</th></tr></thead>';
+      } else {
+        html += '<thead><tr><th>Client Name</th><th class="amount-cell">Amount (₹)</th></tr></thead>';
+      }
       html += '<tbody>';
       var clientGrandTotal = 0;
       for (var j = 0; j < data.length; j++) {
-        html += '<tr><td>' + escapeHtml(data[j].name) + '</td>' +
-                '<td class="amount-cell">' + data[j].total.toFixed(2) + '</td></tr>';
-        clientGrandTotal += data[j].total;
+        var row = data[j];
+        html += '<tr><td>' + escapeHtml(row.name) + '</td>' +
+                '<td class="amount-cell">' + row.total.toFixed(2) + '</td>';
+        if (hasInterestOnly) {
+          if (row.loanType === 'interest_only') {
+            html += '<td class="amount-cell">' + (row.interestTotal != null ? row.interestTotal.toFixed(2) : '0.00') + '</td>';
+            html += '<td class="amount-cell">' + (row.principalTotal != null ? row.principalTotal.toFixed(2) : '0.00') + '</td>';
+            html += '<td class="amount-cell">' + (row.principalBalance != null ? row.principalBalance.toFixed(2) : '—') + '</td>';
+          } else {
+            html += '<td class="amount-cell">—</td>';
+            html += '<td class="amount-cell">—</td>';
+            html += '<td class="amount-cell">—</td>';
+          }
+        }
+        html += '</tr>';
+        clientGrandTotal += row.total;
       }
-      html += '<tr class="grand-total-row"><td><strong>Total</strong></td>' +
+      var totalColspan = hasInterestOnly ? 4 : 1;
+      html += '<tr class="grand-total-row"><td colspan="' + totalColspan + '"><strong>Total</strong></td>' +
               '<td class="amount-cell"><strong>' + clientGrandTotal.toFixed(2) + '</strong></td></tr>';
       html += '</tbody>';
     }

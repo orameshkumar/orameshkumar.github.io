@@ -4,15 +4,20 @@
  * Provides a global DB object with methods for managing clients and payments
  * using IndexedDB as the persistence layer.
  *
- * Database: "CollectionApp" (version 1)
+ * Database: "CollectionApp" (version 2)
  * Object Stores:
- *   - clients: keyPath "id", indexes on "name" (unique) and "mobile" (non-unique)
+ *   - clients: keyPath "id", indexes on "name" (unique), "mobile" (non-unique), "loanType" (non-unique)
  *   - payments: keyPath "id", indexes on "clientId" (non-unique) and "date" (non-unique)
+ *
+ * Migration v1→v2:
+ *   - Adds loanType index to clients store
+ *   - Adds loanType, interestRate, principalBalance fields to existing client records
+ *   - Adds paymentType field to existing payment records
  */
 
 const DB = (function () {
   const DB_NAME = 'CollectionApp';
-  const DB_VERSION = 1;
+  const DB_VERSION = 2;
   let db = null;
 
   /**
@@ -57,6 +62,42 @@ const DB = (function () {
           const paymentsStore = database.createObjectStore('payments', { keyPath: 'id' });
           paymentsStore.createIndex('clientId', 'clientId', { unique: false });
           paymentsStore.createIndex('date', 'date', { unique: false });
+        }
+
+        // Version 1 → 2 migration: add loanType support
+        if (event.oldVersion < 2) {
+          // Add loanType index to clients store
+          const clientsStore = event.target.transaction.objectStore('clients');
+          if (!clientsStore.indexNames.contains('loanType')) {
+            clientsStore.createIndex('loanType', 'loanType', { unique: false });
+          }
+
+          // Migrate existing clients: add loanType, interestRate, principalBalance
+          const clientCursor = clientsStore.openCursor();
+          clientCursor.onsuccess = (e) => {
+            const cursor = e.target.result;
+            if (cursor) {
+              const record = cursor.value;
+              record.loanType = record.loanType || 'daily_emi';
+              record.interestRate = record.interestRate || null;
+              record.principalBalance = record.principalBalance || null;
+              cursor.update(record);
+              cursor.continue();
+            }
+          };
+
+          // Migrate existing payments: add paymentType
+          const paymentsStore = event.target.transaction.objectStore('payments');
+          const paymentCursor = paymentsStore.openCursor();
+          paymentCursor.onsuccess = (e) => {
+            const cursor = e.target.result;
+            if (cursor) {
+              const record = cursor.value;
+              record.paymentType = record.paymentType || 'emi';
+              cursor.update(record);
+              cursor.continue();
+            }
+          };
         }
       };
     });
@@ -330,6 +371,43 @@ const DB = (function () {
   // ─── Public API ────────────────────────────────────────────────────────────
 
   /**
+   * Update the principalBalance field on a client record.
+   * @param {string} clientId - The client id
+   * @param {number} newBalance - The new principal balance value
+   * @returns {Promise<void>}
+   */
+  function updateClientPrincipalBalance(clientId, newBalance) {
+    return new Promise((resolve, reject) => {
+      try {
+        const store = getStore('clients', 'readwrite');
+        const getRequest = store.get(clientId);
+
+        getRequest.onsuccess = () => {
+          const client = getRequest.result;
+          if (!client) {
+            reject(new Error('Client not found: ' + clientId));
+            return;
+          }
+          client.principalBalance = newBalance;
+          const putRequest = store.put(client);
+          putRequest.onsuccess = () => resolve();
+          putRequest.onerror = (event) => {
+            const error = event.target.error;
+            reject(new Error('Failed to update principal balance: ' + (error ? error.message : 'Unknown error')));
+          };
+        };
+
+        getRequest.onerror = (event) => {
+          const error = event.target.error;
+          reject(new Error('Failed to read client for balance update: ' + (error ? error.message : 'Unknown error')));
+        };
+      } catch (e) {
+        reject(new Error('Failed to update principal balance: ' + e.message));
+      }
+    });
+  }
+
+  /**
    * Delete a single payment by ID.
    * @param {string} id - The payment ID to delete
    * @returns {Promise<undefined>}
@@ -366,6 +444,7 @@ const DB = (function () {
     getPaymentsByClient,
     getPaymentsByDateRange,
     getPaymentsByClientAndDate,
-    deletePaymentsByClient
+    deletePaymentsByClient,
+    updateClientPrincipalBalance
   };
 })();

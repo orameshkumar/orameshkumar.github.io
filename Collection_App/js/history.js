@@ -11,6 +11,7 @@ var PaymentHistory = (function() {
     var startDateInput = document.getElementById('history-start-date');
     var endDateInput = document.getElementById('history-end-date');
     var filterBtn = document.getElementById('history-filter-btn');
+    var clientSearchInput = document.getElementById('history-client-search');
 
     // Default: start = 30 days ago, end = today
     var today = getTodayISO();
@@ -25,6 +26,11 @@ var PaymentHistory = (function() {
 
     if (filterBtn) {
       filterBtn.addEventListener('click', loadAndRenderHistory);
+    }
+
+    // Client name search — filter on input
+    if (clientSearchInput) {
+      clientSearchInput.addEventListener('input', loadAndRenderHistory);
     }
 
     loadAndRenderHistory();
@@ -76,8 +82,23 @@ var PaymentHistory = (function() {
           id: payment.id,
           date: payment.date,
           clientName: clientName,
-          amount: payment.amount
+          amount: payment.amount,
+          paymentType: payment.paymentType || 'emi'
         });
+      }
+
+      // Apply client name filter
+      var clientSearchInput = document.getElementById('history-client-search');
+      var clientSearchTerm = clientSearchInput ? clientSearchInput.value.trim().toLowerCase() : '';
+      if (clientSearchTerm) {
+        enrichedPayments = enrichedPayments.filter(function(p) {
+          return p.clientName.toLowerCase().indexOf(clientSearchTerm) !== -1;
+        });
+      }
+
+      if (enrichedPayments.length === 0) {
+        listContainer.innerHTML = '<p class="empty-message">No records match your filter.</p>';
+        return;
       }
 
       // Sort by date descending
@@ -91,10 +112,20 @@ var PaymentHistory = (function() {
       var html = '';
       for (var j = 0; j < enrichedPayments.length; j++) {
         var p = enrichedPayments[j];
+        var badgeClass = 'badge-emi';
+        var badgeLabel = 'EMI';
+        if (p.paymentType === 'interest') {
+          badgeClass = 'badge-interest';
+          badgeLabel = 'Interest';
+        } else if (p.paymentType === 'principal') {
+          badgeClass = 'badge-principal';
+          badgeLabel = 'Principal';
+        }
         html += '<div class="history-item">' +
           '<span class="history-date">' + formatDate(p.date) + '</span>' +
           '<span class="history-client">' + escapeHtml(p.clientName) + '</span>' +
           '<span class="history-amount">₹' + p.amount.toFixed(2) + '</span>' +
+          '<span class="payment-type-badge ' + badgeClass + '">' + badgeLabel + '</span>' +
           '<button class="btn-delete-payment" data-payment-id="' + p.id + '" aria-label="Delete payment for ' + escapeHtml(p.clientName) + '">🗑️</button>' +
         '</div>';
       }

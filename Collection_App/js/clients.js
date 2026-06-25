@@ -17,6 +17,8 @@ var ClientMaster = (function() {
     var durationInput = document.getElementById('client-duration');
     var startDateInput = document.getElementById('client-start-date');
     var searchInput = document.getElementById('client-search');
+    var loanTypeSelect = document.getElementById('client-loan-type');
+    var interestRateInput = document.getElementById('client-interest-rate');
 
     if (addBtn) {
       addBtn.addEventListener('click', showAddForm);
@@ -42,6 +44,19 @@ var ClientMaster = (function() {
     }
     if (startDateInput) {
       startDateInput.addEventListener('input', autoRecalculate);
+    }
+
+    // Loan type change listener — toggle fields and recalculate
+    if (loanTypeSelect) {
+      loanTypeSelect.addEventListener('change', function() {
+        toggleLoanTypeFields(loanTypeSelect.value);
+        autoRecalculate();
+      });
+    }
+
+    // Interest rate input listener — trigger recalculation for interest-only
+    if (interestRateInput) {
+      interestRateInput.addEventListener('input', autoRecalculate);
     }
 
     // Search filter
@@ -72,21 +87,59 @@ var ClientMaster = (function() {
   }
 
   /**
+   * Toggle visibility of form groups based on the selected loan type.
+   * @param {string} loanType - "daily_emi" or "interest_only"
+   */
+  function toggleLoanTypeFields(loanType) {
+    var durationGroup = document.getElementById('client-duration') ? document.getElementById('client-duration').parentElement : null;
+    var endDateGroup = document.getElementById('client-end-date') ? document.getElementById('client-end-date').parentElement : null;
+    var interestRateGroup = document.getElementById('interest-rate-group');
+    var principalBalanceGroup = document.getElementById('principal-balance-group');
+
+    if (loanType === 'interest_only') {
+      // Hide Duration and End Date groups
+      if (durationGroup) durationGroup.setAttribute('hidden', '');
+      if (endDateGroup) endDateGroup.setAttribute('hidden', '');
+      // Show Interest Rate group
+      if (interestRateGroup) interestRateGroup.removeAttribute('hidden');
+    } else {
+      // Show Duration and End Date groups
+      if (durationGroup) durationGroup.removeAttribute('hidden');
+      if (endDateGroup) endDateGroup.removeAttribute('hidden');
+      // Hide Interest Rate group and Principal Balance group
+      if (interestRateGroup) interestRateGroup.setAttribute('hidden', '');
+      if (principalBalanceGroup) principalBalanceGroup.setAttribute('hidden', '');
+    }
+  }
+
+  /**
    * Auto-recalculate EMI and End Date based on current form values.
+   * Branches on loan type: daily_emi uses amount/duration, interest_only uses amount*rate/100.
    */
   function autoRecalculate() {
+    var loanType = document.getElementById('client-loan-type') ? document.getElementById('client-loan-type').value : 'daily_emi';
     var amount = parseFloat(document.getElementById('client-amount').value);
-    var duration = parseInt(document.getElementById('client-duration').value, 10);
-    var startDate = document.getElementById('client-start-date').value;
     var emiInput = document.getElementById('client-emi');
     var endDateInput = document.getElementById('client-end-date');
 
-    if (!isNaN(amount) && amount > 0 && !isNaN(duration) && duration > 0) {
-      emiInput.value = calculateEMI(amount, duration);
-    }
+    if (loanType === 'interest_only') {
+      var interestRate = parseFloat(document.getElementById('client-interest-rate').value);
+      if (!isNaN(amount) && amount > 0 && !isNaN(interestRate) && interestRate > 0) {
+        emiInput.value = Math.round((amount * interestRate / 100) * 100) / 100;
+      }
+      // No end date calculation for interest-only
+    } else {
+      // Daily EMI: existing logic
+      var duration = parseInt(document.getElementById('client-duration').value, 10);
+      var startDate = document.getElementById('client-start-date').value;
 
-    if (startDate && !isNaN(duration) && duration > 0) {
-      endDateInput.value = calculateEndDate(startDate, duration);
+      if (!isNaN(amount) && amount > 0 && !isNaN(duration) && duration > 0) {
+        emiInput.value = calculateEMI(amount, duration);
+      }
+
+      if (startDate && !isNaN(duration) && duration > 0) {
+        endDateInput.value = calculateEndDate(startDate, duration);
+      }
     }
   }
 
@@ -131,10 +184,11 @@ var ClientMaster = (function() {
 
       listContainer.innerHTML = html;
 
-      // Attach edit/delete event listeners
+      // Attach edit/delete/pay-principal event listeners
       clients.forEach(function(client) {
         var editBtn = document.getElementById('edit-' + client.id);
         var deleteBtn = document.getElementById('delete-' + client.id);
+        var payPrincipalBtn = document.getElementById('pay-principal-' + client.id);
 
         if (editBtn) {
           editBtn.addEventListener('click', function() {
@@ -144,6 +198,11 @@ var ClientMaster = (function() {
         if (deleteBtn) {
           deleteBtn.addEventListener('click', function() {
             deleteClient(client.id);
+          });
+        }
+        if (payPrincipalBtn) {
+          payPrincipalBtn.addEventListener('click', function() {
+            showClientPrincipalModal(client);
           });
         }
       });
@@ -157,13 +216,32 @@ var ClientMaster = (function() {
    * Render a single client card HTML.
    */
   function renderClientCard(client) {
-    var amount = typeof client.totalAmount === 'number' ? '₹' + client.totalAmount.toFixed(2) : '';
+    // Determine loan type badge
+    var loanTypeBadge;
+    if (client.loanType === 'interest_only') {
+      loanTypeBadge = '<span class="loan-type-badge badge-interest-only">Interest Only</span>';
+    } else {
+      loanTypeBadge = '<span class="loan-type-badge badge-daily-emi">Daily EMI</span>';
+    }
+
+    // Determine amount display: principal balance for interest-only, total amount for daily_emi
+    var amountDisplay;
+    if (client.loanType === 'interest_only') {
+      var principalBal = typeof client.principalBalance === 'number' ? client.principalBalance.toFixed(2) : '0.00';
+      amountDisplay = 'Principal: ₹' + principalBal;
+    } else {
+      amountDisplay = typeof client.totalAmount === 'number' ? '₹' + client.totalAmount.toFixed(2) : '';
+    }
+
     return '<div class="client-card">' +
       '<div class="client-info">' +
-        '<div class="client-name">' + escapeHtml(client.name) + '</div>' +
-        '<div class="client-details">' + escapeHtml(client.mobile) + ' | ' + amount + '</div>' +
+        '<div class="client-name">' + escapeHtml(client.name) + ' ' + loanTypeBadge + '</div>' +
+        '<div class="client-details">' + escapeHtml(client.mobile) + ' | ' + amountDisplay + '</div>' +
       '</div>' +
       '<div class="client-actions">' +
+        (client.loanType === 'interest_only' && client.principalBalance > 0
+          ? '<button id="pay-principal-' + client.id + '" class="btn-pay-principal" aria-label="Pay principal for ' + escapeHtml(client.name) + '">💳</button>'
+          : '') +
         '<button id="edit-' + client.id + '" class="btn-edit" aria-label="Edit ' + escapeHtml(client.name) + '">✏️</button>' +
         '<button id="delete-' + client.id + '" class="btn-delete" aria-label="Delete ' + escapeHtml(client.name) + '">🗑️</button>' +
       '</div>' +
@@ -179,6 +257,10 @@ var ClientMaster = (function() {
 
     var formTitle = document.getElementById('client-form-title');
     if (formTitle) formTitle.textContent = 'Add Client';
+
+    var loanTypeSelect = document.getElementById('client-loan-type');
+    if (loanTypeSelect) loanTypeSelect.value = 'daily_emi';
+    toggleLoanTypeFields('daily_emi');
 
     var durationInput = document.getElementById('client-duration');
     if (durationInput) durationInput.value = '100';
@@ -219,6 +301,28 @@ var ClientMaster = (function() {
       document.getElementById('client-emi').value = client.emi || '';
       document.getElementById('client-end-date').value = client.endDate || '';
 
+      // Set loan type selector and toggle fields
+      var loanType = client.loanType || 'daily_emi';
+      var loanTypeSelect = document.getElementById('client-loan-type');
+      if (loanTypeSelect) loanTypeSelect.value = loanType;
+      toggleLoanTypeFields(loanType);
+
+      // For interest-only clients, populate interest rate and display principal balance
+      if (loanType === 'interest_only') {
+        var interestRateInput = document.getElementById('client-interest-rate');
+        if (interestRateInput && client.interestRate != null) {
+          interestRateInput.value = client.interestRate;
+        }
+
+        var principalBalanceDisplay = document.getElementById('client-principal-balance-display');
+        if (principalBalanceDisplay && client.principalBalance != null) {
+          principalBalanceDisplay.textContent = '₹' + client.principalBalance.toFixed(2);
+        }
+
+        var principalBalanceGroup = document.getElementById('principal-balance-group');
+        if (principalBalanceGroup) principalBalanceGroup.removeAttribute('hidden');
+      }
+
       var formContainer = document.getElementById('client-form-container');
       if (formContainer) formContainer.removeAttribute('hidden');
 
@@ -249,13 +353,18 @@ var ClientMaster = (function() {
   async function handleFormSubmit() {
     clearErrors();
 
+    var loanType = document.getElementById('client-loan-type') ? document.getElementById('client-loan-type').value : 'daily_emi';
+    var interestRate = parseFloat(document.getElementById('client-interest-rate').value);
+
     var data = {
       name: (document.getElementById('client-name').value || '').trim(),
       mobile: (document.getElementById('client-mobile').value || '').trim(),
       totalAmount: parseFloat(document.getElementById('client-amount').value),
       startDate: document.getElementById('client-start-date').value,
       duration: parseInt(document.getElementById('client-duration').value, 10),
-      emi: parseFloat(document.getElementById('client-emi').value)
+      emi: parseFloat(document.getElementById('client-emi').value),
+      loanType: loanType,
+      interestRate: loanType === 'interest_only' ? interestRate : null
     };
 
     var errors = await validateForm(data);
@@ -264,12 +373,27 @@ var ClientMaster = (function() {
       return;
     }
 
-    // Calculate EMI if not manually set
-    if (isNaN(data.emi) || data.emi <= 0) {
-      data.emi = calculateEMI(data.totalAmount, data.duration);
-    }
+    if (loanType === 'interest_only') {
+      // Interest-only: no duration/endDate, set principalBalance to totalAmount
+      data.duration = null;
+      data.endDate = null;
+      data.principalBalance = data.totalAmount;
 
-    data.endDate = calculateEndDate(data.startDate, data.duration);
+      // Calculate EMI as interest amount if not manually set
+      if (isNaN(data.emi) || data.emi <= 0) {
+        data.emi = Math.round((data.totalAmount * interestRate / 100) * 100) / 100;
+      }
+    } else {
+      // Daily EMI: existing logic
+      data.loanType = 'daily_emi';
+      data.interestRate = null;
+      data.principalBalance = null;
+
+      if (isNaN(data.emi) || data.emi <= 0) {
+        data.emi = calculateEMI(data.totalAmount, data.duration);
+      }
+      data.endDate = calculateEndDate(data.startDate, data.duration);
+    }
 
     await saveClient(data);
   }
@@ -300,8 +424,21 @@ var ClientMaster = (function() {
       errors.push({ field: 'client-start-date', message: 'Collection start date is required.' });
     }
 
-    if (isNaN(data.duration) || data.duration <= 0) {
-      errors.push({ field: 'client-duration', message: 'Duration must be at least 1 day.' });
+    // Loan-type-specific validation
+    if (data.loanType === 'interest_only') {
+      // Validate interest rate
+      if (isNaN(data.interestRate) || data.interestRate <= 0) {
+        errors.push({ field: 'client-interest-rate', message: 'Monthly interest rate must be greater than zero.' });
+      } else if (data.interestRate > 100) {
+        errors.push({ field: 'client-interest-rate', message: 'Monthly interest rate cannot exceed 100%.' });
+      }
+      // Skip duration validation for interest-only
+    } else {
+      // Daily EMI: validate duration
+      if (isNaN(data.duration) || data.duration <= 0) {
+        errors.push({ field: 'client-duration', message: 'Duration must be at least 1 day.' });
+      }
+      // Skip interest rate validation for daily_emi
     }
 
     // Check name uniqueness
@@ -339,13 +476,20 @@ var ClientMaster = (function() {
           duration: data.duration,
           emi: data.emi,
           endDate: data.endDate,
+          loanType: data.loanType,
+          interestRate: data.interestRate,
+          principalBalance: data.principalBalance,
           createdAt: undefined
         };
 
-        // Preserve original createdAt
+        // Preserve original createdAt and principalBalance for interest-only edits
         var existing = await DB.getClient(editingClientId);
         if (existing) {
           clientRecord.createdAt = existing.createdAt;
+          // For interest-only clients, preserve existing principalBalance (don't overwrite from form)
+          if (data.loanType === 'interest_only' && existing.principalBalance != null) {
+            clientRecord.principalBalance = existing.principalBalance;
+          }
         } else {
           clientRecord.createdAt = new Date().toISOString();
         }
@@ -361,6 +505,9 @@ var ClientMaster = (function() {
           duration: data.duration,
           emi: data.emi,
           endDate: data.endDate,
+          loanType: data.loanType,
+          interestRate: data.interestRate,
+          principalBalance: data.principalBalance,
           createdAt: new Date().toISOString()
         };
 
@@ -416,6 +563,145 @@ var ClientMaster = (function() {
     var date = new Date(startDate);
     date.setDate(date.getDate() + duration);
     return date.toISOString().split('T')[0];
+  }
+
+  // ─── Principal Payment from Client Tab ───
+
+  var principalClient = null;
+
+  /**
+   * Show the principal payment modal for an interest-only client.
+   * Pre-fills amount with principal balance and generates QR.
+   * @param {Object} client - Client record
+   */
+  function showClientPrincipalModal(client) {
+    principalClient = client;
+
+    var modal = document.getElementById('client-principal-modal');
+    var nameEl = document.getElementById('client-principal-name');
+    var dateInput = document.getElementById('client-principal-date');
+    var amountInput = document.getElementById('client-principal-amount');
+    var amountError = document.getElementById('client-principal-amount-error');
+    var qrContainer = document.getElementById('client-principal-qr');
+
+    if (nameEl) nameEl.textContent = client.name;
+    if (dateInput && !dateInput.value) dateInput.value = getTodayISO();
+    if (amountInput) amountInput.value = client.principalBalance.toFixed(2);
+    if (amountError) amountError.textContent = '';
+
+    // Generate QR with principal balance amount
+    var upiId = Settings.getUpiId();
+    var appName = Settings.getAppName();
+    if (upiId && qrContainer) {
+      var upiLink = 'upi://pay?pa=' + upiId +
+        '&pn=' + encodeURIComponent(appName) +
+        '&am=' + client.principalBalance.toFixed(2) +
+        '&cu=INR' +
+        '&tn=' + encodeURIComponent(client.name + ' Principal');
+      try {
+        var qr = qrcode(0, 'M');
+        qr.addData(upiLink);
+        qr.make();
+        qrContainer.innerHTML = qr.createSvgTag(4, 0);
+      } catch (e) {
+        qrContainer.innerHTML = '<a href="' + escapeHtml(upiLink) + '" class="qr-fallback-link">Tap to pay via UPI</a>';
+      }
+    } else if (qrContainer) {
+      qrContainer.innerHTML = '<p class="qr-placeholder">Configure UPI ID in Settings</p>';
+    }
+
+    if (modal) modal.removeAttribute('hidden');
+
+    // Attach confirm/cancel handlers
+    var confirmBtn = document.getElementById('client-principal-confirm-btn');
+    var cancelBtn = document.getElementById('client-principal-cancel-btn');
+
+    if (confirmBtn) {
+      confirmBtn.onclick = handleClientPrincipalConfirm;
+    }
+    if (cancelBtn) {
+      cancelBtn.onclick = hideClientPrincipalModal;
+    }
+
+    // Re-generate QR when amount changes
+    if (amountInput) {
+      amountInput.oninput = function() {
+        var amt = parseFloat(amountInput.value);
+        if (!isNaN(amt) && amt > 0 && upiId && qrContainer) {
+          var link = 'upi://pay?pa=' + upiId +
+            '&pn=' + encodeURIComponent(appName) +
+            '&am=' + amt.toFixed(2) +
+            '&cu=INR' +
+            '&tn=' + encodeURIComponent(client.name + ' Principal');
+          try {
+            var q = qrcode(0, 'M');
+            q.addData(link);
+            q.make();
+            qrContainer.innerHTML = q.createSvgTag(4, 0);
+          } catch (e) {
+            qrContainer.innerHTML = '<a href="' + escapeHtml(link) + '" class="qr-fallback-link">Tap to pay via UPI</a>';
+          }
+        }
+      };
+    }
+  }
+
+  /**
+   * Handle confirm principal payment from client tab.
+   */
+  async function handleClientPrincipalConfirm() {
+    if (!principalClient) return;
+
+    var amountInput = document.getElementById('client-principal-amount');
+    var amountError = document.getElementById('client-principal-amount-error');
+    var dateInput = document.getElementById('client-principal-date');
+
+    var amount = parseFloat(amountInput.value);
+    var date = dateInput ? dateInput.value : getTodayISO();
+
+    if (isNaN(amount) || amount <= 0) {
+      if (amountError) amountError.textContent = 'Amount must be greater than zero.';
+      return;
+    }
+
+    if (amount > principalClient.principalBalance) {
+      if (amountError) amountError.textContent = 'Amount cannot exceed outstanding principal of ₹' + principalClient.principalBalance.toFixed(2);
+      return;
+    }
+
+    if (amountError) amountError.textContent = '';
+
+    try {
+      var payment = {
+        id: generateUUID(),
+        clientId: principalClient.id,
+        date: date,
+        amount: amount,
+        paymentType: 'principal',
+        createdAt: new Date().toISOString()
+      };
+
+      await DB.addPayment(payment);
+
+      var newBalance = Math.round((principalClient.principalBalance - amount) * 100) / 100;
+      await DB.updateClientPrincipalBalance(principalClient.id, newBalance);
+
+      hideClientPrincipalModal();
+      renderClientList();
+    } catch (e) {
+      alert('Payment could not be saved: ' + (e.message || 'Unknown error'));
+    }
+  }
+
+  /**
+   * Hide the principal payment modal.
+   */
+  function hideClientPrincipalModal() {
+    var modal = document.getElementById('client-principal-modal');
+    if (modal) modal.setAttribute('hidden', '');
+    var qrContainer = document.getElementById('client-principal-qr');
+    if (qrContainer) qrContainer.innerHTML = '';
+    principalClient = null;
   }
 
   // ─── Helper Functions ───
@@ -657,6 +943,7 @@ var ClientMaster = (function() {
     renderClientList: renderClientList,
     showAddForm: showAddForm,
     showEditForm: showEditForm,
+    toggleLoanTypeFields: toggleLoanTypeFields,
     validateForm: validateForm,
     saveClient: saveClient,
     deleteClient: deleteClient,

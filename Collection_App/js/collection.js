@@ -6,6 +6,10 @@ var Collection = (function() {
   // Track clients who have been paid on the currently selected date
   var paidClientsToday = {};
 
+  // Payment type context for EMI flow
+  var currentPaymentType = 'emi';
+  var currentPrincipalBalance = 0;
+
   /**
    * Initialize the Daily Collection module.
    * Sets up date selector and renders the collection list.
@@ -57,7 +61,8 @@ var Collection = (function() {
   }
 
   /**
-   * Render the list of clients with pending payments for the given date.
+   * Render the list of daily EMI clients with pending payments for the given date.
+   * Interest-only clients are excluded — they are managed in the Interest tab.
    * Clients who have already paid on the selected date are highlighted.
    * Supports search by client name and "paid today" filter.
    * @param {string} date - ISO date string (YYYY-MM-DD)
@@ -75,6 +80,9 @@ var Collection = (function() {
     try {
       var clients = await DB.getAllClients();
 
+      // Exclude interest-only clients — they are managed in the Interest tab
+      clients = clients.filter(function(c) { return c.loanType !== 'interest_only'; });
+
       if (!clients || clients.length === 0) {
         listContainer.innerHTML = '<p class="empty-message">No clients added yet.</p>';
         return;
@@ -83,23 +91,34 @@ var Collection = (function() {
       // Calculate pending for each client, check if paid today
       var pendingClients = [];
       for (var i = 0; i < clients.length; i++) {
-        var payments = await DB.getPaymentsByClient(clients[i].id);
-        var totalPaid = 0;
+        var client = clients[i];
+        var payments = await DB.getPaymentsByClient(client.id);
         var hasPaidOnDate = false;
+
         for (var k = 0; k < payments.length; k++) {
-          totalPaid += payments[k].amount;
           if (payments[k].date === date) {
             hasPaidOnDate = true;
           }
         }
-        var pending = clients[i].totalAmount - totalPaid;
+
+        if (client.loanType === 'interest_only') {
+          // Interest-only clients are excluded by filter above; skip as safety guard
+          continue;
+        }
+
+        // Daily EMI clients: existing logic
+        var totalPaid = 0;
+        for (var k2 = 0; k2 < payments.length; k2++) {
+          totalPaid += payments[k2].amount;
+        }
+        var pending = client.totalAmount - totalPaid;
         pending = pending > 0 ? Math.round(pending * 100) / 100 : 0;
 
         if (pending > 0) {
           pendingClients.push({
-            client: clients[i],
+            client: client,
             pending: pending,
-            paidToday: hasPaidOnDate || !!paidClientsToday[clients[i].id]
+            paidToday: hasPaidOnDate || !!paidClientsToday[client.id]
           });
         }
       }
@@ -134,11 +153,11 @@ var Collection = (function() {
       var html = '';
       for (var j = 0; j < pendingClients.length; j++) {
         var item = pendingClients[j];
-        var emi = item.client.emi || 0;
-        // EMI should not exceed pending
-        var defaultAmount = Math.min(emi, item.pending);
-
         var itemClass = 'collection-item' + (item.paidToday ? ' collection-item-paid' : '');
+
+        // Daily EMI client rendering
+        var emi = item.client.emi || 0;
+        var defaultAmount = Math.min(emi, item.pending);
 
         html += '<div class="' + itemClass + '">' +
           '<div class="collection-info">' +
@@ -161,13 +180,15 @@ var Collection = (function() {
 
       listContainer.innerHTML = html;
 
-      // Attach click handlers to collect buttons
+      // Attach click handlers to daily EMI collect buttons
       var collectBtns = listContainer.querySelectorAll('.btn-collect');
       collectBtns.forEach(function(btn) {
         btn.addEventListener('click', function() {
           var clientId = btn.getAttribute('data-client-id');
           var emiInput = document.getElementById('emi-input-' + clientId);
           var amount = parseFloat(emiInput ? emiInput.value : 0);
+          currentPaymentType = 'emi';
+          currentPrincipalBalance = 0;
           showPaymentPage(clientId, amount);
         });
       });
@@ -180,7 +201,7 @@ var Collection = (function() {
   /**
    * Show the payment modal with QR code for a client.
    * @param {string} clientId - Client ID
-   * @param {number} amount - Payment amount
+   * @param {number} amount - Payment amount (0 means empty field for manual entry)
    */
   async function showPaymentPage(clientId, amount) {
     var upiId = Settings.getUpiId();
@@ -204,7 +225,13 @@ var Collection = (function() {
       var amountError = document.getElementById('payment-amount-error');
 
       if (clientNameEl) clientNameEl.textContent = client.name;
-      if (amountInput) amountInput.value = amount.toFixed(2);
+      if (amountInput) {
+        if (amount > 0) {
+          amountInput.value = amount.toFixed(2);
+        } else {
+          amountInput.value = '';
+        }
+      }
       if (amountError) amountError.textContent = '';
 
       // Store clientId on the modal for confirmation
@@ -213,8 +240,13 @@ var Collection = (function() {
         modal.removeAttribute('hidden');
       }
 
-      // Generate QR code
-      generateQRCode(upiId, appName, amount, client.name);
+      // Generate QR code only if amount > 0
+      if (amount > 0) {
+        generateQRCode(upiId, appName, amount, client.name);
+      } else {
+        var container = document.getElementById('qr-code-container');
+        if (container) container.innerHTML = '<p class="qr-placeholder">Enter amount to generate QR</p>';
+      }
     } catch (e) {
       alert('Error loading client: ' + e.message);
     }
@@ -254,6 +286,7 @@ var Collection = (function() {
 
   /**
    * Handle the confirm payment button click.
+   * Only handles daily EMI payments (interest/principal are managed in interest.js).
    */
   async function handleConfirmPayment() {
     var modal = document.getElementById('payment-modal');
@@ -280,6 +313,7 @@ var Collection = (function() {
 
   /**
    * Record a payment in the database.
+   * Only handles daily EMI payments. Interest and principal payments are managed in interest.js.
    * @param {string} clientId - Client ID
    * @param {string} date - Payment date (ISO)
    * @param {number} amount - Payment amount
@@ -291,6 +325,7 @@ var Collection = (function() {
         clientId: clientId,
         date: date,
         amount: amount,
+        paymentType: 'emi',
         createdAt: new Date().toISOString()
       };
 
