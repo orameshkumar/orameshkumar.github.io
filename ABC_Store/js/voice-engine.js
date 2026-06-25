@@ -199,8 +199,8 @@ const VoiceEngine = (function () {
     var transcript = result[0].transcript;
     console.log('VoiceEngine: Transcript:', transcript);
 
-    // Show raw transcript to user for debugging
-    showNotification('Heard: "' + transcript.trim() + '"');
+    // Show raw transcript to user for debugging (no background color)
+    showNotification('Heard: "' + transcript.trim() + '"', 'neutral');
 
     // Parse the voice command
     var parsed = await parseVoiceCommand(transcript);
@@ -211,6 +211,13 @@ const VoiceEngine = (function () {
         var pair = parsed.recognized[i];
         await Billing.addItemById(pair.itemId, pair.quantityGrams);
       }
+      // Show success notification in green
+      var matchedNames = parsed.recognized.map(function (p) {
+        var item = null;
+        try { item = document.querySelector('[data-item-id="' + p.itemId + '"]'); } catch(e) {}
+        return p.quantityGrams + 'g';
+      });
+      showNotification('✓ Added ' + parsed.recognized.length + ' item(s) to bill', 'success');
     }
 
     // 6.6: Show unrecognized segments
@@ -658,7 +665,7 @@ const VoiceEngine = (function () {
    */
   function showUnrecognizedSegments(segments) {
     var message = 'Could not recognize: "' + segments.join('", "') + '"';
-    showNotification(message);
+    showNotification(message, 'error');
   }
 
   /**
@@ -666,7 +673,7 @@ const VoiceEngine = (function () {
    * Creates or reuses a notification div below #voice-btn.
    * @param {string} message - The message to display
    */
-  function showNotification(message) {
+  function showNotification(message, type) {
     var notifId = 'voice-notification';
     var notif = document.getElementById(notifId);
 
@@ -694,6 +701,21 @@ const VoiceEngine = (function () {
 
     notif.textContent = message;
     notif.classList.add('visible');
+
+    // Set background color based on type
+    if (type === 'success') {
+      notif.style.backgroundColor = '#34a853';
+      notif.style.color = '#fff';
+    } else if (type === 'error') {
+      notif.style.backgroundColor = '#ea4335';
+      notif.style.color = '#fff';
+    } else if (type === 'neutral') {
+      notif.style.backgroundColor = '#f5f5f5';
+      notif.style.color = '#5f6368';
+    } else {
+      notif.style.backgroundColor = '#f5f5f5';
+      notif.style.color = '#5f6368';
+    }
 
     // Auto-hide after 5 seconds
     clearTimeout(notif._hideTimeout);

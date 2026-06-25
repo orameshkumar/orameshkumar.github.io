@@ -118,6 +118,9 @@ async function initApp() {
   if (typeof BarcodeModule !== 'undefined' && BarcodeModule.init) {
     BarcodeModule.init();
   }
+  if (typeof ImportExport !== 'undefined' && ImportExport.init) {
+    ImportExport.init();
+  }
 }
 
 // Register service worker and initialize app on DOM ready

@@ -73,6 +73,10 @@ const BarcodeModule = (function () {
   // ─── Barcode Value Generators ───────────────────────────────────────────────
 
   function getItemBarcodeValue(item) {
+    // Use itemCode if available (user-visible, stable), otherwise fall back to ID fragment
+    if (item.itemCode) {
+      return BARCODE_PREFIX_ITEM + item.itemCode.toUpperCase();
+    }
     return BARCODE_PREFIX_ITEM + item.id.substring(0, 8).toUpperCase();
   }
 
@@ -513,17 +517,19 @@ const BarcodeModule = (function () {
     var upperVal = value.toUpperCase().trim();
 
     if (upperVal.startsWith(BARCODE_PREFIX_ITEM)) {
-      var itemIdFragment = upperVal.substring(BARCODE_PREFIX_ITEM.length).toLowerCase().trim();
+      var itemIdFragment = upperVal.substring(BARCODE_PREFIX_ITEM.length).trim();
       var items = await DB.getAllItems();
+
+      // Match by itemCode first (preferred, stable)
       var matchedItem = items.find(function (item) {
-        // Match first 8 chars of ID (barcode stores first 8 uppercase hex chars)
-        return item.id.substring(0, 8).toLowerCase() === itemIdFragment;
+        return item.itemCode && item.itemCode.toUpperCase() === itemIdFragment;
       });
 
-      // If no match by first 8, try matching by full ID containing the fragment
+      // Fallback: match by first 8 chars of internal ID
       if (!matchedItem) {
+        var lowerFragment = itemIdFragment.toLowerCase();
         matchedItem = items.find(function (item) {
-          return item.id.toLowerCase().indexOf(itemIdFragment) === 0;
+          return item.id.substring(0, 8).toLowerCase() === lowerFragment;
         });
       }
 
@@ -532,9 +538,8 @@ const BarcodeModule = (function () {
         showScanNotification('✓ ' + matchedItem.name + ' — scan quantity');
         if (navigator.vibrate) navigator.vibrate(100);
       } else {
-        // Show detailed debug info
-        var dbIds = items.slice(0, 3).map(function(i) { return i.name + ':' + i.id.substring(0,8); }).join(', ');
-        showScanNotification('No match for "' + itemIdFragment + '" | DB items: ' + dbIds);
+        var dbCodes = items.slice(0, 3).map(function(i) { return (i.itemCode || i.id.substring(0,8)); }).join(', ');
+        showScanNotification('No match: ' + itemIdFragment + ' | Have: ' + dbCodes);
       }
 
     } else if (upperVal.startsWith(BARCODE_PREFIX_QTY)) {

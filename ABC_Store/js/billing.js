@@ -145,7 +145,8 @@ const Billing = (function () {
   }
 
   /**
-   * Handle search input to filter items.
+   * Handle search input to filter items by name, voice tag, or item code.
+   * Auto-selects the item if only one result matches.
    */
   function onSearchInput() {
     var query = searchInput.value.trim().toLowerCase();
@@ -155,9 +156,30 @@ const Billing = (function () {
     }
     var filtered = allItems.filter(function (item) {
       return item.name.toLowerCase().indexOf(query) !== -1
-        || (item.voiceTag && item.voiceTag.toLowerCase().indexOf(query) !== -1);
+        || (item.voiceTag && item.voiceTag.toLowerCase().indexOf(query) !== -1)
+        || (item.itemCode && item.itemCode.toLowerCase().indexOf(query) !== -1);
     });
     renderItemGrid(filtered);
+
+    // Auto-select if exactly one item matches
+    if (filtered.length === 1) {
+      selectedItemId = filtered[0].id;
+      // Update visual state
+      itemGrid.querySelectorAll('.item-card').forEach(function (c) {
+        c.classList.add('selected');
+        c.setAttribute('aria-pressed', 'true');
+      });
+      // Update placeholder for unit type
+      var item = filtered[0];
+      if (customQtyInput) {
+        if (item.baseUnit === 'count') customQtyInput.placeholder = 'Qty (nos)';
+        else if (item.baseUnit === 'litre') customQtyInput.placeholder = 'ml';
+        else customQtyInput.placeholder = 'Custom g';
+      }
+      switchQtyPanel(item.baseUnit || 'kg');
+      // Try to auto-add if quantity is already selected
+      tryAutoAdd();
+    }
   }
 
   /**
@@ -305,7 +327,13 @@ const Billing = (function () {
   function resetSelection() {
     selectedItemId = null;
 
-    // Clear item highlights only — keep quantity selection
+    // Clear search text and reset item grid
+    if (searchInput) {
+      searchInput.value = '';
+    }
+    renderItemGrid(allItems);
+
+    // Clear item highlights — keep quantity selection
     if (itemGrid) {
       itemGrid.querySelectorAll('.item-card').forEach(function (c) {
         c.classList.remove('selected');

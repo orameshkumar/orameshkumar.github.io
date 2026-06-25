@@ -128,7 +128,7 @@ const ItemMaster = (function () {
           thumbHtml +
           '<div class="item-info">' +
             '<div class="item-name">' + _escapeHtml(item.name) + '</div>' +
-            '<div class="item-price">₹' + Number(item.basePricePerKg).toFixed(2) + ' / ' + _unitLabel(item.baseUnit) + '</div>' +
+            '<div class="item-price" style="font-size:0.7rem;color:#5f6368;">' + _escapeHtml(item.itemCode || '') + ' | ₹' + Number(item.basePricePerKg).toFixed(2) + '/' + _unitLabel(item.baseUnit) + '</div>' +
           '</div>' +
           '<button class="item-edit-btn" data-item-id="' + item.id + '" aria-label="Edit ' + _escapeHtml(item.name) + '">✏️</button>' +
           '<button class="item-delete-btn" data-item-id="' + item.id + '" aria-label="Delete ' + _escapeHtml(item.name) + '">🗑️</button>' +
@@ -184,6 +184,7 @@ const ItemMaster = (function () {
 
     var title = item ? 'Edit Item' : 'Add Item';
     var nameVal = item ? _escapeAttr(item.name) : '';
+    var itemCodeVal = item ? _escapeAttr(item.itemCode || '') : _generateItemCode();
     var priceVal = item ? item.basePricePerKg : '';
     var voiceTagVal = item ? _escapeAttr(item.voiceTag || '') : '';
     var baseUnit = item ? (item.baseUnit || 'kg') : 'kg';
@@ -208,6 +209,11 @@ const ItemMaster = (function () {
             '<label for="item-name-input">Item Name *</label>' +
             '<input type="text" id="item-name-input" placeholder="Enter item name" value="' + nameVal + '" autocomplete="off">' +
             '<span id="item-name-error" style="color:#ea4335;font-size:0.75rem;display:none;margin-top:4px;">Item name is required</span>' +
+          '</div>' +
+          '<div class="form-group">' +
+            '<label for="item-code-input">Item Code (unique, auto-generated)</label>' +
+            '<input type="text" id="item-code-input" placeholder="e.g., ITM001" value="' + itemCodeVal + '" autocomplete="off">' +
+            '<span id="item-code-error" style="color:#ea4335;font-size:0.75rem;display:none;margin-top:4px;"></span>' +
           '</div>' +
           '<div class="form-group">' +
             '<label for="item-unit-select">Base Unit *</label>' +
@@ -479,19 +485,23 @@ const ItemMaster = (function () {
    */
   async function _handleSave() {
     var nameInput = document.getElementById('item-name-input');
+    var itemCodeInput = document.getElementById('item-code-input');
     var priceInput = document.getElementById('item-price-input');
     var voiceTagInput = document.getElementById('item-voicetag-input');
     var unitSelect = document.getElementById('item-unit-select');
     var nameError = document.getElementById('item-name-error');
+    var codeError = document.getElementById('item-code-error');
     var priceError = document.getElementById('item-price-error');
 
     var name = nameInput ? nameInput.value.trim() : '';
+    var itemCode = itemCodeInput ? itemCodeInput.value.trim().toUpperCase() : '';
     var price = priceInput ? parseFloat(priceInput.value) : NaN;
     var voiceTag = voiceTagInput ? voiceTagInput.value.trim() : '';
     var baseUnit = unitSelect ? unitSelect.value : 'kg';
 
     // Reset errors
     if (nameError) nameError.style.display = 'none';
+    if (codeError) codeError.style.display = 'none';
     if (priceError) priceError.style.display = 'none';
 
     // Validate
@@ -502,6 +512,11 @@ const ItemMaster = (function () {
       valid = false;
     }
 
+    if (!itemCode) {
+      if (codeError) { codeError.textContent = 'Item code is required'; codeError.style.display = 'block'; }
+      valid = false;
+    }
+
     if (isNaN(price) || price <= 0 || priceInput.value.trim() === '') {
       if (priceError) priceError.style.display = 'block';
       valid = false;
@@ -509,15 +524,27 @@ const ItemMaster = (function () {
 
     if (!valid) return;
 
+    // Check uniqueness of item code
+    var duplicateItem = allItems.find(function (i) {
+      return i.itemCode && i.itemCode.toUpperCase() === itemCode && i.id !== editingItemId;
+    });
+    if (duplicateItem) {
+      if (codeError) { codeError.textContent = 'Item code "' + itemCode + '" already exists (' + duplicateItem.name + ')'; codeError.style.display = 'block'; }
+      return;
+    }
+
     var now = new Date().toISOString();
 
     try {
       if (editingItemId) {
-        // Update existing item
+        // Check if item code changed — update bills if so
         var existingItem = allItems.find(function (i) { return i.id === editingItemId; });
+        var oldCode = existingItem ? (existingItem.itemCode || '') : '';
+
         var updatedItem = {
           id: editingItemId,
           name: name,
+          itemCode: itemCode,
           basePricePerKg: price,
           baseUnit: baseUnit,
           voiceTag: voiceTag,
@@ -526,11 +553,17 @@ const ItemMaster = (function () {
           updatedAt: now
         };
         await DB.updateItem(updatedItem);
+
+        // If item code changed, update all bills referencing this item
+        if (oldCode && oldCode !== itemCode) {
+          await _updateBillsItemCode(editingItemId, name, itemCode);
+        }
       } else {
         // Add new item
         var newItem = {
           id: Utils.generateId(),
           name: name,
+          itemCode: itemCode,
           basePricePerKg: price,
           baseUnit: baseUnit,
           voiceTag: voiceTag,
@@ -547,6 +580,57 @@ const ItemMaster = (function () {
     } catch (error) {
       console.error('Failed to save item:', error);
       alert('Failed to save item. Please try again.');
+    }
+  }
+
+  // ─── Item Code Helpers ────────────────────────────────────────────────────────
+
+  /**
+   * Generate a unique item code. Format: ITM + 3-digit sequential number.
+   * Scans existing items to find the next available number.
+   * @returns {string} Generated item code e.g., "ITM001"
+   */
+  function _generateItemCode() {
+    var maxNum = 0;
+    allItems.forEach(function (item) {
+      if (item.itemCode) {
+        var match = item.itemCode.match(/^ITM(\d+)$/i);
+        if (match) {
+          var num = parseInt(match[1], 10);
+          if (num > maxNum) maxNum = num;
+        }
+      }
+    });
+    return 'ITM' + String(maxNum + 1).padStart(3, '0');
+  }
+
+  /**
+   * Update all bills that reference an item when its code changes.
+   * @param {string} itemId - The item's internal ID
+   * @param {string} newName - New item name
+   * @param {string} newCode - New item code
+   */
+  async function _updateBillsItemCode(itemId, newName, newCode) {
+    try {
+      var bills = await DB.getAllBills();
+      for (var i = 0; i < bills.length; i++) {
+        var bill = bills[i];
+        var updated = false;
+        if (bill.lineItems) {
+          bill.lineItems.forEach(function (li) {
+            if (li.itemId === itemId) {
+              li.itemName = newName;
+              li.itemCode = newCode;
+              updated = true;
+            }
+          });
+        }
+        if (updated) {
+          await DB.saveBill(bill);
+        }
+      }
+    } catch (e) {
+      console.error('Failed to update bills with new item code:', e);
     }
   }
 
