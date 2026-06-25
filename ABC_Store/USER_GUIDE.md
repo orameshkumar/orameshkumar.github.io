@@ -1,8 +1,8 @@
-# ABC Store - User Guide
+# ABC_Store - User Guide
 
 ## Overview
 
-ABC Store is a Progressive Web App (PWA) for billing and inventory management at a provisional/grocery store. It works completely offline on your mobile phone or desktop browser.
+ABC_Store is a Progressive Web App (PWA) for billing and inventory management at a provisional/grocery store. It works completely offline on your mobile phone or desktop browser.
 
 ---
 
@@ -33,7 +33,11 @@ This is where you manage your product catalog.
 1. Tap the **+** button (bottom-right)
 2. Fill in:
    - **Item Name** (required) — e.g., "Rice", "Dal", "Sugar"
-   - **Base Price per KG** (required) — the selling price for 1 kilogram
+   - **Base Unit** — select one:
+     - **Kilogram (KG)** — for items sold by weight
+     - **Litre (L)** — for items sold by volume (oil, milk)
+     - **Count (Nos)** — for items sold by number (eggs, packets)
+   - **Base Price** (required) — the selling price per KG / per Litre / per Unit depending on base unit
    - **Voice Tag** — a word you'll use when speaking to add this item during billing (e.g., "arisi", "chawal")
    - **Image** — tap 📸 to capture a photo with your phone camera
 3. Tap **Save**
@@ -58,11 +62,15 @@ This is where you create bills for customers.
 **Layout (top to bottom):**
 - **Current Bill** — shows items added to the current bill with running total
 - **Item Selector** — search and tap items to select
-- **Quick Entry Buttons** — preset quantities (50g, 100g, 250g, 500g, 750g, 1KG)
-- **Custom Quantity** — type any gram value
+- **Quick Entry Buttons** — preset quantities that change based on item type:
+  - KG items: 50g, 100g, 250g, 500g, 750g, 1KG
+  - Litre items: 50ml, 100ml, 250ml, 500ml, 750ml, 1L
+  - Count items: 1, 2, 3, 5, 6, 10, 12
+- **Custom Quantity** — type any value
 - **Voice Button** 🎤 — hands-free billing
+- **Scan Barcode** 📷 — camera-based barcode entry
 
-**How to Bill:**
+**How to Bill (Touch):**
 
 1. **Select a quantity** — tap a quick button (e.g., "500g") or type a custom amount
 2. **Select an item** — tap an item card from the grid
@@ -70,8 +78,16 @@ This is where you create bills for customers.
 4. **Quantity stays selected** — tap another item to add it at the same quantity
 5. Repeat for all items
 
+**How to Bill (Barcode Scanner):**
+
+1. Tap **📷 Scan Barcode** button
+2. Point camera at an **item barcode** → notification shows "✓ Item Name — scan quantity"
+3. Point camera at a **quantity barcode** → item is added to bill
+4. Repeat: item → quantity → item → quantity...
+5. If multiple barcodes are visible, the one closest to camera center is selected
+
 **Editing a Bill Line:**
-- Tap the **quantity** (blue badge) to change grams
+- Tap the **quantity** (blue badge) to change the amount
 - Tap the **price** to override with a custom amount (shows in red when overridden)
 - Tap ❌ to delete a line item
 
@@ -91,7 +107,7 @@ Tap the 🎤 microphone button to start voice mode (turns red with animation).
 **How it works:**
 - Speak item names and quantities in a single command
 - Example: *"rice half kg dal 100 gram sugar 250 gram"*
-- The engine matches your words against item names and voice tags
+- The engine matches your words against item names AND voice tags
 - Items are automatically added to the bill
 
 **Supported quantity phrases:**
@@ -113,12 +129,35 @@ Tap the 🎤 microphone button to start voice mode (turns red with animation).
 - If something isn't recognized, it shows a notification — add it manually
 
 **Fuzzy Matching:**
-- Misheard words are matched approximately (e.g., "ric" matches "rice")
-- Misspelled units are normalized (e.g., "graam", "grm" → "gram")
+- Misheard item names are matched approximately (e.g., "ric" matches "rice", "dall" matches "dal")
+- Misspelled units are normalized (e.g., "graam", "grm", "ggram" → "gram"; "kgs", "keji" → "kg")
 
 ---
 
-### 4. History
+### 4. Barcode Billing
+
+Use printed barcodes for fast data entry without touching the screen.
+
+**Setup (one-time):**
+1. Go to **Settings** → tap **"Print Item Barcodes"**
+2. Select the items you want barcodes for (Select All / Deselect All available)
+3. A printable page opens — shows item name (large, uppercase) + barcode
+4. Print and laminate the sheet, keep at counter
+5. Similarly, tap **"Print Quantity Barcodes"** to print quantity sheets (KG, Litre, Count)
+
+**During billing:**
+1. Tap **📷 Scan Barcode** in the billing screen
+2. Camera opens with a red guide line in the center
+3. Point at an **item barcode** → phone vibrates, shows "✓ Rice — scan quantity"
+4. Point at a **quantity barcode** (e.g., 500g) → phone vibrates, item added to bill
+5. Continue scanning: item → quantity → item → quantity...
+
+**Multiple barcodes visible?**
+The scanner picks the barcode closest to the center of the camera frame (where the red line is).
+
+---
+
+### 5. History
 
 View all past bills.
 
@@ -131,7 +170,7 @@ View all past bills.
 
 ---
 
-### 5. Reports
+### 6. Reports
 
 View sales summaries.
 
@@ -147,12 +186,12 @@ View sales summaries.
 
 ---
 
-### 6. Settings
+### 7. Settings
 
 Configure your store.
 
 **Store Name:**
-- Displayed in the header banner, WhatsApp bills, and QR payment modal
+- Displayed in the header banner, WhatsApp bills, QR payment modal, and barcode reports
 - Default: "ABC Store"
 - Change it to your actual store name
 
@@ -163,23 +202,30 @@ Configure your store.
 
 When UPI is configured, a QR code is shown after each bill finalization. Customers scan it with GPay/PhonePe/Paytm to pay the exact bill amount. The bill number is included in the payment note.
 
+**Barcode Reports:**
+- **Print Item Barcodes** — select items, generate printable barcode sheet
+- **Print Quantity Barcodes** — generate quantity barcode sheets for all unit types
+
+---
+
+## Base Units Explained
+
+| Unit | Price set as | Quick buttons | Example |
+|------|-------------|---------------|---------|
+| **KG** | ₹ per Kilogram | 50g, 100g, 250g, 500g, 750g, 1KG | Rice ₹80/KG → 500g = ₹40 |
+| **Litre** | ₹ per Litre | 50ml, 100ml, 250ml, 500ml, 750ml, 1L | Oil ₹180/L → 500ml = ₹90 |
+| **Count** | ₹ per Unit | 1, 2, 3, 5, 6, 10, 12 | Eggs ₹7/Nos → 6 = ₹42 |
+
 ---
 
 ## Tips & Tricks
 
-- **Clear cache to see updates:** If the app doesn't show latest changes, go to browser Settings → Site Settings → Clear Data, or use DevTools → Application → Clear site data
+- **Clear cache to see updates:** If the app doesn't show latest changes, clear site data in browser settings, or use DevTools → Application → Clear site data
 - **Works offline:** All data is stored on your device. No internet needed after first load
 - **Backup:** Data is stored in browser. Clearing browser data will delete all items and bills
-- **Multiple tabs:** Don't open the app in multiple tabs simultaneously — it may cause data conflicts
-- **Best browser:** Chrome on Android, Safari on iOS
-
----
-
-## Keyboard Shortcuts (Desktop)
-
-- Use Tab to navigate between fields
-- Enter to submit/save in modals
-- Type in search boxes to quickly find items
+- **Multiple tabs:** Don't open the app in multiple tabs simultaneously
+- **Best browser:** Chrome on Android (supports barcode scanning + voice + camera)
+- **Barcode tips:** Print barcodes on A4 paper, laminate for durability. Keep item sheet on wall and quantity sheet at billing counter
 
 ---
 
@@ -187,9 +233,12 @@ When UPI is configured, a QR code is shown after each bill finalization. Custome
 
 | Problem | Solution |
 |---------|----------|
-| App shows old version | Clear site data in browser settings |
+| App shows old version | Clear site data in browser settings, reload |
 | Voice not working | Allow microphone permission; use Chrome |
 | Camera not opening | Allow camera permission; use HTTPS |
+| Barcode scanner not available | Use Chrome 83+ on Android; not supported on iOS Safari |
 | QR code not scanning | Ensure UPI ID is correct; try zooming in |
 | Items not appearing in billing | Refresh page; items need name + price to be valid |
-| Bill number resets | Bill counter resets daily (001 each day) — this is by design |
+| Bill number resets | Bill counter resets daily (001 each day) — by design |
+| Quick buttons don't match item | Select the item first — buttons switch to match unit type |
+| Barcode printed but won't scan | Ensure print quality is good; hold phone steady |

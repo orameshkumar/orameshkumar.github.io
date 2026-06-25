@@ -212,7 +212,7 @@ const BarcodeModule = (function () {
     html += 'document.addEventListener("DOMContentLoaded", function() {';
     items.forEach(function (item) {
       var barcodeVal = getItemBarcodeValue(item);
-      html += 'try { JsBarcode("#bc-' + barcodeVal + '", "' + barcodeVal + '", { format: "CODE128", height: 40, fontSize: 10, margin: 2 }); } catch(e) {}';
+      html += 'try { JsBarcode("#bc-' + barcodeVal + '", "' + barcodeVal + '", { format: "CODE128", height: 60, fontSize: 12, margin: 10, width: 2 }); } catch(e) {}';
     });
     html += '});';
     html += '<\/script>';
@@ -234,10 +234,10 @@ const BarcodeModule = (function () {
     html += 'body { font-family: Arial, sans-serif; padding: 20px; }';
     html += 'h1 { text-align: center; font-size: 18px; margin-bottom: 10px; }';
     html += 'h2 { font-size: 14px; margin: 16px 0 8px; border-bottom: 1px solid #ccc; padding-bottom: 4px; }';
-    html += '.barcode-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }';
-    html += '.barcode-card { border: 1px solid #ccc; padding: 10px; text-align: center; border-radius: 4px; }';
+    html += '.barcode-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-bottom: 20px; }';
+    html += '.barcode-card { border: 1px solid #ccc; padding: 14px; text-align: center; border-radius: 4px; page-break-inside: avoid; }';
     html += '.barcode-card .qty-label { font-size: 18px; font-weight: bold; margin-bottom: 8px; text-transform: uppercase; }';
-    html += '.barcode-card svg { max-width: 100%; height: 45px; }';
+    html += '.barcode-card svg { max-width: 100%; height: 70px; }';
     html += '.barcode-card .barcode-text { font-size: 8px; color: #999; margin-top: 4px; }';
     html += '@media print { .no-print { display: none; } }';
     html += '</style>';
@@ -268,7 +268,7 @@ const BarcodeModule = (function () {
     html += '<script>';
     html += 'document.addEventListener("DOMContentLoaded", function() {';
     allBarcodes.forEach(function (bc) {
-      html += 'try { JsBarcode("#bc-' + bc.id + '", "' + bc.value + '", { format: "CODE128", height: 35, fontSize: 9, margin: 2 }); } catch(e) {}';
+      html += 'try { JsBarcode("#bc-' + bc.id + '", "' + bc.value + '", { format: "CODE128", height: 60, fontSize: 12, margin: 10, width: 2 }); } catch(e) {}';
     });
     html += '});';
     html += '<\/script>';
@@ -296,25 +296,29 @@ const BarcodeModule = (function () {
     }
 
     var scanBtn = document.getElementById('barcode-scan-btn');
-    var scanArea = document.getElementById('barcode-scan-area');
 
-    if (!scanArea) {
-      scanArea = document.createElement('div');
-      scanArea.id = 'barcode-scan-area';
-      scanArea.style.cssText = 'position:relative;width:100%;max-width:300px;margin:8px auto;border-radius:8px;overflow:hidden;border:2px solid #1a73e8;';
-      scanArea.innerHTML = '<video id="barcode-video" autoplay playsinline style="width:100%;display:block;"></video>' +
-        '<div style="position:absolute;top:50%;left:10%;right:10%;height:2px;background:red;opacity:0.7;"></div>';
-      if (scanBtn && scanBtn.parentNode) {
-        scanBtn.parentNode.insertBefore(scanArea, scanBtn.nextSibling);
-      }
-    }
-    scanArea.style.display = 'block';
+    // Create full-screen scanner overlay
+    var scanArea = document.getElementById('barcode-scan-area');
+    if (scanArea) scanArea.remove();
+
+    scanArea = document.createElement('div');
+    scanArea.id = 'barcode-scan-area';
+    scanArea.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;z-index:999;background:#000;display:flex;flex-direction:column;';
+    scanArea.innerHTML =
+      '<div style="position:relative;flex:1;overflow:hidden;">' +
+        '<video id="barcode-video" autoplay playsinline style="width:100%;height:100%;object-fit:cover;"></video>' +
+        '<div style="position:absolute;top:50%;left:10%;right:10%;height:2px;background:red;opacity:0.8;"></div>' +
+        '<div id="scan-status-bar" style="position:absolute;top:0;left:0;right:0;padding:12px 16px;background:rgba(0,0,0,0.6);color:#fff;font-size:0.8rem;text-align:center;">Scan an item barcode...</div>' +
+      '</div>' +
+      '<button id="barcode-stop-btn" style="flex:0 0 auto;padding:16px;background:#ea4335;color:#fff;border:none;font-size:1rem;font-weight:600;cursor:pointer;">✕ Close Scanner</button>';
+
+    document.body.appendChild(scanArea);
 
     var video = document.getElementById('barcode-video');
 
     try {
       videoStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment', width: { ideal: 640 }, height: { ideal: 480 } }
+        video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
       });
       video.srcObject = videoStream;
       await video.play();
@@ -325,11 +329,14 @@ const BarcodeModule = (function () {
         scanBtn.classList.add('active');
       }
 
+      // Close button handler
+      document.getElementById('barcode-stop-btn').addEventListener('click', stopScanner);
+
       scanInterval = setInterval(function () { detectBarcode(video); }, 500);
     } catch (e) {
       console.error('Scanner: Failed to access camera', e);
       alert('Could not access camera. Please allow camera permission.');
-      scanArea.style.display = 'none';
+      if (scanArea) scanArea.remove();
     }
   }
 
@@ -339,7 +346,7 @@ const BarcodeModule = (function () {
     if (videoStream) { videoStream.getTracks().forEach(function (t) { t.stop(); }); videoStream = null; }
 
     var scanArea = document.getElementById('barcode-scan-area');
-    if (scanArea) scanArea.style.display = 'none';
+    if (scanArea) scanArea.remove();
 
     var scanBtn = document.getElementById('barcode-scan-btn');
     if (scanBtn) { scanBtn.textContent = '📷 Scan Barcode'; scanBtn.classList.remove('active'); }
@@ -415,6 +422,15 @@ const BarcodeModule = (function () {
   }
 
   function showScanNotification(message) {
+    // Update the status bar inside the scanner overlay
+    var statusBar = document.getElementById('scan-status-bar');
+    if (statusBar) {
+      statusBar.textContent = message;
+      statusBar.style.background = 'rgba(0,0,0,0.7)';
+      return;
+    }
+
+    // Fallback: floating toast if scanner isn't full-screen
     var existing = document.getElementById('scan-notification');
     if (existing) existing.remove();
 
