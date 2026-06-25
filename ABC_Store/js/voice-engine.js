@@ -199,6 +199,9 @@ const VoiceEngine = (function () {
     var transcript = result[0].transcript;
     console.log('VoiceEngine: Transcript:', transcript);
 
+    // Show raw transcript to user for debugging
+    showNotification('Heard: "' + transcript.trim() + '"');
+
     // Parse the voice command
     var parsed = await parseVoiceCommand(transcript);
 

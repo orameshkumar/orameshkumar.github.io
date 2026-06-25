@@ -128,7 +128,7 @@ const ItemMaster = (function () {
           thumbHtml +
           '<div class="item-info">' +
             '<div class="item-name">' + _escapeHtml(item.name) + '</div>' +
-            '<div class="item-price">₹' + Number(item.basePricePerKg).toFixed(2) + ' / KG</div>' +
+            '<div class="item-price">₹' + Number(item.basePricePerKg).toFixed(2) + ' / ' + _unitLabel(item.baseUnit) + '</div>' +
           '</div>' +
           '<button class="item-edit-btn" data-item-id="' + item.id + '" aria-label="Edit ' + _escapeHtml(item.name) + '">✏️</button>' +
           '<button class="item-delete-btn" data-item-id="' + item.id + '" aria-label="Delete ' + _escapeHtml(item.name) + '">🗑️</button>' +
@@ -186,6 +186,7 @@ const ItemMaster = (function () {
     var nameVal = item ? _escapeAttr(item.name) : '';
     var priceVal = item ? item.basePricePerKg : '';
     var voiceTagVal = item ? _escapeAttr(item.voiceTag || '') : '';
+    var baseUnit = item ? (item.baseUnit || 'kg') : 'kg';
 
     var imagePreviewHtml;
     if (capturedImageBase64) {
@@ -193,6 +194,8 @@ const ItemMaster = (function () {
     } else {
       imagePreviewHtml = '<div id="item-image-preview" style="width:80px;height:80px;display:flex;align-items:center;justify-content:center;background:#e8eaed;border-radius:4px;margin-top:8px;font-size:1.5rem;color:#5f6368;">📷</div>';
     }
+
+    var priceLabel = baseUnit === 'count' ? 'Price per Unit (₹) *' : (baseUnit === 'litre' ? 'Base Price per Litre (₹) *' : 'Base Price per KG (₹) *');
 
     modalOverlay.innerHTML =
       '<div class="modal" role="dialog" aria-labelledby="item-modal-title" aria-modal="true">' +
@@ -207,8 +210,16 @@ const ItemMaster = (function () {
             '<span id="item-name-error" style="color:#ea4335;font-size:0.75rem;display:none;margin-top:4px;">Item name is required</span>' +
           '</div>' +
           '<div class="form-group">' +
-            '<label for="item-price-input">Base Price per KG (₹) *</label>' +
-            '<input type="number" id="item-price-input" placeholder="Enter price per KG" value="' + priceVal + '" min="0" step="0.01">' +
+            '<label for="item-unit-select">Base Unit *</label>' +
+            '<select id="item-unit-select" style="width:100%;padding:10px 12px;border:1.5px solid #dadce0;border-radius:8px;font-size:0.875rem;min-height:44px;background:#fff;">' +
+              '<option value="kg"' + (baseUnit === 'kg' ? ' selected' : '') + '>Kilogram (KG)</option>' +
+              '<option value="litre"' + (baseUnit === 'litre' ? ' selected' : '') + '>Litre (L)</option>' +
+              '<option value="count"' + (baseUnit === 'count' ? ' selected' : '') + '>Count (Nos)</option>' +
+            '</select>' +
+          '</div>' +
+          '<div class="form-group">' +
+            '<label for="item-price-input" id="item-price-label">' + priceLabel + '</label>' +
+            '<input type="number" id="item-price-input" placeholder="Enter price" value="' + priceVal + '" min="0" step="0.01">' +
             '<span id="item-price-error" style="color:#ea4335;font-size:0.75rem;display:none;margin-top:4px;">Base price is required</span>' +
           '</div>' +
           '<div class="form-group">' +
@@ -255,6 +266,7 @@ const ItemMaster = (function () {
     var saveBtn = document.getElementById('item-modal-save');
     var captureBtn = document.getElementById('item-capture-btn');
     var fileInput = document.getElementById('item-image-file-input');
+    var unitSelect = document.getElementById('item-unit-select');
 
     if (closeBtn) {
       closeBtn.addEventListener('click', closeModal);
@@ -270,6 +282,16 @@ const ItemMaster = (function () {
     }
     if (fileInput) {
       fileInput.addEventListener('change', _handleFileSelected);
+    }
+    if (unitSelect) {
+      unitSelect.addEventListener('change', function () {
+        var label = document.getElementById('item-price-label');
+        if (!label) return;
+        var unit = unitSelect.value;
+        if (unit === 'count') label.textContent = 'Price per Unit (₹) *';
+        else if (unit === 'litre') label.textContent = 'Base Price per Litre (₹) *';
+        else label.textContent = 'Base Price per KG (₹) *';
+      });
     }
 
     // Close on overlay background click
@@ -459,12 +481,14 @@ const ItemMaster = (function () {
     var nameInput = document.getElementById('item-name-input');
     var priceInput = document.getElementById('item-price-input');
     var voiceTagInput = document.getElementById('item-voicetag-input');
+    var unitSelect = document.getElementById('item-unit-select');
     var nameError = document.getElementById('item-name-error');
     var priceError = document.getElementById('item-price-error');
 
     var name = nameInput ? nameInput.value.trim() : '';
     var price = priceInput ? parseFloat(priceInput.value) : NaN;
     var voiceTag = voiceTagInput ? voiceTagInput.value.trim() : '';
+    var baseUnit = unitSelect ? unitSelect.value : 'kg';
 
     // Reset errors
     if (nameError) nameError.style.display = 'none';
@@ -495,6 +519,7 @@ const ItemMaster = (function () {
           id: editingItemId,
           name: name,
           basePricePerKg: price,
+          baseUnit: baseUnit,
           voiceTag: voiceTag,
           imageBase64: capturedImageBase64 || (existingItem ? existingItem.imageBase64 : null),
           createdAt: existingItem ? existingItem.createdAt : now,
@@ -507,6 +532,7 @@ const ItemMaster = (function () {
           id: Utils.generateId(),
           name: name,
           basePricePerKg: price,
+          baseUnit: baseUnit,
           voiceTag: voiceTag,
           imageBase64: capturedImageBase64 || null,
           createdAt: now,
@@ -525,6 +551,17 @@ const ItemMaster = (function () {
   }
 
   // ─── Delete Item ─────────────────────────────────────────────────────────────
+
+  /**
+   * Returns display label for base unit.
+   * @param {string} unit - 'kg', 'litre', or 'count'
+   * @returns {string} Display label
+   */
+  function _unitLabel(unit) {
+    if (unit === 'litre') return 'L';
+    if (unit === 'count') return 'Nos';
+    return 'KG';
+  }
 
   /**
    * Handles deleting an item after user confirmation.

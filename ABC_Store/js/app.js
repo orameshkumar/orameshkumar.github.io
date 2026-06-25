@@ -115,6 +115,9 @@ async function initApp() {
   if (typeof Settings !== 'undefined' && Settings.init) {
     Settings.init();
   }
+  if (typeof BarcodeModule !== 'undefined' && BarcodeModule.init) {
+    BarcodeModule.init();
+  }
 }
 
 // Register service worker and initialize app on DOM ready
