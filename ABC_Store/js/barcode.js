@@ -532,7 +532,9 @@ const BarcodeModule = (function () {
         showScanNotification('✓ ' + matchedItem.name + ' — scan quantity');
         if (navigator.vibrate) navigator.vibrate(100);
       } else {
-        showScanNotification('Unknown item: ' + value + ' (no match for ' + itemIdFragment + ')');
+        // Show detailed debug info
+        var dbIds = items.slice(0, 3).map(function(i) { return i.name + ':' + i.id.substring(0,8); }).join(', ');
+        showScanNotification('No match for "' + itemIdFragment + '" | DB items: ' + dbIds);
       }
 
     } else if (upperVal.startsWith(BARCODE_PREFIX_QTY)) {

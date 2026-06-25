@@ -1,5 +1,5 @@
 // Service Worker for ABC Provisional Store PWA
-const CACHE_NAME = 'abc-store-v9';
+const CACHE_NAME = 'abc-store-v10';
 
 // Application assets to pre-cache during install
 const ASSETS_TO_CACHE = [
