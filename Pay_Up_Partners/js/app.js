@@ -13,6 +13,7 @@ var App = (function() {
 
       // Initialize all modules
       Settings.init();
+      if (typeof License !== 'undefined') await License.init();
       Loans.init();
       ClientMaster.init();
       Collection.init();

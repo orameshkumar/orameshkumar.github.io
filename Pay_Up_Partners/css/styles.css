@@ -1538,3 +1538,21 @@ body {
     transition-duration: 0.01ms !important;
   }
 }
+
+
+/* --- License Status --- */
+.license-status {
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  margin-bottom: var(--spacing-md);
+}
+.license-status.licensed {
+  background: var(--badge-emi-bg);
+  color: var(--badge-emi-text);
+}
+.license-status.unlicensed {
+  background: var(--color-surface);
+  color: var(--color-warning);
+}

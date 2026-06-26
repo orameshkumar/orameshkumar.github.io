@@ -173,6 +173,14 @@ const ClientMaster = (function() {
 
     if (errors.length > 0) { showErrors(errors); return; }
 
+    // License check for new clients
+    if (!editingClientId) {
+      if (typeof License !== 'undefined') {
+        var canAdd = await License.checkClientLimit();
+        if (!canAdd) return;
+      }
+    }
+
     try {
       if (editingClientId) {
         var existing = await DB.getClient(editingClientId);
@@ -276,6 +284,10 @@ const ClientMaster = (function() {
 
   // Export
   async function exportClients() {
+    if (typeof License !== 'undefined' && !License.isLicensed()) {
+      alert('Export requires a valid license.\nGo to Settings → License to activate.');
+      return;
+    }
     var clients = await DB.getAllClients();
     var loans = await DB.getAllLoans();
     if (!clients.length) { alert('No clients to export.'); return; }
@@ -300,6 +312,11 @@ const ClientMaster = (function() {
 
   // Import
   function handleImportFile(event) {
+    if (typeof License !== 'undefined' && !License.isLicensed()) {
+      alert('Import requires a valid license.\nGo to Settings → License to activate.');
+      event.target.value = '';
+      return;
+    }
     var file = event.target.files && event.target.files[0];
     if (!file) return;
     var reader = new FileReader();

@@ -30,6 +30,10 @@ const Backup = (function() {
   }
 
   async function createBackup() {
+    if (typeof License !== 'undefined' && !License.isLicensed()) {
+      alert('Backup requires a valid license.\nGo to Settings → License to activate.');
+      return;
+    }
     try {
       var clients = await DB.getAllClients();
       var loans = await DB.getAllLoans();
@@ -69,6 +73,11 @@ const Backup = (function() {
   }
 
   function handleRestoreFile(event) {
+    if (typeof License !== 'undefined' && !License.isLicensed()) {
+      alert('Restore requires a valid license.\nGo to Settings → License to activate.');
+      event.target.value = '';
+      return;
+    }
     var file = event.target.files && event.target.files[0];
     if (!file) return;
 

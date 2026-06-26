@@ -299,6 +299,18 @@
                         </select>
                     </div>
                     <hr class="settings-divider">
+                    <h3 class="section-subheading">License</h3>
+                    <div id="license-status" class="license-status"></div>
+                    <div class="form-group">
+                        <label for="license-key-input">License Key</label>
+                        <input type="text" id="license-key-input" placeholder="Enter your license key" autocomplete="off">
+                        <span class="error-message" id="license-error" role="alert"></span>
+                    </div>
+                    <button id="license-activate-btn" class="btn-primary">Activate License</button>
+                    <button id="license-remove-btn" class="btn-secondary" hidden>Remove License</button>
+                    <div id="license-success-msg" class="save-confirmation" hidden>License activated!</div>
+
+                    <hr class="settings-divider">
                     <h3 class="section-subheading">WhatsApp Notifications</h3>
                     <div class="theme-toggle-group">
                         <label for="wa-confirm-emi">Confirmation for Daily EMI</label>
@@ -382,6 +394,7 @@
     <script src="js/qrcode-lib.js"></script>
     <script src="js/db.js"></script>
     <script src="js/settings.js"></script>
+    <script src="js/license.js"></script>
     <script src="js/loans.js"></script>
     <script src="js/clients.js"></script>
     <script src="js/collection.js"></script>
