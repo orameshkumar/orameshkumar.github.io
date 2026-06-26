@@ -201,17 +201,27 @@ const WhatsApp = (function() {
     }
   }
 
-  // ─── isReminderDue(periodEndDate, configuredDays) ───
-  function isReminderDue(periodEndDate, configuredDays) {
-    if (!periodEndDate || !configuredDays || !configuredDays.length) return false;
+  // ─── isReminderDue(periodStartDate, configuredDays, referenceDate) ───
+  // Checks if referenceDate is within the configured reminder window BEFORE the period start date.
+  // e.g., if periodStart is July 15, referenceDate is July 12, and configuredDays = [1, 3], returns true (3 days before).
+  // Value 0 means "on due date" (referenceDate === periodStart).
+  function isReminderDue(periodStartDate, configuredDays, referenceDate) {
+    if (!periodStartDate || !configuredDays || !configuredDays.length) return false;
     try {
-      var today = new Date();
-      today.setHours(0, 0, 0, 0);
-      var endParts = periodEndDate.split('-');
-      var endDate = new Date(parseInt(endParts[0], 10), parseInt(endParts[1], 10) - 1, parseInt(endParts[2], 10));
-      endDate.setHours(0, 0, 0, 0);
+      var refParts = (referenceDate || '').split('-');
+      var ref;
+      if (refParts.length === 3) {
+        ref = new Date(parseInt(refParts[0], 10), parseInt(refParts[1], 10) - 1, parseInt(refParts[2], 10));
+      } else {
+        ref = new Date();
+      }
+      ref.setHours(0, 0, 0, 0);
 
-      var diffMs = endDate.getTime() - today.getTime();
+      var parts = periodStartDate.split('-');
+      var startDate = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+      startDate.setHours(0, 0, 0, 0);
+
+      var diffMs = startDate.getTime() - ref.getTime();
       var diffDays = Math.round(diffMs / 86400000);
 
       for (var i = 0; i < configuredDays.length; i++) {
