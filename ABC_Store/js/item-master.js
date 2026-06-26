@@ -10,6 +10,9 @@
 const ItemMaster = (function () {
   'use strict';
 
+  // ─── Constants ──────────────────────────────────────────────────────────────
+  var ITEM_LIMIT = 20;
+
   // ─── State ──────────────────────────────────────────────────────────────────
 
   let allItems = [];
@@ -531,6 +534,16 @@ const ItemMaster = (function () {
     if (duplicateItem) {
       if (codeError) { codeError.textContent = 'Item code "' + itemCode + '" already exists (' + duplicateItem.name + ')'; codeError.style.display = 'block'; }
       return;
+    }
+
+    // ─── License check: enforce item limit for unlicensed users (new items only) ───
+    if (!editingItemId) {
+      if (!License.isLicensed()) {
+        if (allItems.length >= ITEM_LIMIT) {
+          alert('You have reached the limit of ' + ITEM_LIMIT + ' items.\n\nPlease obtain a license key to add unlimited items.\nGo to Settings \u2192 License to activate.');
+          return;
+        }
+      }
     }
 
     var now = new Date().toISOString();

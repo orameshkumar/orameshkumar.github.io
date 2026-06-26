@@ -14,6 +14,10 @@
 const Billing = (function () {
   'use strict';
 
+  // ─── Constants ──────────────────────────────────────────────────────────────
+
+  var BILL_LIMIT = 30;
+
   // ─── State ──────────────────────────────────────────────────────────────────
 
   let allItems = [];               // All items from DB
@@ -48,6 +52,9 @@ const Billing = (function () {
 
     // Set up event listeners
     setupEventListeners();
+
+    // Register license state change listener for bill trimming
+    registerLicenseListener();
 
     // Reset state
     resetBillState();
@@ -102,9 +109,9 @@ const Billing = (function () {
     var litrePanel = document.getElementById('qty-panel-litre');
     var countPanel = document.getElementById('qty-panel-count');
 
-    if (kgPanel) kgPanel.style.display = (unit === 'kg') ? 'flex' : 'none';
-    if (litrePanel) litrePanel.style.display = (unit === 'litre') ? 'flex' : 'none';
-    if (countPanel) countPanel.style.display = (unit === 'count') ? 'flex' : 'none';
+    if (kgPanel) kgPanel.style.display = (unit === 'kg') ? 'grid' : 'none';
+    if (litrePanel) litrePanel.style.display = (unit === 'litre') ? 'grid' : 'none';
+    if (countPanel) countPanel.style.display = (unit === 'count') ? 'grid' : 'none';
 
     // Clear active state from all qty buttons when switching panels
     qtyButtons.forEach(function (b) { b.classList.remove('active'); });
@@ -552,6 +559,10 @@ const Billing = (function () {
 
     try {
       await DB.saveBill(bill);
+
+      // Trim bills to BILL_LIMIT when unlicensed (silent, no alert)
+      await trimBillsIfUnlicensed();
+
       alert('Bill ' + billNumber + ' saved successfully!');
 
       // Show UPI payment QR if configured
@@ -591,6 +602,57 @@ const Billing = (function () {
     });
     if (customQtyInput) {
       customQtyInput.value = '';
+    }
+  }
+
+  // ─── Bill Trimming (License Restriction) ────────────────────────────────────
+
+  /**
+   * Trim bills to BILL_LIMIT when unlicensed.
+   * Fetches all bills, sorts by billNumber descending (most recent first),
+   * and silently deletes any beyond the limit.
+   */
+  async function trimBillsIfUnlicensed() {
+    if (typeof License !== 'undefined' && License.isLicensed()) {
+      return; // Licensed users have no bill limit
+    }
+
+    try {
+      var allBills = await DB.getAllBills();
+
+      // Sort by billNumber descending (most recent first)
+      allBills.sort(function (a, b) {
+        return (b.billNumber || '').localeCompare(a.billNumber || '');
+      });
+
+      if (allBills.length > BILL_LIMIT) {
+        // Delete oldest bills (those beyond the first BILL_LIMIT)
+        var billsToDelete = allBills.slice(BILL_LIMIT);
+        for (var i = 0; i < billsToDelete.length; i++) {
+          try {
+            await DB.deleteBill(billsToDelete[i].id);
+          } catch (e) {
+            console.error('Billing: Failed to delete old bill', e);
+          }
+        }
+      }
+    } catch (e) {
+      console.error('Billing: Failed to trim bills', e);
+    }
+  }
+
+  /**
+   * Register license state change listener.
+   * When transitioning to unlicensed, immediately trim bills to BILL_LIMIT.
+   */
+  function registerLicenseListener() {
+    if (typeof License !== 'undefined' && License.onStateChange) {
+      License.onStateChange(function (isLicensed) {
+        if (!isLicensed) {
+          // Transitioned to unlicensed — trim bills silently
+          trimBillsIfUnlicensed();
+        }
+      });
     }
   }
 

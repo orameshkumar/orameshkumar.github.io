@@ -12,12 +12,141 @@ const Settings = (function () {
   const STORAGE_KEY = 'abcstore_upi_settings';
   const DEFAULT_STORE_NAME = 'ABC Store';
 
+  // ─── License Section ─────────────────────────────────────────────────────────
+
+  /**
+   * Render (or re-render) the license status section at the top of the settings screen.
+   * Shows activation form when unlicensed, licensee info when licensed.
+   */
+  function _renderLicenseSection() {
+    var settingsScreen = document.getElementById('settings-screen');
+    if (!settingsScreen) return;
+
+    var screenContent = settingsScreen.querySelector('.screen-content');
+    if (!screenContent) return;
+
+    // Remove existing license section if present
+    var existing = document.getElementById('license-section');
+    if (existing) existing.remove();
+
+    var section = document.createElement('div');
+    section.id = 'license-section';
+    section.style.cssText = 'margin-bottom:20px;padding:16px;border:1px solid var(--color-border);border-radius:8px;background:var(--color-surface);';
+
+    var licensed = License.isLicensed();
+    var name = License.getLicenseeName();
+
+    if (licensed) {
+      section.innerHTML =
+        '<p id="license-status" style="font-size:1rem;font-weight:600;margin:0 0 12px 0;color:var(--color-success);">✅ Licensed to: ' + _escapeHtml(name) + '</p>' +
+        '<p id="license-error" style="color:var(--color-danger);font-size:0.8rem;margin:0 0 8px 0;display:none;"></p>' +
+        '<p id="license-success-msg" style="color:var(--color-success);font-size:0.8rem;margin:0 0 8px 0;display:none;"></p>' +
+        '<button id="license-remove-btn" class="btn-secondary" style="width:100%;">Remove License</button>';
+    } else {
+      section.innerHTML =
+        '<p id="license-status" style="font-size:1rem;font-weight:600;margin:0 0 12px 0;color:var(--color-warning);">🔒 Unlicensed — Features are limited</p>' +
+        '<p id="license-error" style="color:var(--color-danger);font-size:0.8rem;margin:0 0 8px 0;display:none;"></p>' +
+        '<p id="license-success-msg" style="color:var(--color-success);font-size:0.8rem;margin:0 0 8px 0;display:none;"></p>' +
+        '<div class="form-group" style="margin-bottom:8px;">' +
+          '<input type="text" id="license-key-input" maxlength="500" placeholder="Enter license key" autocomplete="off" style="width:100%;box-sizing:border-box;">' +
+        '</div>' +
+        '<button id="license-activate-btn" class="btn-primary" style="width:100%;">Activate</button>';
+    }
+
+    // Insert at the top of screen-content (before first child)
+    screenContent.insertBefore(section, screenContent.firstChild);
+
+    // Attach event listeners
+    _attachLicenseListeners();
+  }
+
+  /**
+   * Attach event listeners to license section buttons.
+   */
+  function _attachLicenseListeners() {
+    var activateBtn = document.getElementById('license-activate-btn');
+    if (activateBtn) {
+      activateBtn.addEventListener('click', _handleActivate);
+    }
+
+    var removeBtn = document.getElementById('license-remove-btn');
+    if (removeBtn) {
+      removeBtn.addEventListener('click', _handleRemoveLicense);
+    }
+  }
+
+  /**
+   * Handle Activate button click.
+   * Validates input, calls License.activate(), and updates UI.
+   */
+  async function _handleActivate() {
+    var input = document.getElementById('license-key-input');
+    var errorEl = document.getElementById('license-error');
+    var successEl = document.getElementById('license-success-msg');
+
+    // Hide previous messages
+    if (errorEl) errorEl.style.display = 'none';
+    if (successEl) successEl.style.display = 'none';
+
+    if (!input || !input.value.trim()) {
+      if (errorEl) {
+        errorEl.textContent = 'Please enter a license key.';
+        errorEl.style.display = 'block';
+      }
+      return;
+    }
+
+    var result = await License.activate(input.value.trim());
+
+    if (result.success) {
+      // Show success message briefly, then re-render
+      _renderLicenseSection();
+      var successMsg = document.getElementById('license-success-msg');
+      if (successMsg) {
+        successMsg.textContent = result.message;
+        successMsg.style.display = 'block';
+        setTimeout(function () {
+          if (successMsg) successMsg.style.display = 'none';
+        }, 3000);
+      }
+    } else {
+      // Show error, retain input value
+      if (errorEl) {
+        errorEl.textContent = result.message;
+        errorEl.style.display = 'block';
+      }
+    }
+  }
+
+  /**
+   * Handle Remove License button click.
+   * Shows confirmation dialog, deactivates on confirm.
+   */
+  function _handleRemoveLicense() {
+    var confirmed = confirm('Remove license? Features will be limited.');
+    if (confirmed) {
+      License.deactivate();
+      _renderLicenseSection();
+    }
+  }
+
+  /**
+   * Escape HTML entities to prevent XSS in licensee name display.
+   * @param {string} str - Raw string
+   * @returns {string} HTML-safe string
+   */
+  function _escapeHtml(str) {
+    var div = document.createElement('div');
+    div.appendChild(document.createTextNode(str));
+    return div.innerHTML;
+  }
+
   // ─── Initialization ─────────────────────────────────────────────────────────
 
   /**
    * Initialize the Settings module.
    * Loads saved settings into the form, sets up save button,
-   * and applies store name to the UI.
+   * and applies store name to the UI. Also renders the license section.
    */
   function init() {
     var saveBtn = document.getElementById('upi-save-btn');
@@ -30,6 +159,14 @@ const Settings = (function () {
 
     // Apply store name to UI
     applyStoreName();
+
+    // Render license section at the top of settings
+    _renderLicenseSection();
+
+    // Register listener for license state changes to update UI dynamically
+    License.onStateChange(function () {
+      _renderLicenseSection();
+    });
   }
 
   // ─── Store Name ─────────────────────────────────────────────────────────────

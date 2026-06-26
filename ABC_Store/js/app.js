@@ -77,7 +77,7 @@ function setupTabNavigation() {
 
 /**
  * Initialize the application.
- * Sets up database, tab navigation, and defaults to Item Master screen.
+ * Sets up database, license, tab navigation, and defaults to Item Master screen.
  */
 async function initApp() {
   // Initialize database if DB module is available
@@ -88,6 +88,38 @@ async function initApp() {
     } catch (error) {
       console.error('Database initialization failed:', error);
     }
+  }
+
+  // Initialize License module (after DB, before other modules)
+  if (typeof License !== 'undefined' && License.init) {
+    try {
+      await License.init();
+      console.log('License module initialized');
+    } catch (error) {
+      console.error('License initialization failed:', error);
+    }
+
+    // Register state change listener for banner visibility
+    License.onStateChange(function (isLicensed) {
+      var banner = document.getElementById('license-banner');
+      if (!banner) return;
+      if (isLicensed) {
+        banner.setAttribute('hidden', '');
+      } else {
+        banner.removeAttribute('hidden');
+      }
+    });
+
+    // Set initial banner state
+    (function () {
+      var banner = document.getElementById('license-banner');
+      if (!banner) return;
+      if (License.isLicensed()) {
+        banner.setAttribute('hidden', '');
+      } else {
+        banner.removeAttribute('hidden');
+      }
+    })();
   }
 
   // Set up tab navigation
@@ -114,6 +146,9 @@ async function initApp() {
   }
   if (typeof Settings !== 'undefined' && Settings.init) {
     Settings.init();
+  }
+  if (typeof Theme_Engine !== 'undefined' && Theme_Engine.init) {
+    Theme_Engine.init();
   }
   if (typeof BarcodeModule !== 'undefined' && BarcodeModule.init) {
     BarcodeModule.init();

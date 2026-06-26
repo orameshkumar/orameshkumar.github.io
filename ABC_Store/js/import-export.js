@@ -19,11 +19,45 @@ const ImportExport = (function () {
     var importBtn = document.getElementById('import-items-btn');
     var fileInput = document.getElementById('import-file-input');
 
-    if (exportBtn) exportBtn.addEventListener('click', exportItems);
+    if (exportBtn) {
+      exportBtn.addEventListener('click', function () {
+        if (!License.isLicensed()) {
+          alert('Export is available for licensed users only.\nGo to Settings \u2192 License to activate.');
+          return;
+        }
+        exportItems();
+      });
+
+      // Set initial export button state based on license
+      _updateExportButtonState(exportBtn);
+    }
+
     if (importBtn) importBtn.addEventListener('click', function () {
       if (fileInput) fileInput.click();
     });
     if (fileInput) fileInput.addEventListener('change', handleImportFile);
+
+    // Listen for license state changes to dynamically enable/disable export
+    License.onStateChange(function () {
+      var btn = document.getElementById('export-items-btn');
+      if (btn) {
+        _updateExportButtonState(btn);
+      }
+    });
+  }
+
+  /**
+   * Update the export button's disabled state and opacity based on license status.
+   * @param {HTMLElement} btn - The export button element
+   */
+  function _updateExportButtonState(btn) {
+    if (License.isLicensed()) {
+      btn.disabled = false;
+      btn.style.opacity = '1';
+    } else {
+      btn.disabled = true;
+      btn.style.opacity = '0.5';
+    }
   }
 
   // ─── Export ─────────────────────────────────────────────────────────────────

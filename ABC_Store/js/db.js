@@ -206,6 +206,16 @@ const DB = (function () {
     });
   }
 
+  /**
+   * Delete a bill by its id.
+   * @param {string} id - The bill id to delete
+   * @returns {Promise<undefined>}
+   */
+  function deleteBill(id) {
+    const store = getStore('bills', 'readwrite');
+    return requestToPromise(store.delete(id));
+  }
+
   // ─── Public API ────────────────────────────────────────────────────────────
 
   return {
@@ -218,6 +228,7 @@ const DB = (function () {
     saveBill,
     getBill,
     getAllBills,
-    getBillsByDateRange
+    getBillsByDateRange,
+    deleteBill
   };
 })();
