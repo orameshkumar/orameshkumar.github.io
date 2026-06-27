@@ -14,51 +14,88 @@
     <title>License Generator</title>
 </head>
 <body>
-    <div class="card">
-        <h1 class="title">🔑 License Generator</h1>
-        <p class="subtitle">Multi-App Key Generator</p>
-
-        <div class="form-group">
-            <label for="app-select">Application</label>
-            <select id="app-select"></select>
-        </div>
-
-        <div class="form-group">
-            <label for="user-name">User Name</label>
-            <input type="text" id="user-name" placeholder="Enter the licensee name" autocomplete="off">
-        </div>
-
-        <button id="generate-btn" class="btn-primary">Generate License</button>
-
-        <div id="output-section" class="output-section" hidden>
-            <p id="app-name-label" class="app-name-label" hidden></p>
-            <label for="license-output">Generated License Key</label>
-            <textarea id="license-output" readonly rows="4"></textarea>
-            <button id="copy-btn" class="btn-secondary">📋 Copy to Clipboard</button>
-            <div id="status-msg" class="status-msg" hidden></div>
-        </div>
+    <div class="tab-bar" role="tablist" aria-label="Main Navigation">
+        <button class="tab active" role="tab" id="tab-generate"
+                aria-selected="true" aria-controls="panel-generate" tabindex="0">
+            Generate
+        </button>
+        <button class="tab" role="tab" id="tab-history"
+                aria-selected="false" aria-controls="panel-history" tabindex="-1">
+            History
+        </button>
+        <button class="tab" role="tab" id="tab-manage"
+                aria-selected="false" aria-controls="panel-manage" tabindex="-1">
+            Manage Apps
+        </button>
     </div>
 
-    <div class="card manage-card">
-        <h2 class="manage-title">Manage Apps</h2>
+    <div class="tab-panels">
+        <div class="tab-panel active" role="tabpanel" id="panel-generate" aria-labelledby="tab-generate">
+            <h1 class="title">🔑 License Generator</h1>
+            <p class="subtitle">Multi-App Key Generator</p>
 
-        <div class="manage-section">
-            <h3 class="manage-subtitle">Add App</h3>
             <div class="form-group">
-                <label for="add-app-name">App Name</label>
-                <input type="text" id="add-app-name" placeholder="e.g. My New App" autocomplete="off">
+                <label for="app-select">Application</label>
+                <select id="app-select"></select>
             </div>
+
             <div class="form-group">
-                <label for="add-app-secret">Secret String</label>
-                <input type="text" id="add-app-secret" placeholder="e.g. MY_APP_SECRET_2025" autocomplete="off">
+                <label for="user-name">User Name</label>
+                <input type="text" id="user-name" placeholder="Enter the licensee name" autocomplete="off">
             </div>
-            <button id="add-app-btn" class="btn-primary btn-small">Add App</button>
+
+            <button id="generate-btn" class="btn-primary">Generate License</button>
+
+            <div id="output-section" class="output-section" hidden>
+                <p id="app-name-label" class="app-name-label" hidden></p>
+                <label for="license-output">Generated License Key</label>
+                <textarea id="license-output" readonly rows="4"></textarea>
+                <button id="copy-btn" class="btn-secondary">📋 Copy to Clipboard</button>
+                <div id="status-msg" class="status-msg" hidden></div>
+            </div>
         </div>
 
-        <div class="manage-section">
-            <h3 class="manage-subtitle">Remove App</h3>
-            <p class="manage-hint">Removes the currently selected app from the registry.</p>
-            <button id="remove-app-btn" class="btn-danger">Remove Selected App</button>
+        <div class="tab-panel" role="tabpanel" id="panel-history" aria-labelledby="tab-history" hidden>
+            <div class="history-empty">
+                <p>No licenses have been generated yet.</p>
+                <p class="history-empty-hint">Generate a license from the "Generate" tab to see it here.</p>
+            </div>
+            <div class="history-list"></div>
+        </div>
+
+        <div class="tab-panel" role="tabpanel" id="panel-manage" aria-labelledby="tab-manage" hidden>
+            <h2 class="manage-title">Manage Apps</h2>
+
+            <div class="manage-section">
+                <h3 class="manage-subtitle">Theme</h3>
+                <div class="form-group">
+                    <label for="theme-select">Appearance</label>
+                    <select id="theme-select">
+                        <option value="dark">Dark</option>
+                        <option value="light">Light</option>
+                        <option value="purple">Purple</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="manage-section">
+                <h3 class="manage-subtitle">Add App</h3>
+                <div class="form-group">
+                    <label for="add-app-name">App Name</label>
+                    <input type="text" id="add-app-name" placeholder="e.g. My New App" autocomplete="off">
+                </div>
+                <div class="form-group">
+                    <label for="add-app-secret">Secret String</label>
+                    <input type="text" id="add-app-secret" placeholder="e.g. MY_APP_SECRET_2025" autocomplete="off">
+                </div>
+                <button id="add-app-btn" class="btn-primary btn-small">Add App</button>
+            </div>
+
+            <div class="manage-section">
+                <h3 class="manage-subtitle">Remove App</h3>
+                <p class="manage-hint">Removes the currently selected app from the registry.</p>
+                <button id="remove-app-btn" class="btn-danger">Remove Selected App</button>
+            </div>
         </div>
     </div>
 

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'license-generator-v1';
+const CACHE_NAME = 'license-generator-v3';
 const FILES_TO_CACHE = [
   './',
   './index.html',

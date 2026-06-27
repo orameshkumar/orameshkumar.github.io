@@ -47,6 +47,48 @@ Run this command from inside the `License_Generator` folder, then open `http://l
 
 ---
 
+## Tab Navigation
+
+The app uses a tabbed layout with three tabs:
+
+- **Generate** — Create new license keys (default active tab on load)
+- **History** — View and manage all previously generated licenses
+- **Manage Apps** — Add, edit, or remove registered applications
+
+### Keyboard Navigation:
+
+- Use **Left/Right arrow keys** to move focus between tabs
+- Press **Enter** or **Space** to activate the focused tab
+
+---
+
+## License History
+
+Every generated license is automatically saved to history for full traceability.
+
+### Viewing History:
+
+- Switch to the **History** tab to see all generated licenses
+- Entries are grouped by application name (sorted alphabetically)
+- Within each group, entries are displayed in reverse chronological order (newest first)
+- Each entry shows the user name, a truncated key preview, and the generation date
+
+### Interacting with Entries:
+
+- **Tap an entry** to expand it and see the full license key
+- **Tap again** to collapse the entry back to the preview
+- From the expanded view:
+  - Click **Copy** to copy the full license key to the clipboard
+  - Click **Delete** to remove that single entry (confirmation required)
+
+### Managing History:
+
+- Each application group has a **"Clear All"** button to remove all history entries for that app (confirmation required)
+- History stores a maximum of **500 entries** — when the limit is reached, the oldest entry is automatically removed to make room for the new one
+- History is stored in `localStorage` under the key `license_gen_history`
+
+---
+
 ## How It Works
 
 The License Generator creates keys using HMAC-SHA256 (a cryptographic signing algorithm):
@@ -110,11 +152,22 @@ This ensures only keys generated with the correct secret are accepted — you ca
 
 ```
 License_Generator/
-├── index.html      ← Main page
-├── app.js          ← License generation logic
-├── styles.css      ← Dark theme styling
+├── index.html      ← Main page (tab layout, all panels)
+├── app.js          ← License generation, tab logic, history manager
+├── styles.css      ← Dark theme styling, tab & history styles
 ├── manifest.json   ← PWA manifest
 ├── sw.js           ← Service Worker (offline support)
 ├── icon-192.png    ← App icon (small)
 └── icon-512.png    ← App icon (large)
 ```
+
+> **Note:** No new files were added for the tab navigation or license history features. All new functionality lives in the existing `index.html`, `app.js`, and `styles.css` files.
+
+---
+
+## localStorage Keys
+
+| Key | Purpose |
+|-----|---------|
+| `license_gen_apps` | App registry — stores registered applications and their secrets |
+| `license_gen_history` | License history — stores all generated license entries (new) |
