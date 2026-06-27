@@ -99,21 +99,46 @@ const Settings = (function () {
     // License UI
     _initLicenseUI();
 
-    // Mortar Joint Thickness
-    var mortarJointInput = document.getElementById('mortar-joint-input');
-    var btnSaveMortarJoint = document.getElementById('btn-save-mortar-joint');
-    if (mortarJointInput && btnSaveMortarJoint) {
-      mortarJointInput.value = Config.getMortarJointThickness ? Config.getMortarJointThickness() : 0.25;
-      btnSaveMortarJoint.addEventListener('click', function () {
-        var val = parseFloat(mortarJointInput.value);
-        if (isNaN(val) || val <= 0) {
-          showToast('Please enter a positive number');
+    // Base Assumptions
+    var btnSaveAssumptions = document.getElementById('btn-save-assumptions');
+    if (btnSaveAssumptions) {
+      // Load current values into inputs
+      var cementBagCftInput = document.getElementById('cement-bag-cft');
+      var cementBagCumInput = document.getElementById('cement-bag-cum');
+      var mortarFactorImpInput = document.getElementById('mortar-factor-imperial');
+      var mortarFactorMetInput = document.getElementById('mortar-factor-metric');
+      var concreteDensityInput = document.getElementById('concrete-density');
+      var mortarJointInput = document.getElementById('mortar-joint-input');
+
+      // Populate from current config
+      var allConfig = Config.getAll();
+      if (cementBagCftInput) cementBagCftInput.value = allConfig.cementBagVolume ? allConfig.cementBagVolume.cft : 1.25;
+      if (cementBagCumInput) cementBagCumInput.value = allConfig.cementBagVolume ? allConfig.cementBagVolume.cum : 0.035;
+      if (mortarFactorImpInput) mortarFactorImpInput.value = allConfig.mortarFactor ? allConfig.mortarFactor.imperial : 1.33;
+      if (mortarFactorMetInput) mortarFactorMetInput.value = allConfig.mortarFactor ? allConfig.mortarFactor.metric : 1.33;
+      if (concreteDensityInput) concreteDensityInput.value = allConfig.concreteDensity || 2400;
+      if (mortarJointInput) mortarJointInput.value = allConfig.mortarJointThickness || 0.25;
+
+      btnSaveAssumptions.addEventListener('click', function () {
+        var cfg = Config.getAll();
+        var cft = parseFloat(cementBagCftInput.value);
+        var cum = parseFloat(cementBagCumInput.value);
+        var mfImp = parseFloat(mortarFactorImpInput.value);
+        var mfMet = parseFloat(mortarFactorMetInput.value);
+        var density = parseFloat(concreteDensityInput.value);
+        var joint = parseFloat(mortarJointInput.value);
+
+        if (isNaN(cft) || cft <= 0 || isNaN(cum) || cum <= 0 || isNaN(mfImp) || mfImp < 1 || isNaN(mfMet) || mfMet < 1 || isNaN(density) || density <= 0 || isNaN(joint) || joint <= 0) {
+          showToast('Please enter valid positive numbers');
           return;
         }
-        var allConfig = Config.getAll();
-        allConfig.mortarJointThickness = val;
-        DB.saveConfig(allConfig).then(function () {
-          showToast('Mortar joint thickness saved: ' + val + ' inches');
+
+        cfg.cementBagVolume = { cft: cft, cum: cum };
+        cfg.mortarFactor = { imperial: mfImp, metric: mfMet };
+        cfg.concreteDensity = density;
+        cfg.mortarJointThickness = joint;
+        DB.saveConfig(cfg).then(function () {
+          showToast('Base assumptions saved');
         });
       });
     }

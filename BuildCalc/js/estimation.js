@@ -17,6 +17,7 @@ const Estimation = (function () {
   var lastMaterialResults = null;
   var lastLaborResults = null;
   var lastInputs = null;
+  var editingEstimateId = null;
 
   // ─── DOM References ──────────────────────────────────────────────────────
 
@@ -143,6 +144,10 @@ const Estimation = (function () {
     lastMaterialResults = null;
     lastLaborResults = null;
     lastInputs = null;
+
+    // Reset editing state
+    editingEstimateId = null;
+    if (btnSaveEstimate) btnSaveEstimate.textContent = 'Save Estimate';
   }
 
   // ─── Show Category Form ──────────────────────────────────────────────────
@@ -459,20 +464,63 @@ const Estimation = (function () {
       return;
     }
 
-    var estimate = {
-      projectId: currentProjectId,
-      category: currentCategory,
-      inputs: lastInputs,
-      materialResults: lastMaterialResults,
-      laborResults: lastLaborResults,
-      unit: App.getUnit(),
-      createdAt: new Date().toISOString()
-    };
+    var tagInput = document.getElementById('estimate-tag');
+    var tag = tagInput ? tagInput.value.trim() : '';
 
-    return DB.addEstimate(estimate).then(function () {
-      showToast('Estimate saved');
-      renderSavedEstimates();
-      renderCategories();
+    // If editing an existing estimate, update it
+    if (editingEstimateId) {
+      var updatedEstimate = {
+        id: editingEstimateId,
+        projectId: currentProjectId,
+        category: currentCategory,
+        inputs: lastInputs,
+        materialResults: lastMaterialResults,
+        laborResults: lastLaborResults,
+        unit: App.getUnit(),
+        tag: tag,
+        createdAt: new Date().toISOString()
+      };
+
+      return DB.updateEstimate(updatedEstimate).then(function () {
+        if (tagInput) tagInput.value = '';
+        editingEstimateId = null;
+        btnSaveEstimate.textContent = 'Save Estimate';
+        showToast('Estimate updated: ' + (tag || updatedEstimate.category));
+        renderSavedEstimates();
+        renderCategories();
+      });
+    }
+
+    // Auto-generate tag if blank: "{Category}-{seq#}"
+    var savePromise;
+    if (!tag) {
+      savePromise = DB.getEstimatesByProject(currentProjectId).then(function (estimates) {
+        var categoryCount = estimates.filter(function (e) { return e.category === currentCategory; }).length;
+        var categoryLabel = currentCategory.charAt(0).toUpperCase() + currentCategory.slice(1);
+        return categoryLabel + '-' + (categoryCount + 1);
+      });
+    } else {
+      savePromise = Promise.resolve(tag);
+    }
+
+    return savePromise.then(function (finalTag) {
+      var estimate = {
+        projectId: currentProjectId,
+        category: currentCategory,
+        inputs: lastInputs,
+        materialResults: lastMaterialResults,
+        laborResults: lastLaborResults,
+        unit: App.getUnit(),
+        tag: finalTag,
+        createdAt: new Date().toISOString()
+      };
+
+      return DB.addEstimate(estimate).then(function () {
+        if (tagInput) tagInput.value = '';
+        showToast('Estimate saved: ' + finalTag);
+        renderSavedEstimates();
+        renderCategories();
+      });
     });
   }
 
@@ -520,11 +568,13 @@ const Estimation = (function () {
         html +=
           '<div class="list-item" data-id="' + est.id + '">' +
           '<div class="list-item-content">' +
-          '<div class="list-item-title">' + escapeHtml(categoryLabel) + '</div>' +
+          '<div class="list-item-title">' + escapeHtml(categoryLabel) + (est.tag ? ' — ' + escapeHtml(est.tag) : '') + '</div>' +
           '<div class="list-item-subtitle">' + dateStr + '</div>' +
           '</div>' +
           '<div class="list-item-meta">' +
           '<span class="list-item-total">' + escapeHtml(detail) + '</span>' +
+          '<button class="btn-icon btn-print-estimate" data-id="' + est.id + '" aria-label="Print estimate" title="Print">🖨️</button>' +
+          '<button class="btn-icon btn-edit-estimate" data-id="' + est.id + '" aria-label="Edit estimate" title="Edit">✏️</button>' +
           '<button class="btn-icon btn-delete-estimate" data-id="' + est.id + '" aria-label="Delete estimate" title="Delete">🗑️</button>' +
           '</div>' +
           '</div>';
@@ -546,9 +596,167 @@ const Estimation = (function () {
         });
       });
 
+      // Bind edit buttons
+      savedEstimatesList.querySelectorAll('.btn-edit-estimate').forEach(function (btn) {
+        btn.addEventListener('click', function (e) {
+          e.stopPropagation();
+          var id = btn.getAttribute('data-id');
+          editEstimate(id);
+        });
+      });
+
+      // Bind print buttons
+      savedEstimatesList.querySelectorAll('.btn-print-estimate').forEach(function (btn) {
+        btn.addEventListener('click', function (e) {
+          e.stopPropagation();
+          var id = btn.getAttribute('data-id');
+          printSingleEstimate(id);
+        });
+      });
+
       // Show project total
       projectTotalContainer.hidden = false;
       projectTotalValue.textContent = Math.round(totalBags * 100) / 100 + ' cement bags';
+    });
+  }
+
+  // ─── Edit Estimate ─────────────────────────────────────────────────────
+
+  function editEstimate(id) {
+    DB.getEstimate(id).then(function (est) {
+      if (!est) {
+        showToast('Estimate not found');
+        return;
+      }
+
+      currentCategory = est.category;
+      showCategoryForm(est.category);
+
+      // Populate form inputs based on category
+      var inputs = est.inputs;
+      switch (est.category) {
+        case 'masonry':
+          document.getElementById('masonry-volume').value = inputs.volume || '';
+          // Wait for block size dropdown to populate, then set value
+          setTimeout(function () {
+            document.getElementById('masonry-block-size').value = inputs.blockSizeId || '';
+          }, 100);
+          document.getElementById('masonry-ratio-cement').value = inputs.ratio ? inputs.ratio[0] : 1;
+          document.getElementById('masonry-ratio-sand').value = inputs.ratio ? inputs.ratio[1] : 6;
+          break;
+        case 'concreting':
+          document.getElementById('concreting-volume').value = inputs.volume || '';
+          document.getElementById('concreting-ratio-cement').value = inputs.ratio ? inputs.ratio[0] : 1;
+          document.getElementById('concreting-ratio-sand').value = inputs.ratio ? inputs.ratio[1] : 2;
+          document.getElementById('concreting-ratio-crush').value = inputs.ratio ? inputs.ratio[2] : 4;
+          break;
+        case 'steel':
+          document.getElementById('steel-volume').value = inputs.volume || '';
+          document.getElementById('steel-element-type').value = inputs.elementType || '';
+          break;
+        case 'plastering':
+          document.getElementById('plastering-area').value = inputs.area || '';
+          document.getElementById('plastering-thickness').value = inputs.thicknessMm || 12;
+          document.getElementById('plastering-ratio-cement').value = inputs.ratio ? inputs.ratio[0] : 1;
+          document.getElementById('plastering-ratio-sand').value = inputs.ratio ? inputs.ratio[1] : 4;
+          break;
+        case 'tiling':
+          document.getElementById('tiling-floor-area').value = inputs.floorArea || '';
+          document.getElementById('tiling-tile-area').value = inputs.tileArea || '';
+          break;
+      }
+
+      // Set tag input
+      document.getElementById('estimate-tag').value = est.tag || '';
+
+      // Store editing state
+      editingEstimateId = est.id;
+      btnSaveEstimate.textContent = 'Update Estimate';
+    });
+  }
+
+  // ─── Print Single Estimate ───────────────────────────────────────────────
+
+  function printSingleEstimate(id) {
+    DB.getEstimate(id).then(function (est) {
+      if (!est) { showToast('Estimate not found'); return; }
+      return DB.getProject(est.projectId).then(function (project) {
+        return DB.getClient(project.clientId).then(function (client) {
+          var catLabel = est.category.charAt(0).toUpperCase() + est.category.slice(1);
+          var dateStr = new Date(est.createdAt).toLocaleDateString();
+          var unit = est.unit || 'imperial';
+          var unitLabel = unit === 'metric' ? 'Cu.m' : 'Cft';
+
+          var html = '<!DOCTYPE html><html><head>';
+          html += '<title>Estimate - ' + escapeHtml(catLabel) + (est.tag ? ' - ' + escapeHtml(est.tag) : '') + '</title>';
+          html += '<style>';
+          html += 'body { font-family: Arial, sans-serif; padding: 20px; color: #1a1a2e; max-width: 600px; margin: 0 auto; }';
+          html += 'h1 { font-size: 1.3rem; border-bottom: 2px solid #2563eb; padding-bottom: 8px; color: #2563eb; }';
+          html += 'h2 { font-size: 1rem; color: #333; margin-top: 16px; }';
+          html += '.meta { color: #666; font-size: 0.85rem; margin-bottom: 16px; }';
+          html += 'table { width: 100%; border-collapse: collapse; margin: 8px 0; }';
+          html += 'th, td { border: 1px solid #ddd; padding: 8px; text-align: left; font-size: 0.9rem; }';
+          html += 'th { background: #f5f5f5; font-weight: 600; }';
+          html += '</style></head><body>';
+
+          html += '<h1>' + escapeHtml(catLabel) + (est.tag ? ' — ' + escapeHtml(est.tag) : '') + '</h1>';
+          html += '<div class="meta">';
+          html += '<div>Client: ' + escapeHtml(client ? client.name : 'N/A') + ' | Project: ' + escapeHtml(project ? project.name : 'N/A') + '</div>';
+          html += '<div>Date: ' + dateStr + ' | Unit: ' + (unit === 'metric' ? 'Metric' : 'Imperial') + '</div>';
+          html += '</div>';
+
+          // Inputs
+          html += '<h2>Inputs</h2><table><thead><tr><th>Parameter</th><th>Value</th></tr></thead><tbody>';
+          if (est.inputs) {
+            var inp = est.inputs;
+            if (inp.volume !== undefined) html += '<tr><td>Volume</td><td>' + inp.volume + ' ' + unitLabel + '</td></tr>';
+            if (inp.area !== undefined) html += '<tr><td>Area</td><td>' + inp.area + ' ' + (unit === 'metric' ? 'Sq.m' : 'Sft') + '</td></tr>';
+            if (inp.floorArea !== undefined) html += '<tr><td>Floor Area</td><td>' + inp.floorArea + '</td></tr>';
+            if (inp.tileArea !== undefined) html += '<tr><td>Tile Area</td><td>' + inp.tileArea + '</td></tr>';
+            if (inp.thicknessMm !== undefined) html += '<tr><td>Thickness</td><td>' + inp.thicknessMm + ' mm</td></tr>';
+            if (inp.blockSizeId) html += '<tr><td>Block Size</td><td>' + escapeHtml(inp.blockSizeId) + '</td></tr>';
+            if (inp.elementType) html += '<tr><td>Element Type</td><td>' + escapeHtml(inp.elementType) + '</td></tr>';
+            if (inp.ratio) html += '<tr><td>Mix Ratio</td><td>' + inp.ratio.join(' : ') + '</td></tr>';
+          }
+          html += '</tbody></table>';
+
+          // Material Results
+          html += '<h2>Material Results</h2><table><thead><tr><th>Item</th><th>Value</th></tr></thead><tbody>';
+          if (est.materialResults) {
+            var mr = est.materialResults;
+            if (mr.blocks !== undefined) html += '<tr><td>Blocks</td><td>' + mr.blocks + '</td></tr>';
+            if (mr.mortarVolume !== undefined) html += '<tr><td>Mortar Volume</td><td>' + mr.mortarVolume + ' ' + unitLabel + '</td></tr>';
+            if (mr.cementBags !== undefined) html += '<tr><td>Cement Bags</td><td>' + mr.cementBags + '</td></tr>';
+            if (mr.sandVolume !== undefined) html += '<tr><td>Sand</td><td>' + mr.sandVolume + ' ' + unitLabel + '</td></tr>';
+            if (mr.crushVolume !== undefined) html += '<tr><td>Crush</td><td>' + mr.crushVolume + ' ' + unitLabel + '</td></tr>';
+            if (mr.dryVolume !== undefined) html += '<tr><td>Dry Volume</td><td>' + mr.dryVolume + ' ' + unitLabel + '</td></tr>';
+            if (mr.weightKg !== undefined) html += '<tr><td>Steel (kg)</td><td>' + mr.weightKg + '</td></tr>';
+            if (mr.weightTons !== undefined) html += '<tr><td>Steel (tons)</td><td>' + mr.weightTons + '</td></tr>';
+            if (mr.tileCount !== undefined) html += '<tr><td>Tiles</td><td>' + mr.tileCount + '</td></tr>';
+            if (mr.plasterVolume !== undefined) html += '<tr><td>Plaster Volume</td><td>' + mr.plasterVolume + ' ' + unitLabel + '</td></tr>';
+          }
+          html += '</tbody></table>';
+
+          // Labor
+          if (est.laborResults && est.laborResults.crew && est.laborResults.crew.length > 0) {
+            html += '<h2>Labor</h2><table><thead><tr><th>Role</th><th>Count</th><th>Days</th></tr></thead><tbody>';
+            est.laborResults.crew.forEach(function (m) {
+              html += '<tr><td>' + escapeHtml(m.role) + '</td><td>' + m.count + '</td><td>' + est.laborResults.totalDays + '</td></tr>';
+            });
+            html += '</tbody></table>';
+          }
+
+          html += '</body></html>';
+
+          var printWin = window.open('', '_blank');
+          if (printWin) {
+            printWin.document.write(html);
+            printWin.document.close();
+            printWin.focus();
+            setTimeout(function () { printWin.print(); }, 500);
+          }
+        });
+      });
     });
   }
 
@@ -763,7 +971,49 @@ const Estimation = (function () {
       }
       html += '</div></div>';
 
+      // Base Assumptions Section
+      html += '<div class="settings-card"><h3>Base Assumptions</h3>';
+      html += '<p class="setting-hint">Core constants for this project\'s calculations.</p>';
+      html += '<div class="form-group"><label>Cement Bag Volume (Cft)</label>';
+      html += '<input type="number" id="ps-cement-bag-cft" step="0.01" min="0.01" value="' + (snapshot.cementBagVolume ? snapshot.cementBagVolume.cft : 1.25) + '"></div>';
+      html += '<div class="form-group"><label>Cement Bag Volume (Cu.m)</label>';
+      html += '<input type="number" id="ps-cement-bag-cum" step="0.001" min="0.001" value="' + (snapshot.cementBagVolume ? snapshot.cementBagVolume.cum : 0.035) + '"></div>';
+      html += '<div class="form-group"><label>Dry Volume Factor (Imperial)</label>';
+      html += '<input type="number" id="ps-mortar-factor-imp" step="0.01" min="1" value="' + (snapshot.mortarFactor ? snapshot.mortarFactor.imperial : 1.33) + '"></div>';
+      html += '<div class="form-group"><label>Dry Volume Factor (Metric)</label>';
+      html += '<input type="number" id="ps-mortar-factor-met" step="0.01" min="1" value="' + (snapshot.mortarFactor ? snapshot.mortarFactor.metric : 1.33) + '"></div>';
+      html += '<div class="form-group"><label>Concrete Density (kg/Cu.m)</label>';
+      html += '<input type="number" id="ps-concrete-density" step="10" min="1000" value="' + (snapshot.concreteDensity || 2400) + '"></div>';
+      html += '<div class="form-group"><label>Mortar Joint Thickness (inches)</label>';
+      html += '<input type="number" id="ps-mortar-joint" step="0.05" min="0.1" value="' + (snapshot.mortarJointThickness || 0.25) + '"></div>';
+      html += '<button class="btn-outlined btn-sm" id="btn-ps-save-assumptions">Save Assumptions</button>';
+      html += '</div>';
+
       projectSettingsContent.innerHTML = html;
+
+      // Bind base assumptions save
+      var btnPsSaveAssumptions = document.getElementById('btn-ps-save-assumptions');
+      if (btnPsSaveAssumptions) {
+        btnPsSaveAssumptions.addEventListener('click', function () {
+          var cft = parseFloat(document.getElementById('ps-cement-bag-cft').value);
+          var cum = parseFloat(document.getElementById('ps-cement-bag-cum').value);
+          var mfImp = parseFloat(document.getElementById('ps-mortar-factor-imp').value);
+          var mfMet = parseFloat(document.getElementById('ps-mortar-factor-met').value);
+          var density = parseFloat(document.getElementById('ps-concrete-density').value);
+          var joint = parseFloat(document.getElementById('ps-mortar-joint').value);
+
+          if (isNaN(cft) || cft <= 0 || isNaN(cum) || cum <= 0 || isNaN(mfImp) || mfImp < 1 || isNaN(mfMet) || mfMet < 1 || isNaN(density) || density <= 0 || isNaN(joint) || joint <= 0) {
+            showToast('Please enter valid positive numbers');
+            return;
+          }
+
+          snapshot.cementBagVolume = { cft: cft, cum: cum };
+          snapshot.mortarFactor = { imperial: mfImp, metric: mfMet };
+          snapshot.concreteDensity = density;
+          snapshot.mortarJointThickness = joint;
+          saveProjectSnapshot(projectId, snapshot);
+        });
+      }
 
       // Bind project settings CRUD actions
       bindProjectSettingsActions(projectId, snapshot);

@@ -3,14 +3,14 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <meta name="theme-color" content="#1565c0">
+  <meta name="theme-color" content="#C62828">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="BuildCalc">
   <meta name="description" content="Construction material estimation and project management PWA">
   <link rel="manifest" href="manifest.json">
   <link rel="stylesheet" href="css/styles.css">
-  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/icon-192.svg">
   <title>BuildCalc</title>
 </head>
 <body class="theme-dark">
@@ -297,6 +297,11 @@
           <h4>Labor</h4>
           <div id="labor-results-content"></div>
         </div>
+        <div class="form-group" style="margin-top:12px;">
+          <label for="estimate-tag">Tag / Notes *</label>
+          <input type="text" id="estimate-tag" placeholder="e.g. Ground Floor, East Wall (auto: Masonry-1)" maxlength="100">
+          <span class="setting-hint">Leave blank for auto-tag: {Category}-{sequence}</span>
+        </div>
         <div class="form-actions">
           <button id="btn-save-estimate" class="btn-primary">Save Estimate</button>
           <button id="btn-new-estimate" class="btn-outlined">New Estimate</button>
@@ -355,6 +360,7 @@
           </div>
         </div>
       </div>
+      <button id="btn-print-report" class="btn-outlined" hidden>🖨️ Print Report</button>
     </section>
 
     <!-- Settings Screen -->
@@ -412,15 +418,41 @@
           <div id="block-sizes-list" class="config-list" aria-live="polite"></div>
         </div>
 
-        <!-- Mortar Joint Thickness -->
+        <!-- Base Assumptions -->
         <div class="settings-card">
-          <h3>Mortar Joint Thickness</h3>
-          <p class="setting-hint">Thickness of mortar joint between bricks (in inches). Each brick gets half of this value.</p>
-          <div class="form-group" style="margin-top:8px;">
-            <label for="mortar-joint-input">Joint Thickness (inches)</label>
-            <input type="number" id="mortar-joint-input" step="0.05" min="0.1" max="2" value="0.25">
+          <h3>Base Assumptions</h3>
+          <p class="setting-hint">Core constants used in all calculations. Edit to match your local standards.</p>
+          <div class="form-group" style="margin-top:12px;">
+            <label for="cement-bag-cft">Cement Bag Volume (Cft)</label>
+            <input type="number" id="cement-bag-cft" step="0.01" min="0.1" value="1.25">
+            <span class="setting-hint">Volume of 1 bag of cement in cubic feet (standard: 1.25)</span>
           </div>
-          <button id="btn-save-mortar-joint" class="btn-outlined btn-sm">Save</button>
+          <div class="form-group">
+            <label for="cement-bag-cum">Cement Bag Volume (Cu.m)</label>
+            <input type="number" id="cement-bag-cum" step="0.001" min="0.001" value="0.035">
+            <span class="setting-hint">Volume of 1 bag of cement in cubic meters (standard: 0.035)</span>
+          </div>
+          <div class="form-group">
+            <label for="mortar-factor-imperial">Dry Volume Factor (Imperial)</label>
+            <input type="number" id="mortar-factor-imperial" step="0.01" min="1" value="1.33">
+            <span class="setting-hint">Dry mortar volume = wet volume × this factor (standard: 1.33)</span>
+          </div>
+          <div class="form-group">
+            <label for="mortar-factor-metric">Dry Volume Factor (Metric)</label>
+            <input type="number" id="mortar-factor-metric" step="0.01" min="1" value="1.33">
+            <span class="setting-hint">Same factor for metric system</span>
+          </div>
+          <div class="form-group">
+            <label for="concrete-density">Concrete Density (kg/Cu.m)</label>
+            <input type="number" id="concrete-density" step="10" min="1000" value="2400">
+            <span class="setting-hint">Weight of concrete per cubic meter (standard: 2400)</span>
+          </div>
+          <div class="form-group">
+            <label for="mortar-joint-input">Mortar Joint Thickness (inches)</label>
+            <input type="number" id="mortar-joint-input" step="0.05" min="0.1" max="2" value="0.25">
+            <span class="setting-hint">Thickness between bricks. Each brick gets half of this value.</span>
+          </div>
+          <button id="btn-save-assumptions" class="btn-outlined btn-sm">Save All</button>
         </div>
 
         <!-- Labor Rates Section -->

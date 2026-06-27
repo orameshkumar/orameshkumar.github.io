@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <!-- Background -->
+  <rect width="512" height="512" rx="72" fill="#8D6E63"/>
+  
+  <!-- Brick wall pattern - 6 rows -->
+  <!-- Row 1 -->
+  <rect x="16" y="16" width="230" height="68" rx="6" fill="#C62828" stroke="#8B1A1A" stroke-width="2"/>
+  <rect x="258" y="16" width="238" height="68" rx="6" fill="#D32F2F" stroke="#8B1A1A" stroke-width="2"/>
+  <!-- Row 2 (offset) -->
+  <rect x="16" y="96" width="110" height="68" rx="6" fill="#D32F2F" stroke="#8B1A1A" stroke-width="2"/>
+  <rect x="138" y="96" width="230" height="68" rx="6" fill="#C62828" stroke="#8B1A1A" stroke-width="2"/>
+  <rect x="380" y="96" width="116" height="68" rx="6" fill="#D32F2F" stroke="#8B1A1A" stroke-width="2"/>
+  <!-- Row 3 -->
+  <rect x="16" y="176" width="238" height="68" rx="6" fill="#C62828" stroke="#8B1A1A" stroke-width="2"/>
+  <rect x="266" y="176" width="230" height="68" rx="6" fill="#D32F2F" stroke="#8B1A1A" stroke-width="2"/>
+  <!-- Row 4 (offset) -->
+  <rect x="16" y="256" width="110" height="68" rx="6" fill="#D32F2F" stroke="#8B1A1A" stroke-width="2"/>
+  <rect x="138" y="256" width="230" height="68" rx="6" fill="#C62828" stroke="#8B1A1A" stroke-width="2"/>
+  <rect x="380" y="256" width="116" height="68" rx="6" fill="#D32F2F" stroke="#8B1A1A" stroke-width="2"/>
+  <!-- Row 5 -->
+  <rect x="16" y="336" width="230" height="68" rx="6" fill="#C62828" stroke="#8B1A1A" stroke-width="2"/>
+  <rect x="258" y="336" width="238" height="68" rx="6" fill="#D32F2F" stroke="#8B1A1A" stroke-width="2"/>
+  <!-- Row 6 (offset) -->
+  <rect x="16" y="416" width="110" height="68" rx="6" fill="#D32F2F" stroke="#8B1A1A" stroke-width="2"/>
+  <rect x="138" y="416" width="230" height="68" rx="6" fill="#C62828" stroke="#8B1A1A" stroke-width="2"/>
+  <rect x="380" y="416" width="116" height="68" rx="6" fill="#D32F2F" stroke="#8B1A1A" stroke-width="2"/>
+
+  <!-- Dark overlay for depth -->
+  <rect width="512" height="512" rx="72" fill="black" opacity="0.2"/>
+
+  <!-- Letter B - Threaded steel rebar -->
+  <path d="M 115 110 L 115 400" stroke="#607D8B" stroke-width="26" stroke-linecap="round" fill="none"/>
+  <path d="M 115 110 Q 230 110 230 180 Q 230 250 115 250" stroke="#607D8B" stroke-width="26" stroke-linecap="round" fill="none"/>
+  <path d="M 115 250 Q 240 250 240 330 Q 240 400 115 400" stroke="#607D8B" stroke-width="26" stroke-linecap="round" fill="none"/>
+  <!-- B rebar ridges -->
+  <line x1="105" y1="135" x2="125" y2="125" stroke="#455A64" stroke-width="7" stroke-linecap="round"/>
+  <line x1="105" y1="165" x2="125" y2="155" stroke="#455A64" stroke-width="7" stroke-linecap="round"/>
+  <line x1="105" y1="195" x2="125" y2="185" stroke="#455A64" stroke-width="7" stroke-linecap="round"/>
+  <line x1="105" y1="225" x2="125" y2="215" stroke="#455A64" stroke-width="7" stroke-linecap="round"/>
+  <line x1="105" y1="275" x2="125" y2="265" stroke="#455A64" stroke-width="7" stroke-linecap="round"/>
+  <line x1="105" y1="305" x2="125" y2="295" stroke="#455A64" stroke-width="7" stroke-linecap="round"/>
+  <line x1="105" y1="335" x2="125" y2="325" stroke="#455A64" stroke-width="7" stroke-linecap="round"/>
+  <line x1="105" y1="365" x2="125" y2="355" stroke="#455A64" stroke-width="7" stroke-linecap="round"/>
+  <line x1="105" y1="390" x2="125" y2="380" stroke="#455A64" stroke-width="7" stroke-linecap="round"/>
+  <!-- B highlight -->
+  <path d="M 115 110 L 115 400" stroke="#B0BEC5" stroke-width="6" stroke-linecap="round" fill="none" opacity="0.4"/>
+  <path d="M 115 110 Q 225 110 225 180 Q 225 248 115 250" stroke="#B0BEC5" stroke-width="6" stroke-linecap="round" fill="none" opacity="0.3"/>
+  <path d="M 115 250 Q 235 250 235 330 Q 235 398 115 400" stroke="#B0BEC5" stroke-width="6" stroke-linecap="round" fill="none" opacity="0.3"/>
+
+  <!-- Letter C - Threaded steel rebar -->
+  <path d="M 400 120 Q 280 100 280 256 Q 280 415 400 395" stroke="#607D8B" stroke-width="26" stroke-linecap="round" fill="none"/>
+  <!-- C rebar ridges -->
+  <line x1="385" y1="122" x2="400" y2="114" stroke="#455A64" stroke-width="7" stroke-linecap="round"/>
+  <line x1="330" y1="130" x2="325" y2="118" stroke="#455A64" stroke-width="7" stroke-linecap="round"/>
+  <line x1="298" y1="160" x2="288" y2="150" stroke="#455A64" stroke-width="7" stroke-linecap="round"/>
+  <line x1="285" y1="200" x2="275" y2="192" stroke="#455A64" stroke-width="7" stroke-linecap="round"/>
+  <line x1="282" y1="240" x2="272" y2="234" stroke="#455A64" stroke-width="7" stroke-linecap="round"/>
+  <line x1="282" y1="280" x2="272" y2="274" stroke="#455A64" stroke-width="7" stroke-linecap="round"/>
+  <line x1="285" y1="320" x2="275" y2="314" stroke="#455A64" stroke-width="7" stroke-linecap="round"/>
+  <line x1="298" y1="355" x2="288" y2="348" stroke="#455A64" stroke-width="7" stroke-linecap="round"/>
+  <line x1="330" y1="382" x2="325" y2="372" stroke="#455A64" stroke-width="7" stroke-linecap="round"/>
+  <line x1="385" y1="393" x2="400" y2="386" stroke="#455A64" stroke-width="7" stroke-linecap="round"/>
+  <!-- C highlight -->
+  <path d="M 398 122 Q 286 104 286 256 Q 286 412 398 393" stroke="#B0BEC5" stroke-width="6" stroke-linecap="round" fill="none" opacity="0.35"/>
+</svg>

@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192">
+  <!-- Background -->
+  <rect width="192" height="192" rx="28" fill="#8D6E63"/>
+  
+  <!-- Brick wall pattern -->
+  <!-- Row 1 -->
+  <rect x="8" y="8" width="84" height="32" rx="3" fill="#C62828" stroke="#8B1A1A" stroke-width="1.5"/>
+  <rect x="98" y="8" width="86" height="32" rx="3" fill="#D32F2F" stroke="#8B1A1A" stroke-width="1.5"/>
+  <!-- Row 2 (offset) -->
+  <rect x="8" y="46" width="44" height="32" rx="3" fill="#D32F2F" stroke="#8B1A1A" stroke-width="1.5"/>
+  <rect x="58" y="46" width="84" height="32" rx="3" fill="#C62828" stroke="#8B1A1A" stroke-width="1.5"/>
+  <rect x="148" y="46" width="36" height="32" rx="3" fill="#D32F2F" stroke="#8B1A1A" stroke-width="1.5"/>
+  <!-- Row 3 -->
+  <rect x="8" y="84" width="86" height="32" rx="3" fill="#C62828" stroke="#8B1A1A" stroke-width="1.5"/>
+  <rect x="100" y="84" width="84" height="32" rx="3" fill="#D32F2F" stroke="#8B1A1A" stroke-width="1.5"/>
+  <!-- Row 4 (offset) -->
+  <rect x="8" y="122" width="44" height="32" rx="3" fill="#D32F2F" stroke="#8B1A1A" stroke-width="1.5"/>
+  <rect x="58" y="122" width="84" height="32" rx="3" fill="#C62828" stroke="#8B1A1A" stroke-width="1.5"/>
+  <rect x="148" y="122" width="36" height="32" rx="3" fill="#D32F2F" stroke="#8B1A1A" stroke-width="1.5"/>
+  <!-- Row 5 -->
+  <rect x="8" y="160" width="84" height="24" rx="3" fill="#C62828" stroke="#8B1A1A" stroke-width="1.5"/>
+  <rect x="98" y="160" width="86" height="24" rx="3" fill="#D32F2F" stroke="#8B1A1A" stroke-width="1.5"/>
+  
+  <!-- Mortar lines (light gray) -->
+  <line x1="92" y1="8" x2="92" y2="40" stroke="#A1887F" stroke-width="2" opacity="0.6"/>
+  <line x1="52" y1="46" x2="52" y2="78" stroke="#A1887F" stroke-width="2" opacity="0.6"/>
+  <line x1="142" y1="46" x2="142" y2="78" stroke="#A1887F" stroke-width="2" opacity="0.6"/>
+
+  <!-- Shadow overlay for depth -->
+  <rect width="192" height="192" rx="28" fill="black" opacity="0.15"/>
+
+  <!-- Letter B - Threaded steel rebar style -->
+  <!-- Main stroke with ridges -->
+  <path d="M 48 45 L 48 148" stroke="#607D8B" stroke-width="10" stroke-linecap="round" fill="none"/>
+  <path d="M 48 45 Q 90 45 90 72 Q 90 96 48 96" stroke="#607D8B" stroke-width="10" stroke-linecap="round" fill="none"/>
+  <path d="M 48 96 Q 95 96 95 122 Q 95 148 48 148" stroke="#607D8B" stroke-width="10" stroke-linecap="round" fill="none"/>
+  <!-- Rebar ridges on B -->
+  <line x1="44" y1="55" x2="52" y2="50" stroke="#455A64" stroke-width="3" stroke-linecap="round"/>
+  <line x1="44" y1="70" x2="52" y2="65" stroke="#455A64" stroke-width="3" stroke-linecap="round"/>
+  <line x1="44" y1="85" x2="52" y2="80" stroke="#455A64" stroke-width="3" stroke-linecap="round"/>
+  <line x1="44" y1="105" x2="52" y2="100" stroke="#455A64" stroke-width="3" stroke-linecap="round"/>
+  <line x1="44" y1="120" x2="52" y2="115" stroke="#455A64" stroke-width="3" stroke-linecap="round"/>
+  <line x1="44" y1="135" x2="52" y2="130" stroke="#455A64" stroke-width="3" stroke-linecap="round"/>
+  <!-- Highlight on rebar -->
+  <path d="M 48 45 L 48 148" stroke="#90A4AE" stroke-width="3" stroke-linecap="round" fill="none" opacity="0.5"/>
+
+  <!-- Letter C - Threaded steel rebar style -->
+  <path d="M 148 50 Q 105 42 105 96 Q 105 152 148 145" stroke="#607D8B" stroke-width="10" stroke-linecap="round" fill="none"/>
+  <!-- Rebar ridges on C -->
+  <line x1="140" y1="50" x2="148" y2="46" stroke="#455A64" stroke-width="3" stroke-linecap="round"/>
+  <line x1="115" y1="60" x2="110" y2="54" stroke="#455A64" stroke-width="3" stroke-linecap="round"/>
+  <line x1="107" y1="78" x2="101" y2="74" stroke="#455A64" stroke-width="3" stroke-linecap="round"/>
+  <line x1="107" y1="96" x2="101" y2="92" stroke="#455A64" stroke-width="3" stroke-linecap="round"/>
+  <line x1="107" y1="114" x2="101" y2="110" stroke="#455A64" stroke-width="3" stroke-linecap="round"/>
+  <line x1="115" y1="132" x2="110" y2="128" stroke="#455A64" stroke-width="3" stroke-linecap="round"/>
+  <line x1="140" y1="144" x2="148" y2="140" stroke="#455A64" stroke-width="3" stroke-linecap="round"/>
+  <!-- Highlight on rebar -->
+  <path d="M 148 50 Q 108 44 108 96 Q 108 150 148 145" stroke="#90A4AE" stroke-width="3" stroke-linecap="round" fill="none" opacity="0.4"/>
+</svg>
