@@ -558,7 +558,22 @@ const BarcodeModule = (function () {
         }
       }
     } else {
-      showScanNotification('Unknown barcode: ' + value);
+      // Not our prefix — try matching by voice tag, item code, or name
+      var items = await DB.getAllItems();
+      var scannedVal = value.trim();
+      var matchedItem = items.find(function (item) {
+        return (item.voiceTag && item.voiceTag.trim() === scannedVal)
+          || (item.itemCode && item.itemCode.toUpperCase() === scannedVal.toUpperCase())
+          || (item.name && item.name.toLowerCase() === scannedVal.toLowerCase());
+      });
+
+      if (matchedItem) {
+        pendingItemId = matchedItem.id;
+        showScanNotification('✓ ' + matchedItem.name + ' — scan quantity');
+        if (navigator.vibrate) navigator.vibrate(100);
+      } else {
+        showScanNotification('Unknown barcode: ' + value);
+      }
     }
   }
 

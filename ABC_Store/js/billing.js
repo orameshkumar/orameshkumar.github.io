@@ -80,6 +80,21 @@ const Billing = (function () {
     // Search filtering
     if (searchInput) {
       searchInput.addEventListener('input', onSearchInput);
+      // Handle Enter key (for external barcode scanners that send Enter after scan)
+      searchInput.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          // If item is already auto-selected and quantity is set, add to bill
+          if (selectedItemId && selectedQuantityGrams) {
+            tryAutoAdd();
+          } else if (selectedItemId && !selectedQuantityGrams) {
+            // Item selected but no quantity — do nothing, wait for quantity
+          } else {
+            // Force search and auto-select
+            onSearchInput();
+          }
+        }
+      });
     }
 
     // Preset quantity buttons
