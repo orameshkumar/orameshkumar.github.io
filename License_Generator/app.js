@@ -45,11 +45,12 @@
   var STORAGE_KEY = 'license_gen_apps';
   var DEFAULT_APPS = [
     { name: "Pay Up Partners", secret: [80,85,80,95,76,73,67,95,50,48,50,53,95,36,101,99,114,51,116,95,75,51,121,33] },
-    { name: "ABC Store", secret: [65,66,67,95,76,73,67,95,50,48,50,53,95,36,116,48,114,51,95,75,51,121,33] }
+    { name: "ABC Store", secret: [65,66,67,95,76,73,67,95,50,48,50,53,95,36,116,48,114,51,95,75,51,121,33] },
+    { name: "Build Calc", secret: [66,117,105,108,100,67,97,108,99] }
   ];
 
   // Protected app names that cannot be modified or deleted (case-insensitive)
-  var PROTECTED_APPS = ["pay up partners", "abc store"];
+  var PROTECTED_APPS = ["pay up partners", "abc store", "build calc"];
 
   // --- Registry Functions ---
 
@@ -95,6 +96,24 @@
       var option = document.createElement('option');
       option.value = i;
       option.textContent = registry[i].name;
+      select.appendChild(option);
+    }
+    // Also populate the remove-app dropdown
+    _populateRemoveAppDropdown();
+  }
+
+  function _populateRemoveAppDropdown() {
+    var select = document.getElementById('remove-app-select');
+    if (!select) return;
+    var registry = _getRegistry();
+    select.innerHTML = '';
+    for (var i = 0; i < registry.length; i++) {
+      var option = document.createElement('option');
+      option.value = i;
+      option.textContent = registry[i].name;
+      if (PROTECTED_APPS.indexOf(registry[i].name.toLowerCase()) !== -1) {
+        option.textContent += ' (protected)';
+      }
       select.appendChild(option);
     }
   }
@@ -653,7 +672,9 @@
   // Remove App button click
   if (removeAppBtn) {
     removeAppBtn.addEventListener('click', function() {
-      var selectedIndex = parseInt(appSelect.value, 10);
+      var removeSelect = document.getElementById('remove-app-select');
+      if (!removeSelect) return;
+      var selectedIndex = parseInt(removeSelect.value, 10);
       _removeApp(selectedIndex);
     });
   }

@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#1565c0">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="BuildCalc">
+  <meta name="description" content="Construction material estimation and project management PWA">
+  <link rel="manifest" href="manifest.json">
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <title>BuildCalc</title>
+</head>
+<body class="theme-dark">
+<script>
+// Apply saved theme immediately to prevent flash
+(function(){try{var t=localStorage.getItem('buildcalc_theme');if(t==='light'){document.body.classList.remove('theme-dark');}else{document.body.classList.add('theme-dark');}}catch(e){}})();
+</script>
+  <main id="app">
+
+    <!-- Clients Screen -->
+    <section id="clients-screen" class="screen" aria-label="Clients">
+      <header class="screen-header">
+        <h1>Clients</h1>
+        <button id="btn-add-client" class="btn-outlined" aria-label="Add Client">+ Add Client</button>
+      </header>
+      <div id="clients-list" class="list-container" aria-live="polite">
+        <div class="empty-state" aria-hidden="false">
+          <p>No clients yet. Tap "Add Client" to get started.</p>
+        </div>
+      </div>
+
+      <!-- Add/Edit Client Form Overlay -->
+      <div id="client-form-overlay" class="modal-overlay" hidden aria-modal="true" role="dialog" aria-labelledby="client-form-title">
+        <div class="modal-content">
+          <h2 id="client-form-title">Add Client</h2>
+          <form id="client-form" novalidate>
+            <input type="hidden" id="client-id" name="id">
+            <div class="form-group">
+              <label for="client-name">Client Name *</label>
+              <input type="text" id="client-name" name="name" required autocomplete="name" aria-required="true">
+              <span class="validation-msg" id="client-name-error" aria-live="polite"></span>
+            </div>
+            <div class="form-group">
+              <label for="client-address">Address</label>
+              <input type="text" id="client-address" name="address" autocomplete="street-address">
+            </div>
+            <div class="form-group">
+              <label for="client-mobile">Mobile</label>
+              <input type="tel" id="client-mobile" name="mobile" autocomplete="tel">
+            </div>
+            <div class="form-actions">
+              <button type="submit" class="btn-primary">Save</button>
+              <button type="button" id="btn-cancel-client" class="btn-outlined">Cancel</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </section>
+
+    <!-- Projects Screen -->
+    <section id="projects-screen" class="screen" hidden aria-label="Projects">
+      <header class="screen-header">
+        <h1>Projects</h1>
+        <button id="btn-add-project" class="btn-outlined" aria-label="Add Project">+ Add Project</button>
+      </header>
+      <div class="filter-bar">
+        <label for="project-client-filter" class="sr-only">Filter by Client</label>
+        <select id="project-client-filter" aria-label="Filter projects by client">
+          <option value="">All Clients</option>
+        </select>
+      </div>
+      <div id="projects-list" class="list-container" aria-live="polite">
+        <div class="empty-state" aria-hidden="false">
+          <p>No projects yet. Tap "Add Project" to get started.</p>
+        </div>
+      </div>
+
+      <!-- Add Project Form Overlay -->
+      <div id="project-form-overlay" class="modal-overlay" hidden aria-modal="true" role="dialog" aria-labelledby="project-form-title">
+        <div class="modal-content">
+          <h2 id="project-form-title">Add Project</h2>
+          <form id="project-form" novalidate>
+            <input type="hidden" id="project-id" name="id">
+            <div class="form-group">
+              <label for="project-name">Project Name *</label>
+              <input type="text" id="project-name" name="name" required aria-required="true">
+              <span class="validation-msg" id="project-name-error" aria-live="polite"></span>
+            </div>
+            <div class="form-group">
+              <label for="project-client-select">Client *</label>
+              <select id="project-client-select" name="clientId" required aria-required="true">
+                <option value="">Select a client</option>
+              </select>
+              <span class="validation-msg" id="project-client-error" aria-live="polite"></span>
+            </div>
+            <div class="form-actions">
+              <button type="submit" class="btn-primary">Save</button>
+              <button type="button" id="btn-cancel-project" class="btn-outlined">Cancel</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </section>
+
+    <!-- Estimation Screen -->
+    <section id="estimation-screen" class="screen" hidden aria-label="Estimation">
+      <header class="screen-header">
+        <h1>Estimation</h1>
+        <span id="estimation-project-name" class="subtitle"></span>
+        <button id="btn-project-settings" class="btn-outlined btn-sm" hidden aria-label="Project Settings">⚙️ Project Settings</button>
+      </header>
+
+      <!-- Project Settings Panel (hidden by default) -->
+      <div id="project-settings-panel" hidden>
+        <div class="project-settings-banner">
+          <button id="btn-back-to-estimation" class="btn-outlined btn-sm">← Back to Estimation</button>
+          <span class="banner-text">These settings apply only to this project</span>
+        </div>
+        <div id="project-settings-content"></div>
+      </div>
+
+      <!-- Category Selection Grid -->
+      <div id="category-grid" class="category-grid" aria-label="Select estimation category">
+        <button class="btn-outlined category-btn" data-category="masonry" aria-label="Masonry">
+          <span class="category-icon">🧱</span>
+          <span class="category-label">Masonry</span>
+        </button>
+        <button class="btn-outlined category-btn" data-category="concreting" aria-label="Concreting">
+          <span class="category-icon">🏗️</span>
+          <span class="category-label">Concreting</span>
+        </button>
+        <button class="btn-outlined category-btn" data-category="steel" aria-label="Steel">
+          <span class="category-icon">🔩</span>
+          <span class="category-label">Steel</span>
+        </button>
+        <button class="btn-outlined category-btn" data-category="plastering" aria-label="Plastering">
+          <span class="category-icon">🖌️</span>
+          <span class="category-label">Plastering</span>
+        </button>
+        <button class="btn-outlined category-btn" data-category="tiling" aria-label="Tiling">
+          <span class="category-icon">🪨</span>
+          <span class="category-label">Tiling</span>
+        </button>
+        <button class="btn-outlined category-btn placeholder-category" data-category="painting" aria-label="Painting - Coming Soon" disabled>
+          <span class="category-icon">🎨</span>
+          <span class="category-label">Painting</span>
+          <span class="coming-soon-badge">Coming Soon</span>
+        </button>
+        <button class="btn-outlined category-btn placeholder-category" data-category="waterproofing" aria-label="Waterproofing - Coming Soon" disabled>
+          <span class="category-icon">💧</span>
+          <span class="category-label">Waterproofing</span>
+          <span class="coming-soon-badge">Coming Soon</span>
+        </button>
+      </div>
+
+      <!-- Category Calculation Forms -->
+      <div id="category-forms" hidden>
+        <!-- Masonry Form -->
+        <form id="masonry-form" class="calc-form" hidden novalidate aria-label="Masonry calculation">
+          <h3>Masonry Calculation</h3>
+          <div class="form-group">
+            <label for="masonry-volume">Volume (<span class="unit-label">Cft</span>) *</label>
+            <input type="number" id="masonry-volume" name="volume" min="0.01" step="any" required aria-required="true">
+            <span class="validation-msg" id="masonry-volume-error" aria-live="polite"></span>
+          </div>
+          <div class="form-group">
+            <label for="masonry-block-size">Block Size *</label>
+            <select id="masonry-block-size" name="blockSizeId" required aria-required="true">
+              <option value="">Select block size</option>
+            </select>
+            <span class="validation-msg" id="masonry-block-size-error" aria-live="polite"></span>
+          </div>
+          <div class="form-group">
+            <label>Mix Ratio (Cement : Sand) *</label>
+            <div class="ratio-inputs">
+              <input type="number" id="masonry-ratio-cement" name="ratioCement" min="1" step="1" value="1" required aria-label="Cement ratio" aria-required="true">
+              <span class="ratio-separator">:</span>
+              <input type="number" id="masonry-ratio-sand" name="ratioSand" min="1" step="1" value="6" required aria-label="Sand ratio" aria-required="true">
+            </div>
+            <span class="validation-msg" id="masonry-ratio-error" aria-live="polite"></span>
+          </div>
+          <div class="form-actions">
+            <button type="submit" class="btn-primary">Calculate</button>
+            <button type="button" class="btn-outlined btn-back-category">Back</button>
+          </div>
+        </form>
+
+        <!-- Concreting Form -->
+        <form id="concreting-form" class="calc-form" hidden novalidate aria-label="Concreting calculation">
+          <h3>Concreting Calculation</h3>
+          <div class="form-group">
+            <label for="concreting-volume">Volume (<span class="unit-label">Cft</span>) *</label>
+            <input type="number" id="concreting-volume" name="volume" min="0.01" step="any" required aria-required="true">
+            <span class="validation-msg" id="concreting-volume-error" aria-live="polite"></span>
+          </div>
+          <div class="form-group">
+            <label>Mix Ratio (Cement : Sand : Crush) *</label>
+            <div class="ratio-inputs">
+              <input type="number" id="concreting-ratio-cement" name="ratioCement" min="1" step="1" value="1" required aria-label="Cement ratio" aria-required="true">
+              <span class="ratio-separator">:</span>
+              <input type="number" id="concreting-ratio-sand" name="ratioSand" min="1" step="1" value="2" required aria-label="Sand ratio" aria-required="true">
+              <span class="ratio-separator">:</span>
+              <input type="number" id="concreting-ratio-crush" name="ratioCrush" min="1" step="1" value="4" required aria-label="Crush ratio" aria-required="true">
+            </div>
+            <span class="validation-msg" id="concreting-ratio-error" aria-live="polite"></span>
+          </div>
+          <div class="form-actions">
+            <button type="submit" class="btn-primary">Calculate</button>
+            <button type="button" class="btn-outlined btn-back-category">Back</button>
+          </div>
+        </form>
+
+        <!-- Steel Form -->
+        <form id="steel-form" class="calc-form" hidden novalidate aria-label="Steel calculation">
+          <h3>Steel Calculation</h3>
+          <div class="form-group">
+            <label for="steel-volume">Concrete Volume (<span class="unit-label">Cft</span>) *</label>
+            <input type="number" id="steel-volume" name="volume" min="0.01" step="any" required aria-required="true">
+            <span class="validation-msg" id="steel-volume-error" aria-live="polite"></span>
+          </div>
+          <div class="form-group">
+            <label for="steel-element-type">Element Type *</label>
+            <select id="steel-element-type" name="elementType" required aria-required="true">
+              <option value="">Select element type</option>
+              <option value="foundation">Foundation</option>
+              <option value="column">Column</option>
+              <option value="slab_stair">Slab / Staircase</option>
+              <option value="beam">Beam</option>
+            </select>
+            <span class="validation-msg" id="steel-element-type-error" aria-live="polite"></span>
+          </div>
+          <div class="form-actions">
+            <button type="submit" class="btn-primary">Calculate</button>
+            <button type="button" class="btn-outlined btn-back-category">Back</button>
+          </div>
+        </form>
+
+        <!-- Plastering Form -->
+        <form id="plastering-form" class="calc-form" hidden novalidate aria-label="Plastering calculation">
+          <h3>Plastering Calculation</h3>
+          <div class="form-group">
+            <label for="plastering-area">Area (<span class="unit-label">Sft</span>) *</label>
+            <input type="number" id="plastering-area" name="area" min="0.01" step="any" required aria-required="true">
+            <span class="validation-msg" id="plastering-area-error" aria-live="polite"></span>
+          </div>
+          <div class="form-group">
+            <label for="plastering-thickness">Thickness (mm) *</label>
+            <input type="number" id="plastering-thickness" name="thicknessMm" min="1" step="1" value="12" required aria-required="true">
+            <span class="validation-msg" id="plastering-thickness-error" aria-live="polite"></span>
+          </div>
+          <div class="form-group">
+            <label>Mix Ratio (Cement : Sand) *</label>
+            <div class="ratio-inputs">
+              <input type="number" id="plastering-ratio-cement" name="ratioCement" min="1" step="1" value="1" required aria-label="Cement ratio" aria-required="true">
+              <span class="ratio-separator">:</span>
+              <input type="number" id="plastering-ratio-sand" name="ratioSand" min="1" step="1" value="4" required aria-label="Sand ratio" aria-required="true">
+            </div>
+            <span class="validation-msg" id="plastering-ratio-error" aria-live="polite"></span>
+          </div>
+          <div class="form-actions">
+            <button type="submit" class="btn-primary">Calculate</button>
+            <button type="button" class="btn-outlined btn-back-category">Back</button>
+          </div>
+        </form>
+
+        <!-- Tiling Form -->
+        <form id="tiling-form" class="calc-form" hidden novalidate aria-label="Tiling calculation">
+          <h3>Tiling Calculation</h3>
+          <div class="form-group">
+            <label for="tiling-floor-area">Floor Area (<span class="unit-label">Sft</span>) *</label>
+            <input type="number" id="tiling-floor-area" name="floorArea" min="0.01" step="any" required aria-required="true">
+            <span class="validation-msg" id="tiling-floor-area-error" aria-live="polite"></span>
+          </div>
+          <div class="form-group">
+            <label for="tiling-tile-area">Tile Area (<span class="unit-label">Sft</span>) *</label>
+            <input type="number" id="tiling-tile-area" name="tileArea" min="0.01" step="any" required aria-required="true">
+            <span class="validation-msg" id="tiling-tile-area-error" aria-live="polite"></span>
+          </div>
+          <div class="form-actions">
+            <button type="submit" class="btn-primary">Calculate</button>
+            <button type="button" class="btn-outlined btn-back-category">Back</button>
+          </div>
+        </form>
+      </div>
+
+      <!-- Results Display -->
+      <div id="estimation-results" class="results-container" hidden aria-live="polite">
+        <h3>Results</h3>
+        <div id="material-results" class="results-section">
+          <h4>Materials</h4>
+          <div id="material-results-content"></div>
+        </div>
+        <div id="labor-results" class="results-section">
+          <h4>Labor</h4>
+          <div id="labor-results-content"></div>
+        </div>
+        <div class="form-actions">
+          <button id="btn-save-estimate" class="btn-primary">Save Estimate</button>
+          <button id="btn-new-estimate" class="btn-outlined">New Estimate</button>
+        </div>
+      </div>
+
+      <!-- Saved Estimates List -->
+      <div id="saved-estimates" class="saved-estimates-section">
+        <h3>Saved Estimates</h3>
+        <div id="saved-estimates-list" class="list-container" aria-live="polite">
+          <div class="empty-state">
+            <p>No estimates saved for this project yet.</p>
+          </div>
+        </div>
+        <div id="project-total" class="project-total" hidden>
+          <strong>Project Total:</strong>
+          <span id="project-total-value"></span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Reports Screen -->
+    <section id="reports-screen" class="screen" hidden aria-label="Reports">
+      <header class="screen-header">
+        <h1>Reports</h1>
+      </header>
+      <div class="filter-bar">
+        <div class="form-group">
+          <label for="report-client-select">Client</label>
+          <select id="report-client-select" aria-label="Select client for report">
+            <option value="">All Clients</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="report-project-select">Project</label>
+          <select id="report-project-select" aria-label="Select project for report">
+            <option value="">All Projects</option>
+          </select>
+        </div>
+      </div>
+      <div id="report-content" aria-live="polite">
+        <div id="material-totals" class="report-section">
+          <h3>Material Totals</h3>
+          <div id="material-totals-content" class="report-grid">
+            <div class="empty-state">
+              <p>Select a project or client to view reports.</p>
+            </div>
+          </div>
+        </div>
+        <div id="labor-totals" class="report-section">
+          <h3>Labor Totals</h3>
+          <div id="labor-totals-content" class="report-grid">
+            <div class="empty-state">
+              <p>No labor data available.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Settings Screen -->
+    <section id="settings-screen" class="screen" hidden aria-label="Settings">
+      <header class="screen-header">
+        <h1>Settings</h1>
+      </header>
+      <div id="settings-content">
+        <!-- License Section -->
+        <div class="settings-card">
+          <h3>License</h3>
+          <div id="license-status-display"></div>
+          <div id="license-form-section" style="margin-top:8px;">
+            <div class="form-group">
+              <label for="license-key-input">License Key</label>
+              <input type="text" id="license-key-input" placeholder="Enter license key" maxlength="500">
+            </div>
+            <button id="btn-activate-license" class="btn-outlined btn-sm">Activate</button>
+            <button id="btn-remove-license" class="btn-outlined btn-sm" hidden style="color:var(--danger);border-color:var(--danger);">Remove License</button>
+            <span id="license-msg" class="setting-hint" style="margin-top:6px;display:block;"></span>
+          </div>
+        </div>
+
+        <!-- Unit Toggle -->
+        <div class="settings-card">
+          <h3>Unit System</h3>
+          <div class="toggle-group">
+            <label class="toggle-label" for="unit-toggle">
+              <span>Metric Units (Cu.m / Sq.m)</span>
+              <input type="checkbox" id="unit-toggle" role="switch" aria-label="Toggle between Imperial and Metric units">
+              <span class="toggle-slider"></span>
+            </label>
+            <p class="setting-hint">Default: Imperial (Cft / Sft)</p>
+          </div>
+        </div>
+
+        <!-- Theme Toggle -->
+        <div class="settings-card">
+          <h3>Theme</h3>
+          <div class="toggle-group">
+            <label class="toggle-label" for="theme-toggle">
+              <span>Dark Theme</span>
+              <input type="checkbox" id="theme-toggle" role="switch" aria-label="Toggle dark theme">
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Block Sizes Section -->
+        <div class="settings-card">
+          <div class="settings-card-header">
+            <h3>Block Sizes</h3>
+            <button id="btn-add-block-size" class="btn-outlined btn-sm" aria-label="Add block size">+ Add</button>
+          </div>
+          <div id="block-sizes-list" class="config-list" aria-live="polite"></div>
+        </div>
+
+        <!-- Mortar Joint Thickness -->
+        <div class="settings-card">
+          <h3>Mortar Joint Thickness</h3>
+          <p class="setting-hint">Thickness of mortar joint between bricks (in inches). Each brick gets half of this value.</p>
+          <div class="form-group" style="margin-top:8px;">
+            <label for="mortar-joint-input">Joint Thickness (inches)</label>
+            <input type="number" id="mortar-joint-input" step="0.05" min="0.1" max="2" value="0.25">
+          </div>
+          <button id="btn-save-mortar-joint" class="btn-outlined btn-sm">Save</button>
+        </div>
+
+        <!-- Labor Rates Section -->
+        <div class="settings-card">
+          <div class="settings-card-header">
+            <h3>Labor Rates</h3>
+            <button id="btn-add-labor-rate" class="btn-outlined btn-sm" aria-label="Add labor rate">+ Add</button>
+          </div>
+          <div id="labor-rates-list" class="config-list" aria-live="polite"></div>
+        </div>
+
+        <!-- Steel Percentages Section -->
+        <div class="settings-card">
+          <div class="settings-card-header">
+            <h3>Steel Percentages</h3>
+            <button id="btn-add-steel-pct" class="btn-outlined btn-sm" aria-label="Add steel percentage">+ Add</button>
+          </div>
+          <div id="steel-percentages-list" class="config-list" aria-live="polite"></div>
+        </div>
+
+        <!-- Custom Calculations Section -->
+        <div class="settings-card">
+          <div class="settings-card-header">
+            <h3>Custom Calculations</h3>
+            <button id="btn-add-custom-calc" class="btn-outlined btn-sm" aria-label="Add custom calculation">+ Add</button>
+          </div>
+          <div id="custom-calcs-list" class="config-list" aria-live="polite"></div>
+        </div>
+
+        <!-- Export/Import Section -->
+        <div class="settings-card">
+          <h3>Data Management</h3>
+          <div class="form-actions">
+            <button id="btn-export-data" class="btn-outlined" aria-label="Export all data">📤 Export Data</button>
+            <button id="btn-import-data" class="btn-outlined" aria-label="Import data">📥 Import Data</button>
+          </div>
+          <input type="file" id="import-file-input" accept=".json" hidden aria-hidden="true">
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Toast Notification -->
+  <div id="toast" class="toast" role="alert" aria-live="assertive" hidden>
+    <span id="toast-message"></span>
+  </div>
+
+  <!-- Bottom Navigation -->
+  <nav id="bottom-nav" class="bottom-nav" aria-label="Main navigation">
+    <button class="nav-tab active" data-screen="clients-screen" aria-label="Clients" aria-current="page">
+      <span class="nav-icon">👥</span>
+      <span class="nav-label">Clients</span>
+    </button>
+    <button class="nav-tab" data-screen="projects-screen" aria-label="Projects">
+      <span class="nav-icon">📋</span>
+      <span class="nav-label">Projects</span>
+    </button>
+    <button class="nav-tab" data-screen="estimation-screen" aria-label="Estimate">
+      <span class="nav-icon">🧮</span>
+      <span class="nav-label">Estimate</span>
+    </button>
+    <button class="nav-tab" data-screen="reports-screen" aria-label="Reports">
+      <span class="nav-icon">📊</span>
+      <span class="nav-label">Reports</span>
+    </button>
+    <button class="nav-tab" data-screen="settings-screen" aria-label="Settings">
+      <span class="nav-icon">⚙️</span>
+      <span class="nav-label">Settings</span>
+    </button>
+  </nav>
+
+  <!-- Scripts in dependency order -->
+  <script src="js/license.js"></script>
+  <script src="js/db.js"></script>
+  <script src="js/formula-engine.js"></script>
+  <script src="js/config.js"></script>
+  <script src="js/calc-engine.js"></script>
+  <script src="js/clients.js"></script>
+  <script src="js/projects.js"></script>
+  <script src="js/estimation.js"></script>
+  <script src="js/reports.js"></script>
+  <script src="js/settings.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

@@ -237,8 +237,12 @@ const ItemMaster = (function () {
           '</div>' +
           '<div class="form-group">' +
             '<label>Item Image</label>' +
-            '<button type="button" id="item-capture-btn" class="btn-secondary" style="width:100%;margin-top:4px;">📸 Capture Image</button>' +
+            '<div style="display:flex;gap:8px;margin-top:4px;">' +
+              '<button type="button" id="item-capture-btn" class="btn-secondary" style="flex:1;font-size:0.75rem;">📸 Camera</button>' +
+              '<button type="button" id="item-gallery-btn" class="btn-secondary" style="flex:1;font-size:0.75rem;">🖼️ Gallery</button>' +
+            '</div>' +
             '<input type="file" id="item-image-file-input" accept="image/*" capture="environment" style="display:none;">' +
+            '<input type="file" id="item-image-gallery-input" accept="image/*" style="display:none;">' +
             '<div id="item-camera-message" style="color:#ea4335;font-size:0.75rem;display:none;margin-top:4px;"></div>' +
             imagePreviewHtml +
           '</div>' +
@@ -274,7 +278,9 @@ const ItemMaster = (function () {
     var cancelBtn = document.getElementById('item-modal-cancel');
     var saveBtn = document.getElementById('item-modal-save');
     var captureBtn = document.getElementById('item-capture-btn');
+    var galleryBtn = document.getElementById('item-gallery-btn');
     var fileInput = document.getElementById('item-image-file-input');
+    var galleryInput = document.getElementById('item-image-gallery-input');
     var unitSelect = document.getElementById('item-unit-select');
 
     if (closeBtn) {
@@ -289,8 +295,16 @@ const ItemMaster = (function () {
     if (captureBtn) {
       captureBtn.addEventListener('click', _handleCaptureClick);
     }
+    if (galleryBtn) {
+      galleryBtn.addEventListener('click', function () {
+        if (galleryInput) galleryInput.click();
+      });
+    }
     if (fileInput) {
       fileInput.addEventListener('change', _handleFileSelected);
+    }
+    if (galleryInput) {
+      galleryInput.addEventListener('change', _handleFileSelected);
     }
     if (unitSelect) {
       unitSelect.addEventListener('change', function () {
