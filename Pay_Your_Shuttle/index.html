@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#1565c0">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>Pay Your Shuttle</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+<header class="app-header">
+  <span class="header-icon">🏸</span>
+  <h1 id="app-name-header">Pay Your Shuttle</h1>
+</header>
+
+<!-- ══ Monthly Collection ══════════════════════════════ -->
+<main id="monthly-screen" class="screen">
+  <div class="section-header">
+    <span class="screen-title">Monthly collection</span>
+  </div>
+  <div class="filter-bar">
+    <div class="date-picker-wrap"><input type="date" id="monthly-ref-date" class="date-picker-hidden"><div class="date-picker-display" data-for="monthly-ref-date">Select date</div></div>
+    <input type="text" id="monthly-search" placeholder="Search member…">
+  </div>
+  <div class="filter-row">
+    <label><input type="checkbox" id="monthly-filter-unpaid"> Unpaid only</label>
+  </div>
+  <div id="monthly-list"></div>
+</main>
+
+<!-- ══ Guest Play ══════════════════════════════════════ -->
+<main id="guest-screen" class="screen" hidden>
+  <div class="section-header">
+    <span class="screen-title">Guest play</span>
+  </div>
+  <div class="filter-bar">
+    <div class="date-picker-wrap"><input type="date" id="guest-date" class="date-picker-hidden"><div class="date-picker-display" data-for="guest-date">Select date</div></div>
+    <input type="text" id="guest-search" placeholder="Search member…">
+  </div>
+  <div id="guest-list"></div>
+</main>
+
+<!-- ══ Members ════════════════════════════════════════ -->
+<main id="members-screen" class="screen" hidden>
+  <div class="section-header">
+    <span class="screen-title">Members</span>
+    <div style="display:flex;gap:6px;">
+      <button class="btn btn-sm btn-secondary" id="members-export-btn">Export</button>
+      <button class="btn btn-sm btn-secondary" id="members-import-btn">Import</button>
+      <input type="file" id="members-import-file" accept=".csv" hidden>
+      <button class="btn btn-primary" id="add-member-btn">+ Add</button>
+    </div>
+  </div>
+  <input type="text" id="member-search" placeholder="Search members…" class="search-input">
+  <div class="form-container" id="member-form-container" hidden>
+    <div class="form-title" id="member-form-title">Add member</div>
+    <form id="member-form" novalidate>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="member-name">Full name *</label>
+          <input type="text" id="member-name" required>
+          <div class="error-message" id="member-name-error"></div>
+        </div>
+        <div class="form-group">
+          <label for="member-mobile">Mobile (10 digits) *</label>
+          <input type="tel" id="member-mobile" maxlength="10" inputmode="numeric">
+          <div class="error-message" id="member-mobile-error"></div>
+        </div>
+      </div>
+      <div class="form-group">
+        <label for="member-notes">Notes</label>
+        <textarea id="member-notes" rows="2"></textarea>
+      </div>
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary">Save</button>
+        <button type="button" class="btn btn-secondary" id="member-cancel-btn">Cancel</button>
+      </div>
+    </form>
+  </div>
+  <div id="member-list"></div>
+</main>
+
+<!-- ══ Contributions ══════════════════════════════════ -->
+<main id="contributions-screen" class="screen" hidden>
+  <div class="section-header">
+    <span class="screen-title">Monthly fees</span>
+  </div>
+
+  <!-- Section 1: Bulk apply fee -->
+  <div class="bulk-section">
+    <div class="bulk-section-title">Bulk apply fee</div>
+
+    <!-- Section 1: Date + fee + due day -->
+    <div class="form-row">
+      <div class="form-group" style="margin-bottom:0;">
+        <label for="bulk-activation-date">Effective from *</label>
+        <div class="date-picker-wrap"><input type="date" id="bulk-activation-date" class="date-picker-hidden"><div class="date-picker-display" data-for="bulk-activation-date">Select date</div></div>
+      </div>
+      <div class="form-group" style="margin-bottom:0;">
+        <label for="bulk-fee-amount">Monthly fee (₹) *</label>
+        <input type="number" id="bulk-fee-amount" min="1" step="0.01" inputmode="decimal" placeholder="e.g. 500">
+      </div>
+      <div class="form-group" style="margin-bottom:0;">
+        <label for="bulk-due-day">Due day</label>
+        <input type="number" id="bulk-due-day" min="1" max="28" value="1" style="width:100%;">
+      </div>
+    </div>
+
+    <!-- Section 2: Member search + select -->
+    <input type="text" id="bulk-member-search" placeholder="Search members to add…" class="search-input">
+    <div class="bulk-select-all-row">
+      <label><input type="checkbox" id="bulk-select-all"> Select all visible</label>
+      <span id="bulk-selected-count" class="bulk-count">No members selected</span>
+    </div>
+    <div id="bulk-member-list" class="bulk-member-list"></div>
+
+    <!-- Section 3: Apply -->
+    <div class="error-message" id="bulk-error"></div>
+    <div class="success-msg bulk-success-msg" id="bulk-success-msg" hidden></div>
+    <button class="btn btn-primary" id="bulk-apply-btn" style="width:100%;">Apply fee to selected members</button>
+  </div>
+
+  <!-- Individual enrollment form -->
+  <div class="form-container" id="enroll-form-container" hidden>
+    <div class="form-title" id="enroll-form-title">Enroll in monthly</div>
+    <div id="enroll-member-name" style="font-weight:600;margin-bottom:10px;color:var(--primary-light);"></div>
+    <div class="form-row">
+      <div class="form-group">
+        <label for="enroll-monthly-fee">Monthly fee (₹) *</label>
+        <input type="number" id="enroll-monthly-fee" min="1" step="0.01" inputmode="decimal">
+      </div>
+      <div class="form-group">
+        <label for="enroll-guest-fee">Guest play fee (₹)</label>
+        <input type="number" id="enroll-guest-fee" min="0" step="0.01" inputmode="decimal" placeholder="Leave blank for default">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label for="enroll-activation-date">Activation date *</label>
+        <div class="date-picker-wrap"><input type="date" id="enroll-activation-date" class="date-picker-hidden"><div class="date-picker-display" data-for="enroll-activation-date">Select date</div></div>
+      </div>
+      <div class="form-group">
+        <label for="enroll-due-day">Due day (1–28)</label>
+        <input type="number" id="enroll-due-day" min="1" max="28" value="1">
+      </div>
+    </div>
+    <div class="form-group">
+      <label for="enroll-notes">Notes</label>
+      <textarea id="enroll-notes" rows="2"></textarea>
+    </div>
+    <div class="error-message" id="enroll-error" style="margin-bottom:6px;"></div>
+    <div class="form-actions">
+      <button type="button" class="btn btn-primary" id="enroll-save-btn">Save</button>
+      <button type="button" class="btn btn-secondary" id="enroll-cancel-btn">Cancel</button>
+    </div>
+  </div>
+
+  <!-- Individual member list -->
+  <div class="section-header" style="margin-top:4px;">
+    <span class="screen-title" style="font-size:0.75rem;">Current enrollments</span>
+  </div>
+  <input type="text" id="contrib-search" placeholder="Search enrolled members…" class="search-input">
+  <div id="contrib-list"></div>
+</main>
+
+<!-- ══ Expenses ═══════════════════════════════════════ -->
+<main id="expenses-screen" class="screen" hidden>
+  <div class="section-header">
+    <span class="screen-title">Expenses</span>
+    <button class="btn btn-primary" id="add-expense-btn">+ Add</button>
+  </div>
+  <div class="filter-bar">
+    <div class="date-picker-wrap"><input type="date" id="expense-filter-start" class="date-picker-hidden"><div class="date-picker-display" data-for="expense-filter-start">Select date</div></div>
+    <div class="date-picker-wrap"><input type="date" id="expense-filter-end" class="date-picker-hidden"><div class="date-picker-display" data-for="expense-filter-end">Select date</div></div>
+  </div>
+  <input type="text" id="expense-search" placeholder="Search by category or notes…" class="search-input">
+
+  <div class="form-container" id="expense-form-container" hidden>
+    <div class="form-title" id="expense-form-title">Add expense</div>
+    <form id="expense-form" novalidate>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="expense-amount">Amount (₹) *</label>
+          <input type="number" id="expense-amount" min="0.01" step="0.01" inputmode="decimal">
+          <div class="error-message" id="expense-amount-error"></div>
+        </div>
+        <div class="form-group">
+          <label for="expense-date">Date *</label>
+          <div class="date-picker-wrap"><input type="date" id="expense-date" class="date-picker-hidden"><div class="date-picker-display" data-for="expense-date">Select date</div></div>
+          <div class="error-message" id="expense-date-error"></div>
+        </div>
+      </div>
+      <div class="form-group">
+        <label for="expense-category">Category</label>
+        <input type="text" id="expense-category" placeholder="e.g. Shuttlecocks, Court rent, Equipment…" list="expense-category-suggestions">
+        <datalist id="expense-category-suggestions">
+          <option value="Shuttlecocks">
+          <option value="Court rent">
+          <option value="Equipment">
+          <option value="Maintenance">
+          <option value="Tournament">
+          <option value="Miscellaneous">
+        </datalist>
+      </div>
+      <div class="form-group">
+        <label for="expense-notes">Notes</label>
+        <textarea id="expense-notes" rows="2" placeholder="Additional details…"></textarea>
+      </div>
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary">Save</button>
+        <button type="button" class="btn btn-secondary" id="expense-cancel-btn">Cancel</button>
+      </div>
+    </form>
+  </div>
+
+  <div id="expense-list"></div>
+</main>
+
+<!-- ══ History ════════════════════════════════════════ -->
+<main id="history-screen" class="screen" hidden>
+  <div class="section-header">
+    <span class="screen-title">Activity history</span>
+  </div>
+  <div class="filter-bar">
+    <div class="date-picker-wrap"><input type="date" id="history-start" class="date-picker-hidden"><div class="date-picker-display" data-for="history-start">Select date</div></div>
+    <div class="date-picker-wrap"><input type="date" id="history-end" class="date-picker-hidden"><div class="date-picker-display" data-for="history-end">Select date</div></div>
+  </div>
+  <div class="filter-bar">
+    <input type="text" id="history-search" placeholder="Filter by member…">
+    <select id="history-type-filter">
+      <option value="all">All records</option>
+      <option value="monthly_fee">Monthly fee records</option>
+      <option value="monthly_payment">Monthly payments</option>
+      <option value="guest_session">Guest session records</option>
+      <option value="guest_payment">Guest payments</option>
+    </select>
+  </div>
+  <div id="history-list"></div>
+</main>
+
+<!-- ══ Reports ════════════════════════════════════════ -->
+<main id="reports-screen" class="screen" hidden>
+  <div class="section-header">
+    <span class="screen-title">Reports</span>
+    <button class="btn btn-sm btn-secondary" id="report-print-btn">🖨️ Print</button>
+  </div>
+
+  <!-- Report type tabs -->
+  <div class="report-tabs">
+    <button class="report-tab-btn active" data-tab="daywise">Day-wise</button>
+    <button class="report-tab-btn" data-tab="memberwise">Member-wise</button>
+    <button class="report-tab-btn" data-tab="outstanding">Outstanding</button>
+    <button class="report-tab-btn" data-tab="balance">Balance</button>
+  </div>
+
+  <!-- Tab panels — filters live INSIDE each panel so they never overlap the tab bar -->
+  <div class="report-tab-panel" data-tab="daywise">
+    <div class="filter-bar">
+      <div class="date-picker-wrap"><input type="date" id="report-start" class="date-picker-hidden"><div class="date-picker-display" data-for="report-start">Select date</div></div>
+      <div class="date-picker-wrap"><input type="date" id="report-end" class="date-picker-hidden"><div class="date-picker-display" data-for="report-end">Select date</div></div>
+    </div>
+    <input type="text" id="report-search" placeholder="Filter by member…" class="search-input">
+    <div id="report-output-daywise"></div>
+  </div>
+
+  <div class="report-tab-panel" data-tab="memberwise" hidden>
+    <div class="filter-bar">
+      <div class="date-picker-wrap"><input type="date" id="report-start-mw" class="date-picker-hidden"><div class="date-picker-display" data-for="report-start-mw">Select date</div></div>
+      <div class="date-picker-wrap"><input type="date" id="report-end-mw" class="date-picker-hidden"><div class="date-picker-display" data-for="report-end-mw">Select date</div></div>
+    </div>
+    <input type="text" id="report-search-mw" placeholder="Filter by member…" class="search-input">
+    <div id="report-output-memberwise"></div>
+  </div>
+
+  <div class="report-tab-panel" data-tab="outstanding" hidden>
+    <div class="filter-bar">
+      <div class="date-picker-wrap"><input type="date" id="report-outstanding-date" class="date-picker-hidden"><div class="date-picker-display" data-for="report-outstanding-date">Select date</div></div>
+      <span style="font-size:0.8rem;color:var(--text2);align-self:center;white-space:nowrap;">As of date</span>
+    </div>
+    <input type="text" id="report-search-os" placeholder="Filter by member…" class="search-input">
+    <div id="report-output-outstanding"></div>
+  </div>
+
+  <div class="report-tab-panel" data-tab="balance" hidden>
+    <div class="filter-bar">
+      <div class="date-picker-wrap"><input type="date" id="report-start-balance" class="date-picker-hidden"><div class="date-picker-display" data-for="report-start-balance">Select date</div></div>
+      <div class="date-picker-wrap"><input type="date" id="report-end-balance" class="date-picker-hidden"><div class="date-picker-display" data-for="report-end-balance">Select date</div></div>
+    </div>
+    <div id="report-output-balance"></div>
+  </div>
+</main>
+
+<!-- ══ Settings ═══════════════════════════════════════ -->
+<main id="settings-screen" class="screen" hidden>
+  <span class="screen-title">Settings</span>
+  <div class="settings-section">
+    <h3>General</h3>
+    <div class="form-group">
+      <label for="settings-app-name">Club / app name</label>
+      <input type="text" id="settings-app-name" maxlength="50">
+    </div>
+    <div class="form-group">
+      <label for="settings-upi-id">UPI ID (for QR codes) *</label>
+      <input type="text" id="settings-upi-id" maxlength="45" placeholder="yourname@upi">
+    </div>
+    <div class="form-group">
+      <label for="settings-default-guest-fee">Default guest play fee (₹)</label>
+      <input type="number" id="settings-default-guest-fee" min="1" step="0.01" inputmode="decimal" placeholder="50">
+      <div class="loan-notes">Applied when no member-specific guest fee is set</div>
+    </div>
+    <div class="form-group">
+      <label for="theme-select">Theme</label>
+      <select id="theme-select">
+        <option value="dark">Dark</option>
+        <option value="light">Light</option>
+        <option value="forest">Forest (green)</option>
+        <option value="sunset">Sunset (amber)</option>
+      </select>
+    </div>
+    <div class="error-message" id="settings-error" style="margin-top:6px;"></div>
+    <button class="btn btn-primary" id="settings-save-btn" style="margin-top:10px;width:100%;">Save settings</button>
+    <div class="success-msg" id="settings-save-msg" hidden>Settings saved!</div>
+  </div>
+  <div class="settings-section">
+    <h3>WhatsApp notifications</h3>
+    <div class="toggle-row">
+      <span class="toggle-label">Monthly confirmation <span class="loan-notes">(off by default)</span></span>
+      <label class="toggle-switch"><input type="checkbox" id="wa-toggle-monthly"><span class="toggle-slider"></span></label>
+    </div>
+    <div class="toggle-row">
+      <span class="toggle-label">Guest play confirmation <span class="loan-notes">(off by default)</span></span>
+      <label class="toggle-switch"><input type="checkbox" id="wa-toggle-guest"><span class="toggle-slider"></span></label>
+    </div>
+    <div class="form-group" style="margin-top:10px;">
+      <label>Monthly confirmation template</label>
+      <textarea id="wa-tpl-monthly-confirm" rows="3"></textarea>
+      <div class="loan-notes">Variables: {memberName} {amount} {date} {balance}</div>
+    </div>
+    <div class="form-group">
+      <label>Monthly reminder template</label>
+      <textarea id="wa-tpl-monthly-reminder" rows="3"></textarea>
+      <div class="loan-notes">Variables: {memberName} {balance} {fee}</div>
+    </div>
+    <div class="form-group">
+      <label>Guest play confirmation template</label>
+      <textarea id="wa-tpl-guest-confirm" rows="3"></textarea>
+      <div class="loan-notes">Variables: {memberName} {amount} {date}</div>
+    </div>
+    <button class="btn btn-primary" id="wa-save-btn" style="width:100%;">Save WhatsApp settings</button>
+    <div class="success-msg" id="wa-save-msg" hidden>Saved!</div>
+  </div>
+  <div class="settings-section">
+    <h3>Backup reminder</h3>
+    <div class="form-group">
+      <label for="backup-frequency">Remind every</label>
+      <select id="backup-frequency">
+        <option value="0">Never</option>
+        <option value="3">3 days</option>
+        <option value="7">7 days</option>
+        <option value="14">14 days</option>
+        <option value="30">30 days</option>
+      </select>
+    </div>
+  </div>
+  <div class="settings-section">
+    <h3>Backup &amp; restore</h3>
+    <p class="backup-info" id="backup-last-info">No backups yet.</p>
+    <div style="display:flex;gap:8px;">
+      <button class="btn btn-primary" id="backup-btn" style="flex:1;">Create backup</button>
+      <button class="btn btn-secondary" id="restore-btn" style="flex:1;">Restore</button>
+      <input type="file" id="restore-file" accept=".json" hidden>
+    </div>
+  </div>
+</main>
+
+<!-- ══ Bottom Navigation ══════════════════════════════ -->
+<nav class="nav-bar">
+  <button class="nav-tab active" data-screen="members-screen">
+    <span class="nav-icon">👥</span><span>Members</span>
+  </button>
+  <button class="nav-tab" data-screen="monthly-screen">
+    <span class="nav-icon">📅</span><span>Monthly</span>
+  </button>
+  <button class="nav-tab" data-screen="guest-screen">
+    <span class="nav-icon">🏸</span><span>Guest</span>
+  </button>
+  <button class="nav-tab" data-screen="contributions-screen">
+    <span class="nav-icon">💰</span><span>Fees</span>
+  </button>
+  <button class="nav-tab" data-screen="expenses-screen">
+    <span class="nav-icon">🧾</span><span>Expenses</span>
+  </button>
+  <button class="nav-tab" data-screen="history-screen">
+    <span class="nav-icon">📋</span><span>History</span>
+  </button>
+  <button class="nav-tab" data-screen="reports-screen">
+    <span class="nav-icon">📊</span><span>Reports</span>
+  </button>
+  <button class="nav-tab" data-screen="settings-screen">
+    <span class="nav-icon">⚙️</span><span>Settings</span>
+  </button>
+</nav>
+
+<!-- ══ Monthly Payment Modal ══════════════════════════ -->
+<div class="modal-overlay" id="monthly-payment-modal" hidden>
+  <div class="modal">
+    <div class="modal-title" id="monthly-modal-member"></div>
+    <div class="modal-subtitle">Collect monthly contribution</div>
+    <div id="monthly-modal-balance" style="margin-bottom:10px;font-size:0.9rem;"></div>
+    <div class="qr-container" id="monthly-qr-container"></div>
+    <div class="form-group">
+      <label for="monthly-payment-amount">Amount (₹)</label>
+      <input type="number" id="monthly-payment-amount" min="0.01" step="0.01" inputmode="decimal" style="font-size:1.1rem;font-weight:600;">
+    </div>
+    <div class="form-actions">
+      <button class="btn btn-primary" id="monthly-confirm-btn">Confirm payment</button>
+      <button class="btn btn-secondary" id="monthly-cancel-btn">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ Guest Play Payment Modal ═══════════════════════ -->
+<div class="modal-overlay" id="guest-payment-modal" hidden>
+  <div class="modal">
+    <div class="modal-title" id="guest-modal-member"></div>
+    <div class="modal-subtitle">Collect guest play fee</div>
+    <div id="guest-fee-hint" style="font-size:0.82rem;color:var(--text2);margin-bottom:8px;"></div>
+    <div class="qr-container" id="guest-qr-container"></div>
+    <div class="form-group">
+      <label for="guest-payment-amount">Amount (₹)</label>
+      <input type="number" id="guest-payment-amount" min="0.01" step="0.01" inputmode="decimal" style="font-size:1.1rem;font-weight:600;">
+    </div>
+    <div class="form-actions">
+      <button class="btn btn-primary" id="guest-confirm-btn">Confirm payment</button>
+      <button class="btn btn-secondary" id="guest-cancel-btn">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ History Edit Modal ════════════════════════════ -->
+<div class="modal-overlay" id="history-edit-modal" hidden>
+  <div class="modal">
+    <div class="modal-title" id="history-edit-title">Edit record</div>
+    <div class="form-group">
+      <label for="history-edit-date">Date</label>
+      <div class="date-picker-wrap"><input type="date" id="history-edit-date" class="date-picker-hidden"><div class="date-picker-display" data-for="history-edit-date">Select date</div></div>
+    </div>
+    <div id="history-edit-amount-wrap" class="form-group">
+      <label for="history-edit-amount">Amount (₹)</label>
+      <input type="number" id="history-edit-amount" min="0.01" step="0.01" inputmode="decimal">
+    </div>
+    <div id="history-edit-fee-wrap" class="form-group" hidden>
+      <label for="history-edit-fee">Session fee (₹)</label>
+      <input type="number" id="history-edit-fee" min="0.01" step="0.01" inputmode="decimal">
+    </div>
+    <div class="form-group">
+      <label for="history-edit-notes">Notes</label>
+      <textarea id="history-edit-notes" rows="2"></textarea>
+    </div>
+    <div class="error-message" id="history-edit-error" style="margin-bottom:6px;"></div>
+    <div class="form-actions">
+      <button class="btn btn-primary" id="history-edit-save">Save</button>
+      <button class="btn btn-secondary" id="history-edit-cancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ Scripts ════════════════════════════════════════ -->
+<script src="js/utils.js"></script>
+<script src="js/qrcode-lib.js"></script>
+<script src="js/db.js"></script>
+<script src="js/settings.js"></script>
+<script src="js/whatsapp.js"></script>
+<script src="js/members.js"></script>
+<script src="js/contributions.js"></script>
+<script src="js/monthly.js"></script>
+<script src="js/guestplay.js"></script>
+<script src="js/expenses.js"></script>
+<script src="js/history.js"></script>
+<script src="js/reports.js"></script>
+<script src="js/backup.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
