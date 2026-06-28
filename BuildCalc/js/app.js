@@ -40,6 +40,7 @@ const App = (function () {
         Estimation.init();
         Reports.init();
         Settings.init();
+        CAD.init();
       })
       .catch(function (err) {
         console.error('App initialization failed:', err);
@@ -82,6 +83,10 @@ const App = (function () {
       Clients.renderList();
     } else if (screenId === 'projects-screen' && Projects.renderList) {
       Projects.renderList();
+    } else if (screenId === 'estimation-screen' && Estimation.renderCategories) {
+      Estimation.renderCategories();
+    } else if (screenId === 'cad-screen' && CAD.updateProjectNotice) {
+      CAD.updateProjectNotice();
     } else if (screenId === 'reports-screen') {
       // Re-populate report dropdowns when navigating to reports
       var reportClientSelect = document.getElementById('report-client-select');

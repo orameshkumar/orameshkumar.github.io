@@ -36,6 +36,41 @@ const Estimation = (function () {
   var projectSettingsPanel;
   var projectSettingsContent;
   var btnBackToEstimation;
+  var btnQuickEntry;
+  var quickEntryPanel;
+  var quickEntryText;
+  var btnQuickApply;
+  var btnQuickCancel;
+  var quickEntryError;
+  var noProjectNotice;
+  // concreting quick entry
+  var btnQuickEntryConcreting;
+  var quickEntryPanelConcreting;
+  var quickEntryTextConcreting;
+  var btnQuickApplyConcreting;
+  var btnQuickCancelConcreting;
+  var quickEntryErrorConcreting;
+  // steel quick entry
+  var btnQuickEntrySteel;
+  var quickEntryPanelSteel;
+  var quickEntryTextSteel;
+  var btnQuickApplySteel;
+  var btnQuickCancelSteel;
+  var quickEntryErrorSteel;
+  // plastering quick entry
+  var btnQuickEntryPlastering;
+  var quickEntryPanelPlastering;
+  var quickEntryTextPlastering;
+  var btnQuickApplyPlastering;
+  var btnQuickCancelPlastering;
+  var quickEntryErrorPlastering;
+  // tiling quick entry
+  var btnQuickEntryTiling;
+  var quickEntryPanelTiling;
+  var quickEntryTextTiling;
+  var btnQuickApplyTiling;
+  var btnQuickCancelTiling;
+  var quickEntryErrorTiling;
 
   // ─── Initialization ──────────────────────────────────────────────────────
 
@@ -55,6 +90,62 @@ const Estimation = (function () {
     projectSettingsPanel = document.getElementById('project-settings-panel');
     projectSettingsContent = document.getElementById('project-settings-content');
     btnBackToEstimation = document.getElementById('btn-back-to-estimation');
+    btnQuickEntry   = document.getElementById('btn-quick-entry');
+    quickEntryPanel = document.getElementById('quick-entry-panel');
+    quickEntryText  = document.getElementById('quick-entry-text');
+    btnQuickApply   = document.getElementById('btn-quick-apply');
+    btnQuickCancel   = document.getElementById('btn-quick-cancel');
+    quickEntryError = document.getElementById('quick-entry-error');
+    noProjectNotice = document.getElementById('no-project-notice');
+    // concreting
+    btnQuickEntryConcreting   = document.getElementById('btn-quick-entry-concreting');
+    quickEntryPanelConcreting = document.getElementById('quick-entry-panel-concreting');
+    quickEntryTextConcreting  = document.getElementById('quick-entry-text-concreting');
+    btnQuickApplyConcreting   = document.getElementById('btn-quick-apply-concreting');
+    btnQuickCancelConcreting  = document.getElementById('btn-quick-cancel-concreting');
+    quickEntryErrorConcreting = document.getElementById('quick-entry-error-concreting');
+    // steel
+    btnQuickEntrySteel   = document.getElementById('btn-quick-entry-steel');
+    quickEntryPanelSteel = document.getElementById('quick-entry-panel-steel');
+    quickEntryTextSteel  = document.getElementById('quick-entry-text-steel');
+    btnQuickApplySteel   = document.getElementById('btn-quick-apply-steel');
+    btnQuickCancelSteel  = document.getElementById('btn-quick-cancel-steel');
+    quickEntryErrorSteel = document.getElementById('quick-entry-error-steel');
+    // plastering
+    btnQuickEntryPlastering   = document.getElementById('btn-quick-entry-plastering');
+    quickEntryPanelPlastering = document.getElementById('quick-entry-panel-plastering');
+    quickEntryTextPlastering  = document.getElementById('quick-entry-text-plastering');
+    btnQuickApplyPlastering   = document.getElementById('btn-quick-apply-plastering');
+    btnQuickCancelPlastering  = document.getElementById('btn-quick-cancel-plastering');
+    quickEntryErrorPlastering = document.getElementById('quick-entry-error-plastering');
+    // tiling
+    btnQuickEntryTiling   = document.getElementById('btn-quick-entry-tiling');
+    quickEntryPanelTiling = document.getElementById('quick-entry-panel-tiling');
+    quickEntryTextTiling  = document.getElementById('quick-entry-text-tiling');
+    btnQuickApplyTiling   = document.getElementById('btn-quick-apply-tiling');
+    btnQuickCancelTiling  = document.getElementById('btn-quick-cancel-tiling');
+    quickEntryErrorTiling = document.getElementById('quick-entry-error-tiling');
+
+    // Bind quick entry — masonry
+    _bindQuickEntry(btnQuickEntry, quickEntryPanel, quickEntryText,
+                    btnQuickApply, btnQuickCancel, quickEntryError,
+                    'masonry-volume', 3);
+    // Bind quick entry — concreting
+    _bindQuickEntry(btnQuickEntryConcreting, quickEntryPanelConcreting, quickEntryTextConcreting,
+                    btnQuickApplyConcreting, btnQuickCancelConcreting, quickEntryErrorConcreting,
+                    'concreting-volume', 3);
+    // Bind quick entry — steel
+    _bindQuickEntry(btnQuickEntrySteel, quickEntryPanelSteel, quickEntryTextSteel,
+                    btnQuickApplySteel, btnQuickCancelSteel, quickEntryErrorSteel,
+                    'steel-volume', 2);
+    // Bind quick entry — plastering
+    _bindQuickEntry(btnQuickEntryPlastering, quickEntryPanelPlastering, quickEntryTextPlastering,
+                    btnQuickApplyPlastering, btnQuickCancelPlastering, quickEntryErrorPlastering,
+                    'plastering-area', 2);
+    // Bind quick entry — tiling
+    _bindQuickEntry(btnQuickEntryTiling, quickEntryPanelTiling, quickEntryTextTiling,
+                    btnQuickApplyTiling, btnQuickCancelTiling, quickEntryErrorTiling,
+                    'tiling-floor-area', 2);
 
     // Bind category buttons
     var categoryBtns = categoryGrid.querySelectorAll('.category-btn:not(.placeholder-category)');
@@ -148,6 +239,18 @@ const Estimation = (function () {
     // Reset editing state
     editingEstimateId = null;
     if (btnSaveEstimate) btnSaveEstimate.textContent = 'Save Estimate';
+
+    // Close all quick entry panels
+    _closeAllQuickEntryPanels();
+
+    // Show notice and lock category buttons when no project is loaded
+    var hasProject = !!currentProjectId;
+    if (noProjectNotice) noProjectNotice.hidden = hasProject;
+    var categoryBtns = categoryGrid.querySelectorAll('.category-btn:not(.placeholder-category)');
+    categoryBtns.forEach(function (btn) {
+      btn.classList.toggle('category-locked', !hasProject);
+      btn.setAttribute('aria-disabled', hasProject ? 'false' : 'true');
+    });
   }
 
   // ─── Show Category Form ──────────────────────────────────────────────────
@@ -191,6 +294,88 @@ const Estimation = (function () {
 
     // Clear previous validation
     clearFormValidation(category);
+  }
+
+  // ─── Quick Entry helpers ──────────────────────────────────────────────────
+
+  /**
+   * Generic quick-entry wiring for any volume field.
+   * btnIcon toggles the panel; Apply parses rows and writes the sum of L*W*H
+   * into the given volumeInputId; Cancel collapses the panel.
+   */
+  function _bindQuickEntry(btnIcon, panel, textarea, btnApply, btnCancel, errorEl, inputId, dims) {
+    if (!btnIcon || !panel) return;
+    dims = dims || 3;
+    var labels = dims === 2 ? ['L', 'W'] : ['L', 'W', 'H'];
+
+    btnIcon.addEventListener('click', function () {
+      var opening = panel.hidden;
+      panel.hidden = !opening;
+      btnIcon.setAttribute('aria-expanded', opening ? 'true' : 'false');
+      if (opening) { textarea.focus(); errorEl.textContent = ''; }
+    });
+
+    function doApply() {
+      errorEl.textContent = '';
+      var raw = textarea.value.trim();
+      if (!raw) {
+        errorEl.textContent = 'Please enter at least one row of dimensions.';
+        return;
+      }
+      var lines = raw.split(/\r?\n/).map(function (l) { return l.trim(); }).filter(Boolean);
+      var total = 0;
+      for (var i = 0; i < lines.length; i++) {
+        var parts = lines[i].split(/[,\s]+/).filter(Boolean);
+        if (parts.length !== dims) {
+          errorEl.textContent = 'Row ' + (i + 1) + ': expected ' + dims + ' values (' + labels.join(', ') + '), got ' + parts.length + '.';
+          return;
+        }
+        var nums = parts.map(function (p) { return parseFloat(p); });
+        for (var j = 0; j < dims; j++) {
+          if (isNaN(nums[j]) || nums[j] <= 0) {
+            errorEl.textContent = 'Row ' + (i + 1) + ': value ' + (j + 1) + ' must be a positive number.';
+            return;
+          }
+        }
+        var product = 1;
+        for (var k = 0; k < dims; k++) { product *= nums[k]; }
+        total += product;
+      }
+      total = Math.round(total * 10000) / 10000;
+      var targetInput = document.getElementById(inputId);
+      targetInput.value = total;
+      targetInput.dispatchEvent(new Event('input', { bubbles: true }));
+      _closeQuickEntryPanel(btnIcon, panel, textarea);
+    }
+
+    btnApply.addEventListener('click', doApply);
+    textarea.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { doApply(); }
+    });
+    if (btnCancel) {
+      btnCancel.addEventListener('click', function () {
+        _closeQuickEntryPanel(btnIcon, panel, textarea);
+      });
+    }
+  }
+
+  function _closeQuickEntryPanel(btnIcon, panel, textarea) {
+    panel.hidden = true;
+    btnIcon.setAttribute('aria-expanded', 'false');
+    if (textarea) textarea.value = '';
+  }
+
+  function _closeAllQuickEntryPanels() {
+    if (quickEntryPanel && !quickEntryPanel.hidden)
+      _closeQuickEntryPanel(btnQuickEntry, quickEntryPanel, quickEntryText);
+    if (quickEntryPanelConcreting && !quickEntryPanelConcreting.hidden)
+      _closeQuickEntryPanel(btnQuickEntryConcreting, quickEntryPanelConcreting, quickEntryTextConcreting);
+    if (quickEntryPanelSteel && !quickEntryPanelSteel.hidden)
+      _closeQuickEntryPanel(btnQuickEntrySteel, quickEntryPanelSteel, quickEntryTextSteel);
+    if (quickEntryPanelPlastering && !quickEntryPanelPlastering.hidden)
+      _closeQuickEntryPanel(btnQuickEntryPlastering, quickEntryPanelPlastering, quickEntryTextPlastering);
+    if (quickEntryPanelTiling && !quickEntryPanelTiling.hidden)
+      _closeQuickEntryPanel(btnQuickEntryTiling, quickEntryPanelTiling, quickEntryTextTiling);
   }
 
   // ─── Calculate ───────────────────────────────────────────────────────────
@@ -1315,6 +1500,9 @@ const Estimation = (function () {
     init: init,
     setProject: setProject,
     renderCategories: renderCategories,
+    refreshIfActive: function (projectId) {
+      if (currentProjectId === projectId) { renderSavedEstimates(); }
+    },
     renderSavedEstimates: renderSavedEstimates,
     showCategoryForm: showCategoryForm,
     calculate: calculate,

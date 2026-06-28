@@ -267,6 +267,7 @@ const Projects = (function () {
   function navigateToEstimation(projectId) {
     App.navigateTo('estimation-screen');
     Estimation.setProject(projectId);
+    if (typeof CAD !== 'undefined') CAD.setProject(projectId);
   }
 
   // ─── Helpers ─────────────────────────────────────────────────────────────
