@@ -55,8 +55,23 @@ const WhatsApp = (function() {
   function processTemplate(template, variables) {
     if (!template) return '';
     if (!variables) return template;
-    return template.replace(/\{(\w+)\}/g, function(match, key) {
-      return variables.hasOwnProperty(key) ? String(variables[key]) : match;
+
+    // Build a normalized lookup map:
+    // - lowercase
+    // - spaces removed (so "client name" matches "clientName" and "clientname")
+    var normalizedMap = {};
+    for (var k in variables) {
+      if (variables.hasOwnProperty(k)) {
+        normalizedMap[k.toLowerCase().replace(/\s+/g, '')] = variables[k];
+      }
+    }
+
+    // Match placeholders inside braces (ASCII and common Unicode variants)
+    // Captures content that may include spaces (e.g., {Client name}, {client Name})
+    // Handles: { } (ASCII), ｛ ｝ (fullwidth), ﹛ ﹜ (small form variants)
+    return template.replace(/[\{｛﹛]\s*([\w][\w\s]*[\w]|[\w]+)\s*[\}｝﹜]/g, function(match, key) {
+      var normalized = key.toLowerCase().replace(/\s+/g, '');
+      return normalizedMap.hasOwnProperty(normalized) ? String(normalizedMap[normalized]) : match;
     });
   }
 
@@ -149,8 +164,11 @@ const WhatsApp = (function() {
 
       var loanAmount = (loanType === 'interest_only') ? (options.loan.principalBalance || options.loan.totalAmount) : options.loan.totalAmount;
       var template = getConfirmationTemplate();
+      var clientNameVal = options.client.name || '';
       var variables = {
-        clientName: options.client.name || '',
+        clientName: clientNameVal,
+        name: clientNameVal,
+        clientname: clientNameVal,
         amount: Number(options.amount || 0).toFixed(2),
         date: formatDateDDMMYYYY(options.date || ''),
         loanAmount: Number(loanAmount || 0).toFixed(2),
@@ -184,8 +202,11 @@ const WhatsApp = (function() {
       var loanAmount = (loanType === 'interest_only') ? (options.loan.principalBalance || options.loan.totalAmount) : options.loan.totalAmount;
 
       var template = getReminderTemplate();
+      var clientNameVal = options.client.name || '';
       var variables = {
-        clientName: options.client.name || '',
+        clientName: clientNameVal,
+        name: clientNameVal,
+        clientname: clientNameVal,
         reminderNumber: formatOrdinal(count),
         pending: Number(options.pending || 0).toFixed(2),
         loanAmount: Number(loanAmount || 0).toFixed(2),
