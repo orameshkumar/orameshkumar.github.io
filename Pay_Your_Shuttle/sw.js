@@ -1,4 +1,4 @@
-const CACHE_NAME = 'pay-your-shuttle-v7';
+const CACHE_NAME = 'pay-your-shuttle-v8';
 const FILES_TO_CACHE = [
   './', './index.html', './css/styles.css',
   './js/utils.js', './js/qrcode-lib.js', './js/db.js', './js/settings.js',

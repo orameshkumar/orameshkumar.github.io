@@ -128,9 +128,8 @@ const Settings = (function () {
   }
 
   function updateAppNameDisplay() {
-    var header = document.getElementById('app-name-header');
-    if (header) header.textContent = getAppName();
-    document.title = getAppName();
+    // SVG logo is baked into the header — only update the page title
+    document.title = getAppName() || 'Pay Your Shuttle';
   }
 
   return {
