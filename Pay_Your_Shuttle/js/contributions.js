@@ -192,6 +192,7 @@ const Contributions = (function () {
 
     if (!date)                          { if (errEl) errEl.textContent = 'Activation date is required.'; return; }
     if (isNaN(fee) || fee <= 0)         { if (errEl) errEl.textContent = 'Fee must be greater than zero.'; return; }
+    if (!License.canSetMonthlyFee(fee)) { if (errEl) errEl.textContent = 'Monthly fee cannot exceed ₹' + License.getMaxMonthlyFee() + ' without a license. Go to Settings → License to activate.'; return; }
     if (dueDay < 1 || dueDay > 28)      { if (errEl) errEl.textContent = 'Due day must be between 1 and 28.'; return; }
     if (selected.length === 0)          { if (errEl) errEl.textContent = 'Select at least one member.'; return; }
 
@@ -335,6 +336,7 @@ const Contributions = (function () {
     var notes      = (notesInput ? notesInput.value : '').trim();
 
     if (isNaN(fee) || fee <= 0)               { if (errEl) errEl.textContent = 'Monthly fee must be greater than zero.'; return; }
+    if (!License.canSetMonthlyFee(fee))        { if (errEl) errEl.textContent = 'Monthly fee cannot exceed ₹' + License.getMaxMonthlyFee() + ' without a license. Go to Settings → License to activate.'; return; }
     if (!activation)                           { if (errEl) errEl.textContent = 'Activation date is required.'; return; }
     if (isNaN(dueDay) || dueDay < 1 || dueDay > 28) { if (errEl) errEl.textContent = 'Due day must be 1–28.'; return; }
 

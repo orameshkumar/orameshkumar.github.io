@@ -332,3 +332,15 @@ body { display: flex; flex-direction: column; max-width: 480px; margin: 0 auto; 
 /* Settings screen: all sections scroll together */
 #settings-screen { overflow-y: auto; }
 #settings-screen .settings-section { flex-shrink: 0; }
+
+/* ── License Banner ──────────────────────────────────── */
+.license-banner {
+  background: var(--warning-bg, #3a2800);
+  color: var(--warning, #fb8c00);
+  text-align: center;
+  padding: 6px 12px;
+  font-size: 0.78rem;
+  font-weight: 500;
+  border-bottom: 1px solid var(--warning, #fb8c00);
+}
+.license-banner[hidden] { display: none; }

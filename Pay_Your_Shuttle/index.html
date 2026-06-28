@@ -19,6 +19,11 @@
   <h1 id="app-name-header">Pay Your Shuttle</h1>
 </header>
 
+<!-- License banner (shown when unlicensed) -->
+<div id="license-banner" class="license-banner">
+  <span>⚠️ Unlicensed — limited to 20 members &amp; ₹1000 max fee</span>
+</div>
+
 <!-- ══ Monthly Collection ══════════════════════════════ -->
 <main id="monthly-screen" class="screen">
   <div class="section-header">
@@ -369,6 +374,25 @@
     </div>
   </div>
   <div class="settings-section">
+    <h3>License</h3>
+    <div id="license-status-section">
+      <p id="license-status-text" style="margin-bottom:8px;font-size:0.9rem;color:var(--text2);">Status: Unlicensed</p>
+    </div>
+    <div class="form-group">
+      <label for="license-key-input">License key</label>
+      <textarea id="license-key-input" rows="3" placeholder="Paste your license key here…"></textarea>
+    </div>
+    <div class="error-message" id="license-error" style="margin-bottom:6px;"></div>
+    <div class="success-msg" id="license-success-msg" hidden></div>
+    <div style="display:flex;gap:8px;">
+      <button class="btn btn-primary" id="license-activate-btn" style="flex:1;">Activate</button>
+      <button class="btn btn-secondary" id="license-deactivate-btn" style="flex:1;" hidden>Deactivate</button>
+    </div>
+    <div class="loan-notes" style="margin-top:8px;">
+      Without a license: max 20 members, monthly fee capped at ₹1000.
+    </div>
+  </div>
+  <div class="settings-section">
     <h3>Backup &amp; restore</h3>
     <p class="backup-info" id="backup-last-info">No backups yet.</p>
     <div style="display:flex;gap:8px;">
@@ -474,6 +498,7 @@
 <!-- ══ Scripts ════════════════════════════════════════ -->
 <script src="js/utils.js"></script>
 <script src="js/qrcode-lib.js"></script>
+<script src="js/license.js"></script>
 <script src="js/db.js"></script>
 <script src="js/settings.js"></script>
 <script src="js/whatsapp.js"></script>

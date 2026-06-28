@@ -5,8 +5,10 @@ var App = (function () {
   async function initApp() {
     try {
       Settings.applyTheme();
+      await License.init();
       await DB.init();
       Settings.init();
+      initLicenseUI();
       Members.init();
       Contributions.init();
       Monthly.init();
@@ -25,6 +27,63 @@ var App = (function () {
       console.error('App init failed:', e);
       alert('Could not initialize app: ' + e.message);
     }
+  }
+
+  function initLicenseUI() {
+    var activateBtn   = document.getElementById('license-activate-btn');
+    var deactivateBtn = document.getElementById('license-deactivate-btn');
+    var keyInput      = document.getElementById('license-key-input');
+    var statusText    = document.getElementById('license-status-text');
+    var errorEl       = document.getElementById('license-error');
+    var successEl     = document.getElementById('license-success-msg');
+    var banner        = document.getElementById('license-banner');
+
+    function updateLicenseDisplay() {
+      var licensed = License.isLicensed();
+      var name     = License.getLicenseeName();
+
+      if (statusText) {
+        statusText.textContent = licensed
+          ? 'Status: Licensed to ' + name
+          : 'Status: Unlicensed';
+        statusText.style.color = licensed ? 'var(--success, #4caf50)' : 'var(--text2)';
+      }
+      if (activateBtn)   activateBtn.hidden   = licensed;
+      if (deactivateBtn) deactivateBtn.hidden = !licensed;
+      if (keyInput)      keyInput.hidden      = licensed;
+      if (banner) banner.hidden = licensed;
+    }
+
+    if (activateBtn) {
+      activateBtn.addEventListener('click', async function () {
+        if (errorEl) errorEl.textContent = '';
+        if (successEl) successEl.setAttribute('hidden', '');
+
+        var key = keyInput ? keyInput.value.trim() : '';
+        var result = await License.activate(key);
+
+        if (result.success) {
+          if (successEl) { successEl.textContent = result.message; successEl.removeAttribute('hidden'); }
+          if (keyInput) keyInput.value = '';
+          updateLicenseDisplay();
+        } else {
+          if (errorEl) errorEl.textContent = result.message;
+        }
+      });
+    }
+
+    if (deactivateBtn) {
+      deactivateBtn.addEventListener('click', function () {
+        if (!confirm('Deactivate your license? Restrictions will apply.')) return;
+        License.deactivate();
+        if (successEl) successEl.setAttribute('hidden', '');
+        if (errorEl) errorEl.textContent = '';
+        updateLicenseDisplay();
+      });
+    }
+
+    License.onStateChange(function () { updateLicenseDisplay(); });
+    updateLicenseDisplay();
   }
 
   function navigateToScreen(screenId) {

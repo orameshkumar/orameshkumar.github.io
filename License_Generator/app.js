@@ -46,11 +46,12 @@
   var DEFAULT_APPS = [
     { name: "Pay Up Partners", secret: [80,85,80,95,76,73,67,95,50,48,50,53,95,36,101,99,114,51,116,95,75,51,121,33] },
     { name: "ABC Store", secret: [65,66,67,95,76,73,67,95,50,48,50,53,95,36,116,48,114,51,95,75,51,121,33] },
-    { name: "Build Calc", secret: [66,117,105,108,100,67,97,108,99] }
+    { name: "Build Calc", secret: [66,117,105,108,100,67,97,108,99] },
+    { name: "Pay Your Shuttle", secret: [80,97,121,89,111,117,114,83,104,117,116,116,108,101] }
   ];
 
   // Protected app names that cannot be modified or deleted (case-insensitive)
-  var PROTECTED_APPS = ["pay up partners", "abc store", "build calc"];
+  var PROTECTED_APPS = ["pay up partners", "abc store", "build calc", "pay your shuttle"];
 
   // --- Registry Functions ---
 
@@ -83,6 +84,24 @@
     var registry = _loadRegistry();
     if (!registry || registry.length === 0) {
       registry = _seedDefaults();
+    } else {
+      // Ensure all default apps exist in the registry (handles new additions)
+      var changed = false;
+      for (var i = 0; i < DEFAULT_APPS.length; i++) {
+        var defApp = DEFAULT_APPS[i];
+        var found = false;
+        for (var j = 0; j < registry.length; j++) {
+          if (registry[j].name.toLowerCase() === defApp.name.toLowerCase()) {
+            found = true;
+            break;
+          }
+        }
+        if (!found) {
+          registry.push({ name: defApp.name, secret: defApp.secret.slice() });
+          changed = true;
+        }
+      }
+      if (changed) _saveRegistry(registry);
     }
     return registry;
   }
