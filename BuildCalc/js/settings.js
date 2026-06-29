@@ -239,23 +239,23 @@ const Settings = (function () {
 
     form.innerHTML =
       '<div class="form-group">' +
-      '<label>Label *</label>' +
-      '<input type="text" name="label" placeholder="e.g. 8×4×16" value="' + (isEdit ? escapeAttr(existing.label) : '') + '" required>' +
+      '<label for="bs-label">Label *</label>' +
+      '<input id="bs-label" type="text" name="label" autocomplete="off" placeholder="e.g. 8×4×16" value="' + (isEdit ? escapeAttr(existing.label) : '') + '" required>' +
       '<span class="validation-msg"></span>' +
       '</div>' +
       '<div class="form-group">' +
-      '<label>Volume (Cft) *</label>' +
-      '<input type="number" name="volCft" step="any" min="0.001" placeholder="0.296" value="' + (isEdit ? existing.volCft : '') + '" required>' +
+      '<label for="bs-volCft">Volume (Cft) *</label>' +
+      '<input id="bs-volCft" type="number" name="volCft" autocomplete="off" step="any" min="0.001" placeholder="0.296" value="' + (isEdit ? existing.volCft : '') + '" required>' +
       '<span class="validation-msg"></span>' +
       '</div>' +
       '<div class="form-group">' +
-      '<label>Volume (Cu.m) *</label>' +
-      '<input type="number" name="volCum" step="any" min="0.001" placeholder="0.00839" value="' + (isEdit ? existing.volCum : '') + '" required>' +
+      '<label for="bs-volCum">Volume (Cu.m) *</label>' +
+      '<input id="bs-volCum" type="number" name="volCum" autocomplete="off" step="any" min="0.001" placeholder="0.00839" value="' + (isEdit ? existing.volCum : '') + '" required>' +
       '<span class="validation-msg"></span>' +
       '</div>' +
       '<div class="form-group">' +
-      '<label>Formula (optional)</label>' +
-      '<textarea name="formula" rows="2" placeholder="e.g. volume * blockVol">' + (isEdit && existing.formula ? escapeHtml(existing.formula) : '') + '</textarea>' +
+      '<label for="bs-formula">Formula (optional)</label>' +
+      '<textarea id="bs-formula" name="formula" autocomplete="off" rows="2" placeholder="e.g. volume * blockVol">' + (isEdit && existing.formula ? escapeHtml(existing.formula) : '') + '</textarea>' +
       '<span class="formula-status"></span>' +
       '</div>' +
       '<div class="form-actions">' +
@@ -426,34 +426,34 @@ const Settings = (function () {
 
     form.innerHTML =
       '<div class="form-group">' +
-      '<label>Category Name *</label>' +
-      '<input type="text" name="category" placeholder="e.g. masonry" value="' + escapeAttr(cat) + '" ' + (isEdit ? 'readonly' : '') + ' required>' +
+      '<label for="lr-category">Category Name *</label>' +
+      '<input id="lr-category" type="text" name="category" autocomplete="off" placeholder="e.g. masonry" value="' + escapeAttr(cat) + '" ' + (isEdit ? 'readonly' : '') + ' required>' +
       '<span class="validation-msg"></span>' +
       '</div>' +
       '<div class="form-group">' +
-      '<label>Crew Members</label>' +
-      '<div class="crew-rows">' + crewHtml + '</div>' +
+      '<p class="form-group-label">Crew Members</p>' +
+      '<div class="crew-rows" role="group" aria-label="Crew members">' + crewHtml + '</div>' +
       '<button type="button" class="btn-outlined btn-sm btn-add-crew">+ Add Crew</button>' +
       '</div>' +
       '<div class="form-group form-group-rates">' +
-      '<label>Imperial Rate *</label>' +
+      '<label for="lr-imperial">Imperial Rate *</label>' +
       '<div class="rate-input-row">' +
-      '<input type="number" name="imperialRate" step="any" min="0.01" placeholder="40" value="' + (data.imperial ? data.imperial.rate : (isSteelType && data.rate ? data.rate : '')) + '">' +
-      '<input type="text" name="imperialUnit" placeholder="Cft/day" value="' + escapeAttr(data.imperial ? data.imperial.unit : (isSteelType && data.unit ? data.unit : '')) + '">' +
+      '<input id="lr-imperial" type="number" name="imperialRate" autocomplete="off" step="any" min="0.01" placeholder="40" value="' + (data.imperial ? data.imperial.rate : (isSteelType && data.rate ? data.rate : '')) + '">' +
+      '<input aria-label="Imperial unit" type="text" name="imperialUnit" autocomplete="off" placeholder="Cft/day" value="' + escapeAttr(data.imperial ? data.imperial.unit : (isSteelType && data.unit ? data.unit : '')) + '">' +
       '</div>' +
       '<span class="validation-msg"></span>' +
       '</div>' +
       '<div class="form-group form-group-rates">' +
-      '<label>Metric Rate *</label>' +
+      '<label for="lr-metric">Metric Rate *</label>' +
       '<div class="rate-input-row">' +
-      '<input type="number" name="metricRate" step="any" min="0.01" placeholder="1.15" value="' + (data.metric ? data.metric.rate : '') + '">' +
-      '<input type="text" name="metricUnit" placeholder="Cu.m/day" value="' + escapeAttr(data.metric ? data.metric.unit : '') + '">' +
+      '<input id="lr-metric" type="number" name="metricRate" autocomplete="off" step="any" min="0.01" placeholder="1.15" value="' + (data.metric ? data.metric.rate : '') + '">' +
+      '<input aria-label="Metric unit" type="text" name="metricUnit" autocomplete="off" placeholder="Cu.m/day" value="' + escapeAttr(data.metric ? data.metric.unit : '') + '">' +
       '</div>' +
       '<span class="validation-msg"></span>' +
       '</div>' +
       '<div class="form-group">' +
-      '<label>Formula (optional)</label>' +
-      '<textarea name="formula" rows="2" placeholder="e.g. quantity * rate">' + (data.formula ? escapeHtml(data.formula) : '') + '</textarea>' +
+      '<label for="lr-formula">Formula (optional)</label>' +
+      '<textarea id="lr-formula" name="formula" autocomplete="off" rows="2" placeholder="e.g. quantity * rate">' + (data.formula ? escapeHtml(data.formula) : '') + '</textarea>' +
       '<span class="formula-status"></span>' +
       '</div>' +
       '<div class="form-actions">' +
@@ -539,9 +539,10 @@ const Settings = (function () {
   }
 
   function buildCrewRow(role, count, idx) {
+    var n = idx + 1;
     return '<div class="crew-row" data-idx="' + idx + '">' +
-      '<input type="text" name="crewRole" placeholder="Role" value="' + escapeAttr(role) + '">' +
-      '<input type="number" name="crewCount" min="1" value="' + (count || 1) + '" style="width:60px">' +
+      '<input aria-label="Crew role ' + n + '" autocomplete="off" type="text" name="crewRole" placeholder="Role" value="' + escapeAttr(role) + '">' +
+      '<input aria-label="Crew count ' + n + '" autocomplete="off" type="number" name="crewCount" min="1" value="' + (count || 1) + '" style="width:60px">' +
       '</div>';
   }
 
@@ -614,13 +615,13 @@ const Settings = (function () {
 
     form.innerHTML =
       '<div class="form-group">' +
-      '<label>Element Type *</label>' +
-      '<input type="text" name="elementType" placeholder="e.g. foundation" value="' + (isEdit ? escapeAttr(existing.type) : '') + '" ' + (isEdit ? 'readonly' : '') + ' required>' +
+      '<label for="sp-type">Element Type *</label>' +
+      '<input id="sp-type" type="text" name="elementType" autocomplete="off" placeholder="e.g. foundation" value="' + (isEdit ? escapeAttr(existing.type) : '') + '" ' + (isEdit ? 'readonly' : '') + ' required>' +
       '<span class="validation-msg"></span>' +
       '</div>' +
       '<div class="form-group">' +
-      '<label>Percentage Factor * (decimal, e.g. 0.0085)</label>' +
-      '<input type="number" name="percentage" step="any" min="0.0001" placeholder="0.0085" value="' + (isEdit ? existing.percentage : '') + '" required>' +
+      '<label for="sp-pct">Percentage Factor * (decimal, e.g. 0.0085)</label>' +
+      '<input id="sp-pct" type="number" name="percentage" autocomplete="off" step="any" min="0.0001" placeholder="0.0085" value="' + (isEdit ? existing.percentage : '') + '" required>' +
       '<span class="validation-msg"></span>' +
       '</div>' +
       '<div class="form-actions">' +
@@ -738,18 +739,18 @@ const Settings = (function () {
 
     form.innerHTML =
       '<div class="form-group">' +
-      '<label>Name *</label>' +
-      '<input type="text" name="calcName" placeholder="e.g. Extra Cement" value="' + (isEdit ? escapeAttr(existing.name) : '') + '" required>' +
+      '<label for="cc-name">Name *</label>' +
+      '<input id="cc-name" type="text" name="calcName" autocomplete="off" placeholder="e.g. Extra Cement" value="' + (isEdit ? escapeAttr(existing.name) : '') + '" required>' +
       '<span class="validation-msg"></span>' +
       '</div>' +
       '<div class="form-group">' +
-      '<label>Category *</label>' +
-      '<select name="calcCategory" required>' + optionsHtml + '</select>' +
+      '<label for="cc-category">Category *</label>' +
+      '<select id="cc-category" name="calcCategory" autocomplete="off" required>' + optionsHtml + '</select>' +
       '<span class="validation-msg"></span>' +
       '</div>' +
       '<div class="form-group">' +
-      '<label>Formula * <span class="formula-vars-hint"></span></label>' +
-      '<textarea name="formula" rows="3" placeholder="e.g. volume * ratio_cement" required>' + (isEdit ? escapeHtml(existing.formula) : '') + '</textarea>' +
+      '<label for="cc-formula">Formula * <span class="formula-vars-hint"></span></label>' +
+      '<textarea id="cc-formula" name="formula" autocomplete="off" rows="3" placeholder="e.g. volume * ratio_cement" required>' + (isEdit ? escapeHtml(existing.formula) : '') + '</textarea>' +
       '<span class="formula-status"></span>' +
       '</div>' +
       '<div class="form-actions">' +

@@ -37,9 +37,12 @@ const Clients = (function () {
     nameError = document.getElementById('client-name-error');
     btnAdd = document.getElementById('btn-add-client');
     btnCancel = document.getElementById('btn-cancel-client');
+    console.log('[Clients.init] btnAdd =', btnAdd);
+    console.log('[Clients.init] formOverlay =', formOverlay);
 
     // Bind events
     btnAdd.addEventListener('click', showAddForm);
+    console.log('[Clients.init] click listener bound to btnAdd');
     form.addEventListener('submit', save);
     btnCancel.addEventListener('click', closeModal);
 

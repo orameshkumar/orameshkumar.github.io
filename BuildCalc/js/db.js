@@ -16,7 +16,7 @@
 
 const DB = (function () {
   const DB_NAME = 'BuildCalcDB';
-  const DB_VERSION = 1;
+  const DB_VERSION = 2;
   let db = null;
 
   // ─── ID Generation ───────────────────────────────────────────────────────
@@ -54,6 +54,10 @@ const DB = (function () {
         reject(new Error('Failed to open database: ' + request.error));
       };
 
+      request.onblocked = function () {
+        reject(new Error('Database blocked'));
+      };
+
       request.onsuccess = function (event) {
         db = event.target.result;
         resolve(db);
@@ -85,6 +89,31 @@ const DB = (function () {
         // Create "config" object store
         if (!database.objectStoreNames.contains('config')) {
           database.createObjectStore('config', { keyPath: 'id' });
+        }
+
+        // ── New stores (v2) ──────────────────────────────────────────────
+        if (!database.objectStoreNames.contains('workers')) {
+          var workersStore = database.createObjectStore('workers', { keyPath: 'id' });
+          workersStore.createIndex('team', 'team', { unique: false });
+        }
+
+        if (!database.objectStoreNames.contains('assignments')) {
+          var assignStore = database.createObjectStore('assignments', { keyPath: 'id' });
+          assignStore.createIndex('estimateId', 'estimateId', { unique: false });
+          assignStore.createIndex('projectId',  'projectId',  { unique: false });
+          assignStore.createIndex('workerId',   'workerId',   { unique: false });
+        }
+
+        if (!database.objectStoreNames.contains('tasks')) {
+          var tasksStore = database.createObjectStore('tasks', { keyPath: 'id' });
+          tasksStore.createIndex('projectId', 'projectId', { unique: false });
+          tasksStore.createIndex('workerId',  'workerId',  { unique: false });
+          tasksStore.createIndex('status',    'status',    { unique: false });
+        }
+
+        if (!database.objectStoreNames.contains('vendors')) {
+          var vendorsStore = database.createObjectStore('vendors', { keyPath: 'id' });
+          vendorsStore.createIndex('name', 'name', { unique: false });
         }
       };
     });
@@ -359,6 +388,30 @@ const DB = (function () {
     });
   }
 
+  // ─── RFQ + PO CRUD ───────────────────────────────────────────────────────
+
+  function _storeAdd(store, rec) {
+    if (!rec.id) rec.id = generateId();
+    if (!rec.createdAt) rec.createdAt = new Date().toISOString();
+    return new Promise(function(res,rej){ var tx=db.transaction(store,'readwrite'); var r=tx.objectStore(store).add(rec); r.onsuccess=function(){res(r.result);}; tx.onerror=function(){rej(tx.error);}; });
+  }
+  function _storeGet(store,id)        { return new Promise(function(res,rej){ var r=db.transaction(store,'readonly').objectStore(store).get(id); r.onsuccess=function(){res(r.result);}; r.onerror=function(){rej(r.error);}; }); }
+  function _storeGetByIndex(store,idx,val) { return new Promise(function(res,rej){ var r=db.transaction(store,'readonly').objectStore(store).index(idx).getAll(val); r.onsuccess=function(){res(r.result);}; r.onerror=function(){rej(r.error);}; }); }
+  function _storePut(store,rec)       { return new Promise(function(res,rej){ var tx=db.transaction(store,'readwrite'); var r=tx.objectStore(store).put(rec); r.onsuccess=function(){res(r.result);}; tx.onerror=function(){rej(tx.error);}; }); }
+  function _storeDel(store,id)        { return new Promise(function(res,rej){ var tx=db.transaction(store,'readwrite'); var r=tx.objectStore(store).delete(id); r.onsuccess=function(){res();}; tx.onerror=function(){rej(tx.error);}; }); }
+
+  function addRfq(r)           { return _storeAdd('rfqs', r); }
+  function getRfq(id)          { return _storeGet('rfqs', id); }
+  function getRfqsByProject(p) { return _storeGetByIndex('rfqs','projectId',p); }
+  function updateRfq(r)        { return _storePut('rfqs', r); }
+  function deleteRfq(id)       { return _storeDel('rfqs', id); }
+
+  function addPO(po)           { return _storeAdd('purchaseOrders', po); }
+  function getPO(id)           { return _storeGet('purchaseOrders', id); }
+  function getPOsByProject(p)  { return _storeGetByIndex('purchaseOrders','projectId',p); }
+  function updatePO(po)        { return _storePut('purchaseOrders', po); }
+  function deletePO(id)        { return _storeDel('purchaseOrders', id); }
+
   // ─── Bulk Operations ─────────────────────────────────────────────────────
 
   /**
@@ -467,6 +520,50 @@ const DB = (function () {
     });
   }
 
+
+  // ─── Worker CRUD ─────────────────────────────────────────────────────────
+  function addWorker(w)    { if (!w.id) w.id = generateId(); if (!w.createdAt) w.createdAt = new Date().toISOString(); return requestToPromise(getStore('workers','readwrite').add(w)).then(function(){ return w.id; }); }
+  function getWorker(id)   { return requestToPromise(getStore('workers','readonly').get(id)); }
+  function getAllWorkers()  { return requestToPromise(getStore('workers','readonly').getAll()); }
+  function updateWorker(w) { return requestToPromise(getStore('workers','readwrite').put(w)); }
+  function deleteWorker(id){ return requestToPromise(getStore('workers','readwrite').delete(id)); }
+  function getWorkersByTeam(team){ return getAllByIndex('workers','team',team); }
+
+  // ─── Assignment CRUD ──────────────────────────────────────────────────────
+  function addAssignment(a)    { if (!a.id) a.id = generateId(); if (!a.createdAt) a.createdAt = new Date().toISOString(); return requestToPromise(getStore('assignments','readwrite').add(a)).then(function(){ return a.id; }); }
+  function getAssignment(id)   { return requestToPromise(getStore('assignments','readonly').get(id)); }
+  function getAssignmentsByEstimate(estimateId){ return getAllByIndex('assignments','estimateId',estimateId); }
+  function getAssignmentsByProject(projectId)  { return getAllByIndex('assignments','projectId',projectId); }
+  function getAssignmentsByWorker(workerId)    { return getAllByIndex('assignments','workerId',workerId); }
+  function updateAssignment(a) { return requestToPromise(getStore('assignments','readwrite').put(a)); }
+  function deleteAssignment(id){ return requestToPromise(getStore('assignments','readwrite').delete(id)); }
+  function deleteAssignmentsByEstimate(estimateId){
+    return getAssignmentsByEstimate(estimateId).then(function(list){
+      return Promise.all(list.map(function(a){ return deleteAssignment(a.id); }));
+    });
+  }
+
+  // ─── Task CRUD ────────────────────────────────────────────────────────────
+  function addTask(t)    { if (!t.id) t.id = generateId(); if (!t.createdAt) t.createdAt = new Date().toISOString(); return requestToPromise(getStore('tasks','readwrite').add(t)).then(function(){ return t.id; }); }
+  function getTask(id)   { return requestToPromise(getStore('tasks','readonly').get(id)); }
+  function getAllTasks()  { return requestToPromise(getStore('tasks','readonly').getAll()); }
+  function getTasksByProject(projectId){ return getAllByIndex('tasks','projectId',projectId); }
+  function getTasksByWorker(workerId)  { return getAllByIndex('tasks','workerId',workerId); }
+  function updateTask(t) { return requestToPromise(getStore('tasks','readwrite').put(t)); }
+  function deleteTask(id){ return requestToPromise(getStore('tasks','readwrite').delete(id)); }
+  function deleteTasksByProject(projectId){
+    return getTasksByProject(projectId).then(function(list){
+      return Promise.all(list.map(function(t){ return deleteTask(t.id); }));
+    });
+  }
+
+  // ─── Vendor CRUD ──────────────────────────────────────────────────────────
+  function addVendor(v)    { if (!v.id) v.id = generateId(); if (!v.createdAt) v.createdAt = new Date().toISOString(); return requestToPromise(getStore('vendors','readwrite').add(v)).then(function(){ return v.id; }); }
+  function getVendor(id)   { return requestToPromise(getStore('vendors','readonly').get(id)); }
+  function getAllVendors()  { return requestToPromise(getStore('vendors','readonly').getAll()); }
+  function updateVendor(v) { return requestToPromise(getStore('vendors','readwrite').put(v)); }
+  function deleteVendor(id){ return requestToPromise(getStore('vendors','readwrite').delete(id)); }
+
   // ─── Public API ──────────────────────────────────────────────────────────
 
   return {
@@ -502,6 +599,42 @@ const DB = (function () {
     // Bulk operations
     exportAll: exportAll,
     importAll: importAll,
-    clearAll: clearAll
+    clearAll: clearAll,
+
+    // Worker operations
+    addWorker: addWorker, getWorker: getWorker, getAllWorkers: getAllWorkers,
+    updateWorker: updateWorker, deleteWorker: deleteWorker, getWorkersByTeam: getWorkersByTeam,
+
+    // Assignment operations
+    addAssignment: addAssignment, getAssignment: getAssignment,
+    getAssignmentsByEstimate: getAssignmentsByEstimate,
+    getAssignmentsByProject: getAssignmentsByProject,
+    getAssignmentsByWorker: getAssignmentsByWorker,
+    updateAssignment: updateAssignment, deleteAssignment: deleteAssignment,
+    deleteAssignmentsByEstimate: deleteAssignmentsByEstimate,
+
+    // Task operations
+    addTask: addTask, getTask: getTask, getAllTasks: getAllTasks,
+    getTasksByProject: getTasksByProject, getTasksByWorker: getTasksByWorker,
+    updateTask: updateTask, deleteTask: deleteTask, deleteTasksByProject: deleteTasksByProject,
+
+    // Vendor operations
+    addVendor: addVendor, getVendor: getVendor, getAllVendors: getAllVendors,
+    updateVendor: updateVendor, deleteVendor: deleteVendor,
+    addRfq: addRfq, getRfq: getRfq, getRfqsByProject: getRfqsByProject,
+    updateRfq: updateRfq, deleteRfq: deleteRfq,
+    addPO: addPO, getPO: getPO, getPOsByProject: getPOsByProject,
+    updatePO: updatePO, deletePO: deletePO
   };
 })();
+// ── Auto-select backend ───────────────────────────────────────────────────
+// On file:// IndexedDB is blocked by Chrome. Use the localStorage backend.
+if (typeof window !== 'undefined' && window.location && window.location.protocol === 'file:') {
+  // DBLocal is defined in db-local.js (loaded before db.js in index.html)
+  // Overwrite the global DB reference with the localStorage adapter.
+  if (typeof DBLocal !== 'undefined') {
+    // Copy all DBLocal methods onto DB so every module keeps working unchanged
+    Object.keys(DBLocal).forEach(function(k){ DB[k] = DBLocal[k]; });
+    console.log('[DB] Using localStorage backend (file:// detected)');
+  }
+}

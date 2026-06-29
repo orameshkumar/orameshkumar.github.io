@@ -97,6 +97,22 @@ const Estimation = (function () {
     btnQuickCancel   = document.getElementById('btn-quick-cancel');
     quickEntryError = document.getElementById('quick-entry-error');
     noProjectNotice = document.getElementById('no-project-notice');
+    // ── Inline no-project selector ──────────────────────────────────────
+    var _noProjectSel = document.getElementById('est-project-select');
+    if (_noProjectSel) {
+      DB.getAllProjects().then(function(projs) {
+        projs.sort(function(a,b){ return a.name.localeCompare(b.name); });
+        projs.forEach(function(p) {
+          var o = document.createElement('option');
+          o.value = p.id; o.textContent = p.name;
+          _noProjectSel.appendChild(o);
+        });
+      });
+      _noProjectSel.addEventListener('change', function() {
+        if (_noProjectSel.value) { App.setProjectContext(_noProjectSel.value); }
+      });
+    }
+
     // concreting
     btnQuickEntryConcreting   = document.getElementById('btn-quick-entry-concreting');
     quickEntryPanelConcreting = document.getElementById('quick-entry-panel-concreting');
@@ -1306,14 +1322,14 @@ const Estimation = (function () {
     var form = document.createElement('div');
     form.className = 'inline-edit-form';
     form.innerHTML =
-      '<div class="form-group"><label>Label *</label>' +
-      '<input type="text" name="label" placeholder="e.g. 8×4×16" value="' + (isEdit ? escapeHtml(existing.label) : '') + '" required>' +
+      '<div class="form-group"><label for="ps-bs-label">Label *</label>' +
+      '<input id="ps-bs-label" type="text" name="label" autocomplete="off" placeholder="e.g. 8×4×16" value="' + (isEdit ? escapeHtml(existing.label) : '') + '" required>' +
       '<span class="validation-msg"></span></div>' +
-      '<div class="form-group"><label>Volume (Cft) *</label>' +
-      '<input type="number" name="volCft" step="any" min="0.001" value="' + (isEdit ? existing.volCft : '') + '" required>' +
+      '<div class="form-group"><label for="ps-bs-volCft">Volume (Cft) *</label>' +
+      '<input id="ps-bs-volCft" type="number" name="volCft" autocomplete="off" step="any" min="0.001" value="' + (isEdit ? existing.volCft : '') + '" required>' +
       '<span class="validation-msg"></span></div>' +
-      '<div class="form-group"><label>Volume (Cu.m) *</label>' +
-      '<input type="number" name="volCum" step="any" min="0.001" value="' + (isEdit ? existing.volCum : '') + '" required>' +
+      '<div class="form-group"><label for="ps-bs-volCum">Volume (Cu.m) *</label>' +
+      '<input id="ps-bs-volCum" type="number" name="volCum" autocomplete="off" step="any" min="0.001" value="' + (isEdit ? existing.volCum : '') + '" required>' +
       '<span class="validation-msg"></span></div>' +
       '<div class="form-actions">' +
       '<button type="button" class="btn-primary btn-sm btn-save-item">Save</button>' +
@@ -1356,16 +1372,16 @@ const Estimation = (function () {
     var form = document.createElement('div');
     form.className = 'inline-edit-form';
     form.innerHTML =
-      '<div class="form-group"><label>Category Name *</label>' +
-      '<input type="text" name="category" placeholder="e.g. masonry" value="' + escapeHtml(cat) + '" ' + (isEdit ? 'readonly' : '') + ' required>' +
+      '<div class="form-group"><label for="ps-lr-cat">Category Name *</label>' +
+      '<input id="ps-lr-cat" type="text" name="category" autocomplete="off" placeholder="e.g. masonry" value="' + escapeHtml(cat) + '" ' + (isEdit ? 'readonly' : '') + ' required>' +
       '<span class="validation-msg"></span></div>' +
-      '<div class="form-group"><label>Imperial Rate *</label>' +
-      '<div class="rate-input-row"><input type="number" name="imperialRate" step="any" min="0.01" value="' + (data.imperial ? data.imperial.rate : (data.rate || '')) + '">' +
-      '<input type="text" name="imperialUnit" placeholder="Cft/day" value="' + escapeHtml(data.imperial ? data.imperial.unit : (data.unit || '')) + '"></div>' +
+      '<div class="form-group"><label for="ps-lr-imp">Imperial Rate *</label>' +
+      '<div class="rate-input-row"><input id="ps-lr-imp" type="number" name="imperialRate" autocomplete="off" step="any" min="0.01" value="' + (data.imperial ? data.imperial.rate : (data.rate || '')) + '">' +
+      '<input aria-label="Imperial unit" type="text" name="imperialUnit" autocomplete="off" placeholder="Cft/day" value="' + escapeHtml(data.imperial ? data.imperial.unit : (data.unit || '')) + '"></div>' +
       '<span class="validation-msg"></span></div>' +
-      '<div class="form-group"><label>Metric Rate *</label>' +
-      '<div class="rate-input-row"><input type="number" name="metricRate" step="any" min="0.01" value="' + (data.metric ? data.metric.rate : '') + '">' +
-      '<input type="text" name="metricUnit" placeholder="Cu.m/day" value="' + escapeHtml(data.metric ? data.metric.unit : '') + '"></div>' +
+      '<div class="form-group"><label for="ps-lr-met">Metric Rate *</label>' +
+      '<div class="rate-input-row"><input id="ps-lr-met" type="number" name="metricRate" autocomplete="off" step="any" min="0.01" value="' + (data.metric ? data.metric.rate : '') + '">' +
+      '<input aria-label="Metric unit" type="text" name="metricUnit" autocomplete="off" placeholder="Cu.m/day" value="' + escapeHtml(data.metric ? data.metric.unit : '') + '"></div>' +
       '<span class="validation-msg"></span></div>' +
       '<div class="form-actions">' +
       '<button type="button" class="btn-primary btn-sm btn-save-item">Save</button>' +
@@ -1406,11 +1422,11 @@ const Estimation = (function () {
     var form = document.createElement('div');
     form.className = 'inline-edit-form';
     form.innerHTML =
-      '<div class="form-group"><label>Element Type *</label>' +
-      '<input type="text" name="elementType" placeholder="e.g. foundation" value="' + (isEdit ? escapeHtml(existing.type) : '') + '" ' + (isEdit ? 'readonly' : '') + ' required>' +
+      '<div class="form-group"><label for="ps-sp-type">Element Type *</label>' +
+      '<input id="ps-sp-type" type="text" name="elementType" autocomplete="off" placeholder="e.g. foundation" value="' + (isEdit ? escapeHtml(existing.type) : '') + '" ' + (isEdit ? 'readonly' : '') + ' required>' +
       '<span class="validation-msg"></span></div>' +
-      '<div class="form-group"><label>Percentage Factor * (e.g. 0.0085)</label>' +
-      '<input type="number" name="percentage" step="any" min="0.0001" value="' + (isEdit ? existing.percentage : '') + '" required>' +
+      '<div class="form-group"><label for="ps-sp-pct">Percentage Factor * (e.g. 0.0085)</label>' +
+      '<input id="ps-sp-pct" type="number" name="percentage" autocomplete="off" step="any" min="0.0001" value="' + (isEdit ? existing.percentage : '') + '" required>' +
       '<span class="validation-msg"></span></div>' +
       '<div class="form-actions">' +
       '<button type="button" class="btn-primary btn-sm btn-save-item">Save</button>' +
@@ -1450,14 +1466,14 @@ const Estimation = (function () {
     var form = document.createElement('div');
     form.className = 'inline-edit-form';
     form.innerHTML =
-      '<div class="form-group"><label>Name *</label>' +
-      '<input type="text" name="calcName" placeholder="e.g. Extra Cement" value="' + (isEdit ? escapeHtml(existing.name) : '') + '" required>' +
+      '<div class="form-group"><label for="ps-cc-name">Name *</label>' +
+      '<input id="ps-cc-name" type="text" name="calcName" autocomplete="off" placeholder="e.g. Extra Cement" value="' + (isEdit ? escapeHtml(existing.name) : '') + '" required>' +
       '<span class="validation-msg"></span></div>' +
-      '<div class="form-group"><label>Category *</label>' +
-      '<select name="calcCategory" required>' + optionsHtml + '</select>' +
+      '<div class="form-group"><label for="ps-cc-cat">Category *</label>' +
+      '<select id="ps-cc-cat" name="calcCategory" autocomplete="off" required>' + optionsHtml + '</select>' +
       '<span class="validation-msg"></span></div>' +
-      '<div class="form-group"><label>Formula *</label>' +
-      '<textarea name="formula" rows="2" placeholder="e.g. volume * ratio_cement" required>' + (isEdit ? escapeHtml(existing.formula) : '') + '</textarea>' +
+      '<div class="form-group"><label for="ps-cc-formula">Formula *</label>' +
+      '<textarea id="ps-cc-formula" name="formula" autocomplete="off" rows="2" placeholder="e.g. volume * ratio_cement" required>' + (isEdit ? escapeHtml(existing.formula) : '') + '</textarea>' +
       '<span class="validation-msg"></span></div>' +
       '<div class="form-actions">' +
       '<button type="button" class="btn-primary btn-sm btn-save-item">Save</button>' +

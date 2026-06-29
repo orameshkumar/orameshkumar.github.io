@@ -57,8 +57,24 @@ const CAD = (function () {
 
   // ── Initialisation ─────────────────────────────────────────────────────
   function init() {
-    cadScreen          = document.getElementById('cad-screen');
+    cadScreen          = document.getElementById('cad-panel');
     cadProjectNotice   = document.getElementById('cad-no-project');
+    // ── Inline no-project selector ──────────────────────────────────────
+    var _noProjectSel = document.getElementById('cad-project-select');
+    if (_noProjectSel) {
+      DB.getAllProjects().then(function(projs) {
+        projs.sort(function(a,b){ return a.name.localeCompare(b.name); });
+        projs.forEach(function(p) {
+          var o = document.createElement('option');
+          o.value = p.id; o.textContent = p.name;
+          _noProjectSel.appendChild(o);
+        });
+      });
+      _noProjectSel.addEventListener('change', function() {
+        if (_noProjectSel.value) { App.setProjectContext(_noProjectSel.value); }
+      });
+    }
+
     cadUploadZone      = document.getElementById('cad-upload-zone');
     cadFileInput       = document.getElementById('cad-file-input');
     cadFileName        = document.getElementById('cad-file-name');

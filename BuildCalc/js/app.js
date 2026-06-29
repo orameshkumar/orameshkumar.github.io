@@ -11,6 +11,7 @@
 const App = (function () {
   var currentUnit = 'imperial';
   var currentTheme = 'dark';
+  var _dbReady = false;   // set to true after full init chain completes
 
   // ─── Initialization ──────────────────────────────────────────────────────
 
@@ -41,21 +42,29 @@ const App = (function () {
         Reports.init();
         Settings.init();
         CAD.init();
+        Workforce.init();
+        Schedule.init();
+        Procurement.init();
+
+        // Wire inner tabs and navigate — must be INSIDE .then() so DB is ready
+        _dbReady = true;
+        _initInnerTabs();
+        navigateTo('projects-screen');
       })
       .catch(function (err) {
-        console.error('App initialization failed:', err);
+        var app = document.getElementById('app') || document.body;
+        app.innerHTML = '<div style="padding:2rem;font-family:sans-serif;color:#c00">' +
+          '<h2>BuildCalc failed to start</h2><p>' + err.message + '</p>' +
+          '<p>If opening as a local file, try: right-click index.html → Open with Chrome, or use a local server.</p></div>';
       });
 
-    // Bind bottom nav
+    // Bind bottom nav (safe to do synchronously — just attaches listeners)
     var navTabs = document.querySelectorAll('.nav-tab');
     navTabs.forEach(function (tab) {
       tab.addEventListener('click', function () {
         navigateTo(tab.getAttribute('data-screen'));
       });
     });
-
-    // Default screen
-    navigateTo('clients-screen');
   }
 
   // ─── Navigation ──────────────────────────────────────────────────────────
@@ -78,42 +87,17 @@ const App = (function () {
       }
     });
 
-    // Refresh data when navigating to certain screens
-    if (screenId === 'clients-screen' && Clients.renderList) {
-      Clients.renderList();
-    } else if (screenId === 'projects-screen' && Projects.renderList) {
-      Projects.renderList();
-    } else if (screenId === 'estimation-screen' && Estimation.renderCategories) {
-      Estimation.renderCategories();
-    } else if (screenId === 'cad-screen' && CAD.updateProjectNotice) {
-      CAD.updateProjectNotice();
-    } else if (screenId === 'reports-screen') {
-      // Re-populate report dropdowns when navigating to reports
-      var reportClientSelect = document.getElementById('report-client-select');
-      var reportProjectSelect = document.getElementById('report-project-select');
-      if (reportClientSelect) {
-        DB.getAllClients().then(function (clients) {
-          clients.sort(function (a, b) {
-            return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
-          });
-          var html = '<option value="">All Clients</option>';
-          clients.forEach(function (client) {
-            html += '<option value="' + client.id + '">' + escapeHtml(client.name) + '</option>';
-          });
-          reportClientSelect.innerHTML = html;
-        });
-      }
-      if (reportProjectSelect) {
-        DB.getAllProjects().then(function (projects) {
-          projects.sort(function (a, b) {
-            return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
-          });
-          var html = '<option value="">All Projects</option>';
-          projects.forEach(function (project) {
-            html += '<option value="' + project.id + '">' + escapeHtml(project.name) + '</option>';
-          });
-          reportProjectSelect.innerHTML = html;
-        });
+    // Refresh data when navigating — only after DB is fully ready
+    if (!_dbReady) return;
+
+    // Refresh the currently active inner panel of the target screen
+    var targetScreen = document.getElementById(screenId);
+    if (targetScreen) {
+      var activeBtn = targetScreen.querySelector('.inner-tab-btn.active');
+      if (activeBtn) {
+        _onInnerTabActivate(activeBtn.getAttribute('data-inner-tab'));
+      } else if (screenId === 'estimation-screen') {
+        if (Estimation && Estimation.renderCategories) Estimation.renderCategories();
       }
     }
   }
@@ -158,12 +142,89 @@ const App = (function () {
     return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
 
+
+  // ─── Inner Tab Wiring ────────────────────────────────────────────────────
+
+  function _initInnerTabs() {
+    // Panels are pre-set in HTML (active=visible, inactive=display:none).
+    // Just bind click handlers.
+    document.querySelectorAll('.inner-tab-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var panelId   = btn.getAttribute('data-inner-tab');
+        var tabBar    = btn.parentElement;      // .module-tabs div
+        var container = tabBar.parentElement;   // .screen section
+
+        // Update button active state
+        tabBar.querySelectorAll('.inner-tab-btn').forEach(function (b) {
+          b.classList.remove('active');
+          b.removeAttribute('aria-selected');
+        });
+        btn.classList.add('active');
+        btn.setAttribute('aria-selected', 'true');
+
+        // Show target panel, hide siblings
+        container.querySelectorAll('.inner-tab-panel').forEach(function (p) {
+          p.style.display = (p.id === panelId) ? 'block' : 'none';
+        });
+
+        // Refresh data
+        if (_dbReady) _onInnerTabActivate(panelId);
+      });
+    });
+  }
+
+  function _onInnerTabActivate(panelId) {
+    if (panelId === 'cad-panel') {
+      if (CAD && CAD.updateProjectNotice) CAD.updateProjectNotice();
+    } else if (panelId === 'reports-panel') {
+      var rcs = document.getElementById('report-client-select');
+      var rps = document.getElementById('report-project-select');
+      if (rcs) DB.getAllClients().then(function(cl) {
+        cl.sort(function(a,b){return a.name.localeCompare(b.name);});
+        var h = '<option value="">All Clients</option>';
+        cl.forEach(function(c){ h += '<option value="'+c.id+'">'+escapeHtml(c.name)+'</option>'; });
+        rcs.innerHTML = h;
+      });
+      if (rps) DB.getAllProjects().then(function(pr) {
+        pr.sort(function(a,b){return a.name.localeCompare(b.name);});
+        var h = '<option value="">All Projects</option>';
+        pr.forEach(function(p){ h += '<option value="'+p.id+'">'+escapeHtml(p.name)+'</option>'; });
+        rps.innerHTML = h;
+      });
+    } else if (panelId === 'schedule-panel') {
+      if (Schedule && Schedule.refresh) Schedule.refresh();
+    } else if (panelId === 'procurement-panel') {
+      if (Procurement && Procurement.refresh) Procurement.refresh();
+    } else if (panelId === 'clients-panel') {
+      if (Clients && Clients.renderList) Clients.renderList();
+    } else if (panelId === 'projects-panel') {
+      if (Projects && Projects.renderList) Projects.renderList();
+    } else if (panelId === 'estimate-panel') {
+      if (Estimation && Estimation.renderCategories) Estimation.renderCategories();
+    } else if (panelId === 'workers-panel') {
+      if (Workforce && Workforce.renderList) Workforce.renderList();
+    }
+  }
+
   // Auto-init on DOMContentLoaded
   document.addEventListener('DOMContentLoaded', init);
+
+  // ── Global project context setter ───────────────────────────────────────
+  function setProjectContext(projectId) {
+    if (typeof Estimation  !== 'undefined') Estimation.setProject(projectId);
+    if (typeof CAD         !== 'undefined') CAD.setProject(projectId);
+    if (typeof Schedule    !== 'undefined') Schedule.setProject(projectId);
+    if (typeof Procurement !== 'undefined') Procurement.setProject(projectId);
+    // Sync all inline no-project selectors to the chosen project
+    document.querySelectorAll('.no-project-select').forEach(function(sel) {
+      sel.value = projectId;
+    });
+  }
 
   return {
     init: init,
     navigateTo: navigateTo,
+    setProjectContext: setProjectContext,
     getUnit: getUnit,
     setUnit: setUnit,
     getTheme: getTheme,

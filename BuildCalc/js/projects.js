@@ -137,7 +137,19 @@ const Projects = (function () {
         listContainer.querySelectorAll('.list-item-content').forEach(function (item) {
           item.addEventListener('click', function () {
             var listItem = item.closest('.list-item');
-            navigateToEstimation(listItem.getAttribute('data-id'));
+            var pid = listItem.getAttribute('data-id');
+            // Set context on all modules without navigating away
+            App.setProjectContext(pid);
+            // Highlight active project in the list
+            listContainer.querySelectorAll('.list-item').forEach(function(li) {
+              li.classList.toggle('list-item-active', li.getAttribute('data-id') === pid);
+            });
+            // Show active project bar
+            DB.getProject(pid).then(function(proj) {
+              var bar  = document.getElementById('active-project-bar');
+              var name = document.getElementById('active-project-name');
+              if (bar && proj) { name.textContent = proj.name; bar.hidden = false; }
+            });
           });
         });
 
@@ -236,9 +248,12 @@ const Projects = (function () {
     } else {
       // New project — check license limit per client
       License.canAddProject(selectedClientId).then(function (allowed) {
+        console.log('[Projects.save] canAddProject allowed=', allowed);
         if (!allowed) return;
         projectData.configSnapshot = Config.createSnapshot();
+        console.log('[Projects.save] calling DB.addProject', projectData);
         DB.addProject(projectData).then(function () {
+          console.log('[Projects.save] addProject done, calling renderList');
           closeModal();
           renderList(clientFilter.value || null);
           populateClientFilter();
@@ -267,7 +282,9 @@ const Projects = (function () {
   function navigateToEstimation(projectId) {
     App.navigateTo('estimation-screen');
     Estimation.setProject(projectId);
-    if (typeof CAD !== 'undefined') CAD.setProject(projectId);
+    if (typeof CAD !== 'undefined')         CAD.setProject(projectId);
+    if (typeof Schedule !== 'undefined')    Schedule.setProject(projectId);
+    if (typeof Procurement !== 'undefined') Procurement.setProject(projectId);
   }
 
   // ─── Helpers ─────────────────────────────────────────────────────────────

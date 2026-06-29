@@ -8,7 +8,8 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="BuildCalc">
   <meta name="description" content="Construction material estimation and project management PWA">
-  <link rel="manifest" href="manifest.json">
+  <link rel="manifest" href="manifest.json" crossorigin="use-credentials">
+  <script>if(location.protocol==="file:"){var l=document.querySelector('link[rel="manifest"]');if(l)l.parentNode.removeChild(l);}</script>
   <link rel="stylesheet" href="css/styles.css">
   <link rel="apple-touch-icon" href="icons/icon-192.svg">
   <title>BuildCalc</title>
@@ -21,89 +22,39 @@
   <main id="app">
 
     <!-- Clients Screen -->
-    <section id="clients-screen" class="screen" aria-label="Clients">
-      <header class="screen-header">
-        <h1>Clients</h1>
-        <button id="btn-add-client" class="btn-outlined" aria-label="Add Client">+ Add Client</button>
-      </header>
-      <div id="clients-list" class="list-container" aria-live="polite">
-        <div class="empty-state" aria-hidden="false">
-          <p>No clients yet. Tap "Add Client" to get started.</p>
-        </div>
-      </div>
-
-      <!-- Add/Edit Client Form Overlay -->
-      <div id="client-form-overlay" class="modal-overlay" hidden aria-modal="true" role="dialog" aria-labelledby="client-form-title">
-        <div class="modal-content">
-          <h2 id="client-form-title">Add Client</h2>
-          <form id="client-form" novalidate>
-            <input type="hidden" id="client-id" name="id">
-            <div class="form-group">
-              <label for="client-name">Client Name *</label>
-              <input type="text" id="client-name" name="name" required autocomplete="name" aria-required="true">
-              <span class="validation-msg" id="client-name-error" aria-live="polite"></span>
-            </div>
-            <div class="form-group">
-              <label for="client-address">Address</label>
-              <input type="text" id="client-address" name="address" autocomplete="street-address">
-            </div>
-            <div class="form-group">
-              <label for="client-mobile">Mobile</label>
-              <input type="tel" id="client-mobile" name="mobile" autocomplete="tel">
-            </div>
-            <div class="form-actions">
-              <button type="submit" class="btn-primary">Save</button>
-              <button type="button" id="btn-cancel-client" class="btn-outlined">Cancel</button>
-            </div>
-          </form>
-        </div>
-      </div>
-    </section>
 
     <!-- Projects Screen -->
-    <section id="projects-screen" class="screen" hidden aria-label="Projects">
-      <header class="screen-header">
-        <h1>Projects</h1>
-        <button id="btn-add-project" class="btn-outlined" aria-label="Add Project">+ Add Project</button>
-      </header>
-      <div class="filter-bar">
-        <label for="project-client-filter" class="sr-only">Filter by Client</label>
-        <select id="project-client-filter" aria-label="Filter projects by client">
-          <option value="">All Clients</option>
-        </select>
+    <section id="projects-screen" class="screen" aria-label="Projects">
+      <header class="screen-header"><h1>Projects</h1></header>
+      <div id="active-project-bar" class="active-project-bar" hidden>
+        <span class="active-project-icon">✅</span>
+        <span>Active project: <strong id="active-project-name"></strong></span>
+        <span class="active-project-hint">Context set across all tabs</span>
       </div>
-      <div id="projects-list" class="list-container" aria-live="polite">
-        <div class="empty-state" aria-hidden="false">
-          <p>No projects yet. Tap "Add Project" to get started.</p>
+      <div class="module-tabs" role="tablist">
+        <button id="tab-btn-projects" class="inner-tab-btn active" data-inner-tab="projects-panel" role="tab" aria-selected="true">Projects</button>
+        <button id="tab-btn-clients" class="inner-tab-btn" data-inner-tab="clients-panel" role="tab">Clients</button>
+      </div>
+      <div id="clients-panel" class="inner-tab-panel" style="display:none">
+        <div class="panel-toolbar">
+          <span class="panel-hint" style="margin:0">Manage your client list.</span>
+          <button id="btn-add-client" class="btn-primary screen-header-btn">+ Client</button>
+        </div>
+        <div id="clients-list" class="list-container" aria-live="polite">
+          <div class="empty-state"><p>No clients yet. Tap "+ Client" to get started.</p></div>
+        </div>
+      </div>
+      <div id="projects-panel" class="inner-tab-panel">
+        <div class="panel-toolbar">
+          <select id="project-client-filter" class="proc-filter" aria-label="Filter projects by client" autocomplete="off"><option value="">All Clients</option></select>
+          <button id="btn-add-project" class="btn-primary screen-header-btn">+ Project</button>
+        </div>
+        <div id="projects-list" class="list-container" aria-live="polite">
+          <div class="empty-state"><p>No projects yet.</p></div>
         </div>
       </div>
 
-      <!-- Add Project Form Overlay -->
-      <div id="project-form-overlay" class="modal-overlay" hidden aria-modal="true" role="dialog" aria-labelledby="project-form-title">
-        <div class="modal-content">
-          <h2 id="project-form-title">Add Project</h2>
-          <form id="project-form" novalidate>
-            <input type="hidden" id="project-id" name="id">
-            <div class="form-group">
-              <label for="project-name">Project Name *</label>
-              <input type="text" id="project-name" name="name" required aria-required="true">
-              <span class="validation-msg" id="project-name-error" aria-live="polite"></span>
-            </div>
-            <div class="form-group">
-              <label for="project-client-select">Client *</label>
-              <select id="project-client-select" name="clientId" required aria-required="true">
-                <option value="">Select a client</option>
-              </select>
-              <span class="validation-msg" id="project-client-error" aria-live="polite"></span>
-            </div>
-            <div class="form-actions">
-              <button type="submit" class="btn-primary">Save</button>
-              <button type="button" id="btn-cancel-project" class="btn-outlined">Cancel</button>
-            </div>
-          </form>
-        </div>
-      </div>
-    </section>
+      <!-- Add Project Form Overlay -->    </section>
 
     <!-- Estimation Screen -->
     <section id="estimation-screen" class="screen" hidden aria-label="Estimation">
@@ -112,6 +63,12 @@
         <span id="estimation-project-name" class="subtitle"></span>
         <button id="btn-project-settings" class="btn-outlined btn-sm" hidden aria-label="Project Settings">⚙️ Project Settings</button>
       </header>
+      <div class="module-tabs" role="tablist">
+        <button id="tab-btn-estimate" class="inner-tab-btn active" data-inner-tab="estimate-panel" role="tab" aria-selected="true">Estimate</button>
+        <button id="tab-btn-cad" class="inner-tab-btn" data-inner-tab="cad-panel" role="tab">CAD Import</button>
+        <button id="tab-btn-reports" class="inner-tab-btn" data-inner-tab="reports-panel" role="tab">Reports</button>
+      </div>
+      <div id="estimate-panel" class="inner-tab-panel">
 
       <!-- Project Settings Panel (hidden by default) -->
       <div id="project-settings-panel" hidden>
@@ -125,7 +82,13 @@
       <!-- No-project notice -->
       <div id="no-project-notice" class="no-project-notice" hidden aria-live="polite">
         <span class="no-project-icon">📋</span>
-        <p>Please select a project from the <strong>Projects</strong> tab to start estimating.</p>
+        <p>Select Project context</p>
+        <div class="no-project-selector">
+          <label for="est-project-select" class="no-project-select-label"></label>
+          <select id="est-project-select" class="proc-filter no-project-select" autocomplete="off">
+            <option value="">— choose project —</option>
+          </select>
+        </div>
       </div>
 
       <!-- Category Selection Grid -->
@@ -174,13 +137,13 @@
                 &#9783;
               </button>
             </label>
-            <input type="number" id="masonry-volume" name="volume" min="0.01" step="any" required aria-required="true">
+            <input type="number" id="masonry-volume" name="volume" min="0.01" step="any" required aria-required="true" autocomplete="off">
             <span class="validation-msg" id="masonry-volume-error" aria-live="polite"></span>
 
             <!-- Quick Entry Panel -->
             <div id="quick-entry-panel" class="quick-entry-panel" hidden aria-label="Quick volume entry">
               <p class="quick-entry-hint">Enter dimensions per row: <strong>L, W, H</strong> (one row per line). Total = sum of L×W×H.</p>
-              <textarea id="quick-entry-text" class="quick-entry-textarea" rows="4" placeholder="e.g.&#10;3, 2, 1.5&#10;4, 0.5, 2&#10;2, 1, 3" aria-label="Dimension rows, comma separated, one per line" spellcheck="false"></textarea>
+              <textarea id="quick-entry-text" class="quick-entry-textarea" rows="4" placeholder="e.g.&#10;3, 2, 1.5&#10;4, 0.5, 2&#10;2, 1, 3" aria-label="Dimension rows, comma separated, one per line" spellcheck="false" autocomplete="off"></textarea>
               <div class="quick-entry-actions">
                 <button type="button" id="btn-quick-cancel" class="btn-outlined quick-entry-cancel">Cancel</button>
                 <button type="button" id="btn-quick-apply" class="btn-primary quick-entry-apply">Apply</button>
@@ -190,18 +153,18 @@
           </div>
           <div class="form-group">
             <label for="masonry-block-size">Block Size *</label>
-            <select id="masonry-block-size" name="blockSizeId" required aria-required="true">
+            <select id="masonry-block-size" name="blockSizeId" required aria-required="true" autocomplete="off">
               <option value="">Select block size</option>
             </select>
             <span class="validation-msg" id="masonry-block-size-error" aria-live="polite"></span>
           </div>
           <div class="form-group">
-            <label>Mix Ratio (Cement : Sand) *</label>
+            <fieldset class="ratio-fieldset"><legend class="ratio-legend">Mix Ratio (Cement : Sand) *</legend>
             <div class="ratio-inputs">
-              <input type="number" id="masonry-ratio-cement" name="ratioCement" min="1" step="1" value="1" required aria-label="Cement ratio" aria-required="true">
+              <input type="number" id="masonry-ratio-cement" name="ratioCement" min="1" step="1" value="1" required aria-label="Cement ratio" aria-required="true" autocomplete="off">
               <span class="ratio-separator">:</span>
-              <input type="number" id="masonry-ratio-sand" name="ratioSand" min="1" step="1" value="6" required aria-label="Sand ratio" aria-required="true">
-            </div>
+              <input type="number" id="masonry-ratio-sand" name="ratioSand" min="1" step="1" value="6" required aria-label="Sand ratio" aria-required="true" autocomplete="off">
+            </div></fieldset>
             <span class="validation-msg" id="masonry-ratio-error" aria-live="polite"></span>
           </div>
           <div class="form-actions">
@@ -218,11 +181,11 @@
               Volume (<span class="unit-label">Cft</span>) *
               <button type="button" id="btn-quick-entry-concreting" class="btn-icon quick-entry-icon" aria-label="Quick entry — calculate volume from dimensions" title="Quick entry: L×W×H per row">&#9783;</button>
             </label>
-            <input type="number" id="concreting-volume" name="volume" min="0.01" step="any" required aria-required="true">
+            <input type="number" id="concreting-volume" name="volume" min="0.01" step="any" required aria-required="true" autocomplete="off">
             <span class="validation-msg" id="concreting-volume-error" aria-live="polite"></span>
             <div id="quick-entry-panel-concreting" class="quick-entry-panel" hidden aria-label="Quick volume entry">
               <p class="quick-entry-hint">Enter dimensions per row: <strong>L, W, H</strong> (one row per line). Total = sum of L×W×H.</p>
-              <textarea id="quick-entry-text-concreting" class="quick-entry-textarea" rows="4" placeholder="e.g.&#10;3, 2, 1.5&#10;4, 0.5, 2&#10;2, 1, 3" aria-label="Dimension rows, comma separated, one per line" spellcheck="false"></textarea>
+              <textarea id="quick-entry-text-concreting" class="quick-entry-textarea" rows="4" placeholder="e.g.&#10;3, 2, 1.5&#10;4, 0.5, 2&#10;2, 1, 3" aria-label="Dimension rows, comma separated, one per line" spellcheck="false" autocomplete="off"></textarea>
               <div class="quick-entry-actions">
                 <button type="button" id="btn-quick-cancel-concreting" class="btn-outlined quick-entry-cancel">Cancel</button>
                 <button type="button" id="btn-quick-apply-concreting" class="btn-primary quick-entry-apply">Apply</button>
@@ -231,14 +194,14 @@
             </div>
           </div>
           <div class="form-group">
-            <label>Mix Ratio (Cement : Sand : Crush) *</label>
+            <fieldset class="ratio-fieldset"><legend class="ratio-legend">Mix Ratio (Cement : Sand : Crush) *</legend>
             <div class="ratio-inputs">
-              <input type="number" id="concreting-ratio-cement" name="ratioCement" min="1" step="1" value="1" required aria-label="Cement ratio" aria-required="true">
+              <input type="number" id="concreting-ratio-cement" name="ratioCement" min="1" step="1" value="1" required aria-label="Cement ratio" aria-required="true" autocomplete="off">
               <span class="ratio-separator">:</span>
-              <input type="number" id="concreting-ratio-sand" name="ratioSand" min="1" step="1" value="2" required aria-label="Sand ratio" aria-required="true">
+              <input type="number" id="concreting-ratio-sand" name="ratioSand" min="1" step="1" value="2" required aria-label="Sand ratio" aria-required="true" autocomplete="off">
               <span class="ratio-separator">:</span>
-              <input type="number" id="concreting-ratio-crush" name="ratioCrush" min="1" step="1" value="4" required aria-label="Crush ratio" aria-required="true">
-            </div>
+              <input type="number" id="concreting-ratio-crush" name="ratioCrush" min="1" step="1" value="4" required aria-label="Crush ratio" aria-required="true" autocomplete="off">
+            </div></fieldset>
             <span class="validation-msg" id="concreting-ratio-error" aria-live="polite"></span>
           </div>
           <div class="form-actions">
@@ -255,11 +218,11 @@
               Concrete Volume (<span class="unit-label">Cft</span>) *
               <button type="button" id="btn-quick-entry-steel" class="btn-icon quick-entry-icon" aria-label="Quick entry — calculate volume from dimensions" title="Quick entry: L×W×H per row">&#9783;</button>
             </label>
-            <input type="number" id="steel-volume" name="volume" min="0.01" step="any" required aria-required="true">
+            <input type="number" id="steel-volume" name="volume" min="0.01" step="any" required aria-required="true" autocomplete="off">
             <span class="validation-msg" id="steel-volume-error" aria-live="polite"></span>
             <div id="quick-entry-panel-steel" class="quick-entry-panel" hidden aria-label="Quick volume entry">
               <p class="quick-entry-hint">Enter dimensions per row: <strong>L, W, H</strong> (one row per line). Total = sum of L×W×H.</p>
-              <textarea id="quick-entry-text-steel" class="quick-entry-textarea" rows="4" placeholder="e.g.&#10;3, 2, 1.5&#10;4, 0.5, 2&#10;2, 1, 3" aria-label="Dimension rows, comma separated, one per line" spellcheck="false"></textarea>
+              <textarea id="quick-entry-text-steel" class="quick-entry-textarea" rows="4" placeholder="e.g.&#10;3, 2, 1.5&#10;4, 0.5, 2&#10;2, 1, 3" aria-label="Dimension rows, comma separated, one per line" spellcheck="false" autocomplete="off"></textarea>
               <div class="quick-entry-actions">
                 <button type="button" id="btn-quick-cancel-steel" class="btn-outlined quick-entry-cancel">Cancel</button>
                 <button type="button" id="btn-quick-apply-steel" class="btn-primary quick-entry-apply">Apply</button>
@@ -269,7 +232,7 @@
           </div>
           <div class="form-group">
             <label for="steel-element-type">Element Type *</label>
-            <select id="steel-element-type" name="elementType" required aria-required="true">
+            <select id="steel-element-type" name="elementType" required aria-required="true" autocomplete="off">
               <option value="">Select element type</option>
               <option value="foundation">Foundation</option>
               <option value="column">Column</option>
@@ -292,11 +255,11 @@
               Area (<span class="unit-label">Sft</span>) *
               <button type="button" id="btn-quick-entry-plastering" class="btn-icon quick-entry-icon" aria-label="Quick entry — calculate area from dimensions" title="Quick entry: L×W per row">&#9783;</button>
             </label>
-            <input type="number" id="plastering-area" name="area" min="0.01" step="any" required aria-required="true">
+            <input type="number" id="plastering-area" name="area" min="0.01" step="any" required aria-required="true" autocomplete="off">
             <span class="validation-msg" id="plastering-area-error" aria-live="polite"></span>
             <div id="quick-entry-panel-plastering" class="quick-entry-panel" hidden aria-label="Quick area entry">
               <p class="quick-entry-hint">Enter dimensions per row: <strong>L, W</strong> (one row per line). Total = sum of L×W.</p>
-              <textarea id="quick-entry-text-plastering" class="quick-entry-textarea" rows="4" placeholder="e.g.&#10;5, 3&#10;4, 2.5&#10;6, 1" aria-label="Dimension rows, comma separated, one per line" spellcheck="false"></textarea>
+              <textarea id="quick-entry-text-plastering" class="quick-entry-textarea" rows="4" placeholder="e.g.&#10;5, 3&#10;4, 2.5&#10;6, 1" aria-label="Dimension rows, comma separated, one per line" spellcheck="false" autocomplete="off"></textarea>
               <div class="quick-entry-actions">
                 <button type="button" id="btn-quick-cancel-plastering" class="btn-outlined quick-entry-cancel">Cancel</button>
                 <button type="button" id="btn-quick-apply-plastering" class="btn-primary quick-entry-apply">Apply</button>
@@ -306,16 +269,16 @@
           </div>
           <div class="form-group">
             <label for="plastering-thickness">Thickness (mm) *</label>
-            <input type="number" id="plastering-thickness" name="thicknessMm" min="1" step="1" value="12" required aria-required="true">
+            <input type="number" id="plastering-thickness" name="thicknessMm" min="1" step="1" value="12" required aria-required="true" autocomplete="off">
             <span class="validation-msg" id="plastering-thickness-error" aria-live="polite"></span>
           </div>
           <div class="form-group">
-            <label>Mix Ratio (Cement : Sand) *</label>
+            <fieldset class="ratio-fieldset"><legend class="ratio-legend">Mix Ratio (Cement : Sand) *</legend>
             <div class="ratio-inputs">
-              <input type="number" id="plastering-ratio-cement" name="ratioCement" min="1" step="1" value="1" required aria-label="Cement ratio" aria-required="true">
+              <input type="number" id="plastering-ratio-cement" name="ratioCement" min="1" step="1" value="1" required aria-label="Cement ratio" aria-required="true" autocomplete="off">
               <span class="ratio-separator">:</span>
-              <input type="number" id="plastering-ratio-sand" name="ratioSand" min="1" step="1" value="4" required aria-label="Sand ratio" aria-required="true">
-            </div>
+              <input type="number" id="plastering-ratio-sand" name="ratioSand" min="1" step="1" value="4" required aria-label="Sand ratio" aria-required="true" autocomplete="off">
+            </div></fieldset>
             <span class="validation-msg" id="plastering-ratio-error" aria-live="polite"></span>
           </div>
           <div class="form-actions">
@@ -332,11 +295,11 @@
               Floor Area (<span class="unit-label">Sft</span>) *
               <button type="button" id="btn-quick-entry-tiling" class="btn-icon quick-entry-icon" aria-label="Quick entry — calculate area from dimensions" title="Quick entry: L×W per row">&#9783;</button>
             </label>
-            <input type="number" id="tiling-floor-area" name="floorArea" min="0.01" step="any" required aria-required="true">
+            <input type="number" id="tiling-floor-area" name="floorArea" min="0.01" step="any" required aria-required="true" autocomplete="off">
             <span class="validation-msg" id="tiling-floor-area-error" aria-live="polite"></span>
             <div id="quick-entry-panel-tiling" class="quick-entry-panel" hidden aria-label="Quick area entry">
               <p class="quick-entry-hint">Enter dimensions per row: <strong>L, W</strong> (one row per line). Total = sum of L×W.</p>
-              <textarea id="quick-entry-text-tiling" class="quick-entry-textarea" rows="4" placeholder="e.g.&#10;5, 3&#10;4, 2.5&#10;6, 1" aria-label="Dimension rows, comma separated, one per line" spellcheck="false"></textarea>
+              <textarea id="quick-entry-text-tiling" class="quick-entry-textarea" rows="4" placeholder="e.g.&#10;5, 3&#10;4, 2.5&#10;6, 1" aria-label="Dimension rows, comma separated, one per line" spellcheck="false" autocomplete="off"></textarea>
               <div class="quick-entry-actions">
                 <button type="button" id="btn-quick-cancel-tiling" class="btn-outlined quick-entry-cancel">Cancel</button>
                 <button type="button" id="btn-quick-apply-tiling" class="btn-primary quick-entry-apply">Apply</button>
@@ -346,7 +309,7 @@
           </div>
           <div class="form-group">
             <label for="tiling-tile-area">Tile Area (<span class="unit-label">Sft</span>) *</label>
-            <input type="number" id="tiling-tile-area" name="tileArea" min="0.01" step="any" required aria-required="true">
+            <input type="number" id="tiling-tile-area" name="tileArea" min="0.01" step="any" required aria-required="true" autocomplete="off">
             <span class="validation-msg" id="tiling-tile-area-error" aria-live="polite"></span>
           </div>
           <div class="form-actions">
@@ -369,7 +332,7 @@
         </div>
         <div class="form-group" style="margin-top:12px;">
           <label for="estimate-tag">Tag / Notes *</label>
-          <input type="text" id="estimate-tag" placeholder="e.g. Ground Floor, East Wall (auto: Masonry-1)" maxlength="100">
+          <input type="text" id="estimate-tag" placeholder="e.g. Ground Floor, East Wall (auto: Masonry-1)" maxlength="100" autocomplete="off">
           <span class="setting-hint">Leave blank for auto-tag: {Category}-{sequence}</span>
         </div>
         <div class="form-actions">
@@ -391,23 +354,102 @@
           <span id="project-total-value"></span>
         </div>
       </div>
-    </section>
+          </div><!-- /estimate-panel -->
+      <div id="cad-panel" class="inner-tab-panel" style="display:none">
+      <header class="screen-header">
+        <h1>CAD Import</h1>
+      </header>
 
-    <!-- Reports Screen -->
-    <section id="reports-screen" class="screen" hidden aria-label="Reports">
+      <!-- No-project notice -->
+      <div id="cad-no-project" class="no-project-notice" hidden aria-live="polite">
+        <span class="no-project-icon">📋</span>
+        <p>Select Project context</p>
+        <div class="no-project-selector">
+          <label for="cad-project-select" class="no-project-select-label"></label>
+          <select id="cad-project-select" class="proc-filter no-project-select" autocomplete="off">
+            <option value="">— choose project —</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Upload zone -->
+      <div id="cad-upload-zone" class="cad-upload-zone" role="button" tabindex="0" aria-label="Upload DXF or DWG file">
+        <span class="cad-upload-icon">📐</span>
+        <p class="cad-upload-title">Drop a .dxf or .dwg file here</p>
+        <p class="cad-upload-sub">or tap to browse</p>
+        <input type="file" id="cad-file-input" accept=".dxf,.dwg" hidden aria-label="Select CAD file">
+      </div>
+      <p id="cad-file-name" class="cad-file-name"></p>
+
+      <!-- Progress bar -->
+      <div id="cad-progress" class="cad-progress" hidden>
+        <div class="cad-progress-track">
+          <div id="cad-progress-bar" class="cad-progress-bar" style="width:0%" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+        </div>
+        <p id="cad-progress-text" class="cad-progress-text"></p>
+      </div>
+
+      <!-- Grid toolbar -->
+      <div id="cad-grid" class="cad-grid-wrap" hidden>
+        <div class="cad-toolbar">
+          <div class="cad-toolbar-left">
+            <select id="cad-filter-category" class="cad-filter" aria-label="Filter by category" autocomplete="off">
+              <option value="">All categories</option>
+              <option value="masonry">Masonry</option>
+              <option value="concreting">Concreting</option>
+              <option value="steel">Steel</option>
+              <option value="plastering">Plastering</option>
+              <option value="tiling">Tiling</option>
+              <option value="annotation">Annotation</option>
+            </select>
+            <select id="cad-filter-layer" class="cad-filter" aria-label="Filter by layer" autocomplete="off">
+              <option value="">All layers</option>
+            </select>
+          </div>
+          <div class="cad-toolbar-right">
+            <span id="cad-grid-count" class="cad-count">0 entities</span>
+            <span id="cad-sel-count" class="cad-count cad-sel">0 selected</span>
+          </div>
+        </div>
+
+        <div class="cad-table-wrap">
+          <table class="cad-table" aria-label="CAD entities">
+            <thead>
+              <tr>
+                <th class="cad-th-chk"><input type="checkbox" id="cad-chk-header" aria-label="Select all visible" style="display:none"></th>
+                <th>Layer</th>
+                <th>Type</th>
+                <th>Label / Description</th>
+                <th>Value</th>
+                <th>Category</th>
+              </tr>
+            </thead>
+            <tbody id="cad-grid-body"></tbody>
+          </table>
+        </div>
+
+        <div class="cad-actions">
+          <button id="btn-cad-select-all" class="btn-outlined">Select all visible</button>
+          <button id="btn-cad-deselect-all" class="btn-outlined">Deselect all</button>
+          <button id="btn-cad-push" class="btn-primary" disabled>Push to Estimates</button>
+        </div>
+        <p id="cad-push-result" class="cad-push-result" aria-live="polite"></p>
+      </div>
+    </div>
+      <div id="reports-panel" class="inner-tab-panel" style="display:none">
       <header class="screen-header">
         <h1>Reports</h1>
       </header>
       <div class="filter-bar">
         <div class="form-group">
           <label for="report-client-select">Client</label>
-          <select id="report-client-select" aria-label="Select client for report">
+          <select id="report-client-select" aria-label="Select client for report" autocomplete="off">
             <option value="">All Clients</option>
           </select>
         </div>
         <div class="form-group">
           <label for="report-project-select">Project</label>
-          <select id="report-project-select" aria-label="Select project for report">
+          <select id="report-project-select" aria-label="Select project for report" autocomplete="off">
             <option value="">All Projects</option>
           </select>
         </div>
@@ -431,13 +473,20 @@
         </div>
       </div>
       <button id="btn-print-report" class="btn-outlined" hidden>🖨️ Print Report</button>
+    </div>
     </section>
 
+    <!-- Reports Screen -->
+    
+
     <!-- Settings Screen -->
-    <section id="settings-screen" class="screen" hidden aria-label="Settings">
-      <header class="screen-header">
-        <h1>Settings</h1>
-      </header>
+    <section id="more-screen" class="screen" hidden aria-label="More">
+      <header class="screen-header"><h1>More</h1></header>
+      <div class="module-tabs" role="tablist">
+        <button id="tab-btn-settings" class="inner-tab-btn active" data-inner-tab="settings-inner-panel" role="tab" aria-selected="true">Settings</button>
+      </div>
+      <div id="settings-inner-panel" class="inner-tab-panel">
+    <section id="settings-screen" style="display:block;padding:0" aria-label="Settings">
       <div id="settings-content">
         <!-- License Section -->
         <div class="settings-card">
@@ -446,7 +495,7 @@
           <div id="license-form-section" style="margin-top:8px;">
             <div class="form-group">
               <label for="license-key-input">License Key</label>
-              <input type="text" id="license-key-input" placeholder="Enter license key" maxlength="500">
+              <input type="text" id="license-key-input" placeholder="Enter license key" maxlength="500" autocomplete="off">
             </div>
             <button id="btn-activate-license" class="btn-outlined btn-sm">Activate</button>
             <button id="btn-remove-license" class="btn-outlined btn-sm" hidden style="color:var(--danger);border-color:var(--danger);">Remove License</button>
@@ -494,32 +543,32 @@
           <p class="setting-hint">Core constants used in all calculations. Edit to match your local standards.</p>
           <div class="form-group" style="margin-top:12px;">
             <label for="cement-bag-cft">Cement Bag Volume (Cft)</label>
-            <input type="number" id="cement-bag-cft" step="0.01" min="0.1" value="1.25">
+            <input type="number" id="cement-bag-cft" step="0.01" min="0.1" value="1.25" autocomplete="off">
             <span class="setting-hint">Volume of 1 bag of cement in cubic feet (standard: 1.25)</span>
           </div>
           <div class="form-group">
             <label for="cement-bag-cum">Cement Bag Volume (Cu.m)</label>
-            <input type="number" id="cement-bag-cum" step="0.001" min="0.001" value="0.035">
+            <input type="number" id="cement-bag-cum" step="0.001" min="0.001" value="0.035" autocomplete="off">
             <span class="setting-hint">Volume of 1 bag of cement in cubic meters (standard: 0.035)</span>
           </div>
           <div class="form-group">
             <label for="mortar-factor-imperial">Dry Volume Factor (Imperial)</label>
-            <input type="number" id="mortar-factor-imperial" step="0.01" min="1" value="1.33">
+            <input type="number" id="mortar-factor-imperial" step="0.01" min="1" value="1.33" autocomplete="off">
             <span class="setting-hint">Dry mortar volume = wet volume × this factor (standard: 1.33)</span>
           </div>
           <div class="form-group">
             <label for="mortar-factor-metric">Dry Volume Factor (Metric)</label>
-            <input type="number" id="mortar-factor-metric" step="0.01" min="1" value="1.33">
+            <input type="number" id="mortar-factor-metric" step="0.01" min="1" value="1.33" autocomplete="off">
             <span class="setting-hint">Same factor for metric system</span>
           </div>
           <div class="form-group">
             <label for="concrete-density">Concrete Density (kg/Cu.m)</label>
-            <input type="number" id="concrete-density" step="10" min="1000" value="2400">
+            <input type="number" id="concrete-density" step="10" min="1000" value="2400" autocomplete="off">
             <span class="setting-hint">Weight of concrete per cubic meter (standard: 2400)</span>
           </div>
           <div class="form-group">
             <label for="mortar-joint-input">Mortar Joint Thickness (inches)</label>
-            <input type="number" id="mortar-joint-input" step="0.05" min="0.1" max="2" value="0.25">
+            <input type="number" id="mortar-joint-input" step="0.05" min="0.1" max="2" value="0.25" autocomplete="off">
             <span class="setting-hint">Thickness between bricks. Each brick gets half of this value.</span>
           </div>
           <button id="btn-save-assumptions" class="btn-outlined btn-sm">Save All</button>
@@ -562,85 +611,288 @@
           <input type="file" id="import-file-input" accept=".json" hidden aria-hidden="true">
         </div>
       </div>
-    </section>
-
+    </section><!-- /settings -->
+      </div><!-- /settings-panel -->
+    </section><!-- /more-screen -->
 
     <!-- CAD Import Screen -->
-    <section id="cad-screen" class="screen" hidden aria-label="CAD Import">
+    
+
+
+    <!-- Workforce Screen -->
+    <section id="workforce-screen" class="screen" hidden aria-label="Workforce">
+      <header class="screen-header"><h1>Workforce</h1></header>
+      <div class="module-tabs" role="tablist">
+        <button id="tab-btn-workers" class="inner-tab-btn active" data-inner-tab="workers-panel" role="tab" aria-selected="true">Workers</button>
+        <button id="tab-btn-schedule" class="inner-tab-btn" data-inner-tab="schedule-panel" role="tab">Schedule</button>
+        <button id="tab-btn-procurement" class="inner-tab-btn" data-inner-tab="procurement-panel" role="tab">Procurement</button>
+      </div>
+      <div id="workers-panel" class="inner-tab-panel">
+        <div class="panel-toolbar" style="margin-bottom:10px">
+          <select id="wf-filter-team" class="proc-filter" aria-label="Filter by team" autocomplete="off"><option value="">All teams</option></select>
+          <button id="btn-wf-add" class="btn-primary screen-header-btn">+ Add Worker</button>
+        </div>
+      <div id="workforce-empty" class="empty-state">
+        <p>No workers added yet. Tap <strong>+ Add Worker</strong> to build your team pool.</p>
+      </div>
+      <div id="workforce-list"></div>
+
+      <!-- Worker form overlay -->      </div><!-- /workers-panel -->
+      <div id="schedule-panel" class="inner-tab-panel" style="display:none">
       <header class="screen-header">
-        <h1>CAD Import</h1>
+        <h1>Schedule</h1>
+        <span id="sched-project-name" class="screen-header-sub"></span>
       </header>
-
-      <!-- No-project notice -->
-      <div id="cad-no-project" class="no-project-notice" hidden aria-live="polite">
+      <div id="sched-no-project" class="no-project-notice" hidden>
         <span class="no-project-icon">📋</span>
-        <p>Please select a project from the <strong>Projects</strong> tab before importing.</p>
-      </div>
-
-      <!-- Upload zone -->
-      <div id="cad-upload-zone" class="cad-upload-zone" role="button" tabindex="0" aria-label="Upload DXF or DWG file">
-        <span class="cad-upload-icon">📐</span>
-        <p class="cad-upload-title">Drop a .dxf or .dwg file here</p>
-        <p class="cad-upload-sub">or tap to browse</p>
-        <input type="file" id="cad-file-input" accept=".dxf,.dwg" hidden aria-label="Select CAD file">
-      </div>
-      <p id="cad-file-name" class="cad-file-name"></p>
-
-      <!-- Progress bar -->
-      <div id="cad-progress" class="cad-progress" hidden>
-        <div class="cad-progress-track">
-          <div id="cad-progress-bar" class="cad-progress-bar" style="width:0%" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+        <p>Select Project context</p>
+        <div class="no-project-selector">
+          <label for="sched-project-select" class="no-project-select-label"></label>
+          <select id="sched-project-select" class="proc-filter no-project-select" autocomplete="off">
+            <option value="">— choose project —</option>
+          </select>
         </div>
-        <p id="cad-progress-text" class="cad-progress-text"></p>
       </div>
 
-      <!-- Grid toolbar -->
-      <div id="cad-grid" class="cad-grid-wrap" hidden>
-        <div class="cad-toolbar">
-          <div class="cad-toolbar-left">
-            <select id="cad-filter-category" class="cad-filter" aria-label="Filter by category">
-              <option value="">All categories</option>
-              <option value="masonry">Masonry</option>
-              <option value="concreting">Concreting</option>
-              <option value="steel">Steel</option>
-              <option value="plastering">Plastering</option>
-              <option value="tiling">Tiling</option>
-              <option value="annotation">Annotation</option>
-            </select>
-            <select id="cad-filter-layer" class="cad-filter" aria-label="Filter by layer">
-              <option value="">All layers</option>
-            </select>
-          </div>
-          <div class="cad-toolbar-right">
-            <span id="cad-grid-count" class="cad-count">0 entities</span>
-            <span id="cad-sel-count" class="cad-count cad-sel">0 selected</span>
-          </div>
-        </div>
+      <!-- Tab bar -->
+      <div class="module-tabs" role="tablist">
+        <button class="sched-tab-btn active" data-tab="assign" role="tab" aria-selected="true">Assign</button>
+        <button class="sched-tab-btn" data-tab="tasks"  role="tab">Tasks</button>
+        <button class="sched-tab-btn" data-tab="gantt"  role="tab">Gantt</button>
+      </div>
 
-        <div class="cad-table-wrap">
-          <table class="cad-table" aria-label="CAD entities">
-            <thead>
-              <tr>
-                <th class="cad-th-chk"><input type="checkbox" id="cad-chk-header" aria-label="Select all visible" style="display:none"></th>
-                <th>Layer</th>
-                <th>Type</th>
-                <th>Label / Description</th>
-                <th>Value</th>
-                <th>Category</th>
-              </tr>
-            </thead>
-            <tbody id="cad-grid-body"></tbody>
+      <!-- Assign panel -->
+      <div id="sched-panel-assign" class="sched-tab-panel">
+        <p class="panel-hint">Assign workers to each estimate item. Duration is calculated automatically.</p>
+        <div id="sched-estimates-list"></div>
+      </div>
+
+      <!-- Tasks panel -->
+      <div id="sched-panel-tasks" class="sched-tab-panel" hidden>
+        <div class="panel-toolbar">
+          <p class="panel-hint">Generate tasks from confirmed assignments, then track status.</p>
+          <button id="btn-generate-tasks" class="btn-primary">Generate Tasks</button>
+        </div>
+        <div id="tasks-empty" class="empty-state" hidden>
+          <p>No tasks yet. Assign workers to estimates then tap <strong>Generate Tasks</strong>.</p>
+        </div>
+        <div id="tasks-list"></div>
+      </div>
+
+      <!-- Gantt panel -->
+      <div id="sched-panel-gantt" class="sched-tab-panel" hidden>
+        <p class="panel-hint">Gantt view of all tasks. <span class="gantt-legend-todo">■</span> To do &nbsp; <span class="gantt-legend-inprogress">■</span> In progress &nbsp; <span class="gantt-legend-done">■</span> Done</p>
+        <div id="gantt-svg-container" class="gantt-wrap"></div>
+      </div>
+
+      <!-- Assignment overlay -->    </div>
+      <div id="procurement-panel" class="inner-tab-panel" style="display:none">
+      <header class="screen-header">
+        <h1>Procurement</h1>
+        <span id="proc-project-name" class="screen-header-sub"></span>
+      </header>
+      <div id="proc-no-project" class="no-project-notice" hidden>
+        <span class="no-project-icon">📋</span>
+        <p>Select Project context</p>
+        <div class="no-project-selector">
+          <label for="proc-project-select" class="no-project-select-label"></label>
+          <select id="proc-project-select" class="proc-filter no-project-select" autocomplete="off">
+            <option value="">— choose project —</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Tab bar -->
+      <div class="module-tabs" role="tablist">
+        <button class="proc-tab-btn active" data-tab="materials"  role="tab" aria-selected="true">Materials</button>
+        <button class="proc-tab-btn" data-tab="vendors"    role="tab">Vendors</button>
+        <button class="proc-tab-btn" data-tab="rfq"        role="tab">RFQ</button>
+        <button class="proc-tab-btn" data-tab="saved-rfqs" role="tab">Saved RFQs</button>
+        <button class="proc-tab-btn" data-tab="pos"        role="tab">Purchase Orders</button>
+      </div>
+
+      <!-- Materials panel -->
+      <div id="proc-panel-materials" class="proc-tab-panel">
+        <p class="panel-hint">Select the materials to include in your RFQ, then tap <strong>Generate RFQ</strong>.</p>
+        <!-- Toolbar -->
+        <div id="proc-mat-toolbar" class="panel-toolbar" style="display:none;margin-bottom:10px;flex-wrap:wrap;gap:8px">
+          <label class="mat-select-all-label">
+            <input type="checkbox" id="proc-select-all" checked aria-label="Select all materials">
+            <span id="proc-sel-count">All</span> materials selected
+          </label>
+          <button id="btn-rfq-from-materials" class="btn-primary btn-sm">📋 Generate RFQ</button>
+        </div>
+        <div class="proc-table-wrap">
+          <table class="proc-table" aria-label="Material rollup">
+            <thead><tr><th style="width:36px"><span class="sr-only">Select</span></th><th>Category</th><th>Material</th><th>Qty</th><th>Unit</th></tr></thead>
+            <tbody id="proc-materials-table"></tbody>
           </table>
         </div>
-
-        <div class="cad-actions">
-          <button id="btn-cad-select-all" class="btn-outlined">Select all visible</button>
-          <button id="btn-cad-deselect-all" class="btn-outlined">Deselect all</button>
-          <button id="btn-cad-push" class="btn-primary" disabled>Push to Estimates</button>
-        </div>
-        <p id="cad-push-result" class="cad-push-result" aria-live="polite"></p>
       </div>
+
+      <!-- Vendors panel -->
+      <div id="proc-panel-vendors" class="proc-tab-panel" hidden>
+        <div class="panel-toolbar">
+          <p class="panel-hint">Maintain your vendor list with material specialities.</p>
+          <button id="btn-vendor-add" class="btn-primary">+ Add Vendor</button>
+        </div>
+        <div id="proc-vendors-empty" class="empty-state">
+          <p>No vendors yet. Tap <strong>+ Add Vendor</strong> to add suppliers.</p>
+        </div>
+        <div id="proc-vendors-list"></div>
+      </div>
+
+      <!-- RFQ panel -->
+      <div id="proc-panel-rfq" class="proc-tab-panel" hidden>
+        <p class="panel-hint">Generate a printable Request for Quotation for a vendor.</p>
+        <div class="form-group rfq-vendor-row">
+          <label for="rfq-vendor-select">Select vendor</label>
+          <select id="rfq-vendor-select" class="proc-filter" autocomplete="off"></select>
+        </div>
+        <div class="form-actions rfq-actions">
+          <button id="btn-generate-rfq" class="btn-primary">Generate RFQ</button>
+          <button id="btn-save-rfq" class="btn-outlined" hidden>💾 Save RFQ</button>
+          <button id="btn-print-rfq" class="btn-outlined" hidden>🖨️ Print RFQ</button>
+        </div>
+        <div id="rfq-preview" class="rfq-preview-wrap"></div>
+      </div>
+
+      <!-- Saved RFQs panel -->
+      <div id="proc-panel-saved-rfqs" class="proc-tab-panel" hidden>
+        <p class="panel-hint">All RFQs saved against this project. Open any RFQ to enter vendor prices and generate a Purchase Order.</p>
+        <div id="saved-rfqs-list"></div>
+        <div id="saved-rfqs-empty" class="empty-state" hidden><p>No saved RFQs yet. Generate and save an RFQ first.</p></div>
+      </div>
+
+      <!-- Purchase Orders panel -->
+      <div id="proc-panel-pos" class="proc-tab-panel" hidden>
+        <p class="panel-hint">All Purchase Orders raised for this project.</p>
+        <div id="pos-list"></div>
+        <div id="pos-empty" class="empty-state" hidden><p>No purchase orders yet. Open a saved RFQ to create one.</p></div>
+      </div>
+
+      <!-- Vendor form overlay -->    </div>
     </section>
+
+    <!-- Schedule Screen -->
+    
+
+    <!-- Procurement Screen -->
+    
+
+
+    <!-- Modal overlays at main level -->
+    <div id="client-form-overlay" class="modal-overlay" hidden aria-modal="true" role="dialog" aria-labelledby="client-form-title">
+        <div class="modal-content">
+          <h2 id="client-form-title">Add Client</h2>
+          <form id="client-form" novalidate>
+            <input type="hidden" id="client-id" name="id">
+            <div class="form-group">
+              <label for="client-name">Client Name *</label>
+              <input type="text" id="client-name" name="name" required autocomplete="name" aria-required="true">
+              <span class="validation-msg" id="client-name-error" aria-live="polite"></span>
+            </div>
+            <div class="form-group">
+              <label for="client-address">Address</label>
+              <input type="text" id="client-address" name="address" autocomplete="street-address">
+            </div>
+            <div class="form-group">
+              <label for="client-mobile">Mobile</label>
+              <input type="tel" id="client-mobile" name="mobile" autocomplete="tel">
+            </div>
+            <div class="form-actions">
+              <button type="submit" class="btn-primary">Save</button>
+              <button type="button" id="btn-cancel-client" class="btn-outlined">Cancel</button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+          <div id="project-form-overlay" class="modal-overlay" hidden aria-modal="true" role="dialog" aria-labelledby="project-form-title">
+        <div class="modal-content">
+          <h2 id="project-form-title">Add Project</h2>
+          <form id="project-form" novalidate>
+            <input type="hidden" id="project-id" name="id">
+            <div class="form-group">
+              <label for="project-name">Project Name *</label>
+              <input type="text" id="project-name" name="name" required aria-required="true" autocomplete="off">
+              <span class="validation-msg" id="project-name-error" aria-live="polite"></span>
+            </div>
+            <div class="form-group">
+              <label for="project-client-select">Client *</label>
+              <select id="project-client-select" name="clientId" required aria-required="true" autocomplete="off">
+                <option value="">Select a client</option>
+              </select>
+              <span class="validation-msg" id="project-client-error" aria-live="polite"></span>
+            </div>
+            <div class="form-actions">
+              <button type="submit" class="btn-primary">Save</button>
+              <button type="button" id="btn-cancel-project" class="btn-outlined">Cancel</button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+          <div id="workforce-form-overlay" class="modal-overlay" hidden aria-modal="true">
+        <div class="modal-content">
+          <h2 id="workforce-form-title">Add Worker</h2>
+          <div class="form-group">
+            <label for="wf-name">Name *</label>
+            <input type="text" id="wf-name" placeholder="Worker name" autocomplete="name">
+          </div>
+          <div class="form-group">
+            <label for="wf-team">Team</label>
+            <input type="text" id="wf-team" placeholder="e.g. Team A, Foundation Crew" autocomplete="organization">
+          </div>
+          <div class="form-group">
+            <label for="wf-phone">Phone</label>
+            <input type="tel" id="wf-phone" placeholder="+91 ..." autocomplete="tel">
+          </div>
+          <div class="form-group">
+            <fieldset class="ratio-fieldset"><legend class="ratio-legend">Skills</legend>
+            <div id="wf-skills-grid" class="skill-chips-grid"></div>
+            </fieldset>
+          </div>
+          <div class="form-actions">
+            <button id="btn-wf-cancel" class="btn-outlined">Cancel</button>
+            <button id="btn-wf-save" class="btn-primary">Save</button>
+          </div>
+        </div>
+      </div>
+
+          <div id="assign-overlay" class="modal-overlay" hidden aria-modal="true">
+        <div class="modal-content modal-wide">
+          <h2 id="assign-est-title">Assign Workers</h2>
+          <p id="assign-est-detail" class="assign-detail-text"></p>
+          <div id="assign-workers-container" class="assign-workers-wrap"></div>
+          <div class="assign-duration-row">
+            <span class="assign-duration-label">Estimated duration:</span>
+            <span id="assign-duration" class="assign-duration-val">—</span>
+          </div>
+          <div class="form-actions">
+            <button id="btn-assign-close" class="btn-outlined">Cancel</button>
+            <button id="btn-assign-save" class="btn-primary">Save Assignment</button>
+          </div>
+        </div>
+      </div>
+
+          <div id="vendor-form-overlay" class="modal-overlay" hidden aria-modal="true">
+        <div class="modal-content">
+          <h2>Vendor Details</h2>
+          <div class="form-group"><label for="v-name">Company name *</label><input type="text" id="v-name" autocomplete="organization"></div>
+          <div class="form-group"><label for="v-contact">Contact person</label><input type="text" id="v-contact" autocomplete="name"></div>
+          <div class="form-group"><label for="v-phone">Phone</label><input type="tel" id="v-phone" autocomplete="tel"></div>
+          <div class="form-group"><label for="v-email">Email</label><input type="email" id="v-email" autocomplete="email"></div>
+          <div class="form-group">
+            <label for="v-materials">Materials supplied <span class="hint-text">(comma separated, e.g. cement, sand, blocks)</span></label>
+            <input type="text" id="v-materials" placeholder="cement, sand, gravel" autocomplete="off">
+          </div>
+          <div class="form-actions">
+            <button id="btn-vendor-cancel" class="btn-outlined">Cancel</button>
+            <button id="btn-vendor-save" class="btn-primary">Save Vendor</button>
+          </div>
+        </div>
+      </div>
 
   </main>
 
@@ -651,34 +903,23 @@
 
   <!-- Bottom Navigation -->
   <nav id="bottom-nav" class="bottom-nav" aria-label="Main navigation">
-    <button class="nav-tab active" data-screen="clients-screen" aria-label="Clients" aria-current="page">
-      <span class="nav-icon">👥</span>
-      <span class="nav-label">Clients</span>
-    </button>
-    <button class="nav-tab" data-screen="projects-screen" aria-label="Projects">
-      <span class="nav-icon">📋</span>
-      <span class="nav-label">Projects</span>
+    <button class="nav-tab active" data-screen="projects-screen" aria-label="Projects" aria-current="page">
+      <span class="nav-icon">🏗️</span><span class="nav-label">Projects</span>
     </button>
     <button class="nav-tab" data-screen="estimation-screen" aria-label="Estimate">
-      <span class="nav-icon">🧮</span>
-      <span class="nav-label">Estimate</span>
+      <span class="nav-icon">🧮</span><span class="nav-label">Estimate</span>
     </button>
-    <button class="nav-tab" data-screen="cad-screen" aria-label="CAD Import">
-      <span class="nav-icon">📐</span>
-      <span class="nav-label">CAD</span>
+    <button class="nav-tab" data-screen="workforce-screen" aria-label="Workforce">
+      <span class="nav-icon">👷</span><span class="nav-label">Workforce</span>
     </button>
-    <button class="nav-tab" data-screen="reports-screen" aria-label="Reports">
-      <span class="nav-icon">📊</span>
-      <span class="nav-label">Reports</span>
-    </button>
-    <button class="nav-tab" data-screen="settings-screen" aria-label="Settings">
-      <span class="nav-icon">⚙️</span>
-      <span class="nav-label">Settings</span>
+    <button class="nav-tab" data-screen="more-screen" aria-label="More">
+      <span class="nav-icon">⚙️</span><span class="nav-label">More</span>
     </button>
   </nav>
 
   <!-- Scripts in dependency order -->
   <script src="js/license.js"></script>
+  <script src="js/db-local.js"></script>
   <script src="js/db.js"></script>
   <script src="js/formula-engine.js"></script>
   <script src="js/config.js"></script>
@@ -689,6 +930,9 @@
   <script src="js/reports.js"></script>
   <script src="js/settings.js"></script>
   <script src="js/cad.js"></script>
+  <script src="js/workforce.js"></script>
+  <script src="js/schedule.js"></script>
+  <script src="js/procurement.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>
