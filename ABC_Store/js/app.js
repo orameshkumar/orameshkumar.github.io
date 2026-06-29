@@ -75,6 +75,41 @@ function setupTabNavigation() {
   });
 }
 
+function setupMoreMenu() {
+  var moreBtn = document.getElementById('more-btn');
+  var moreMenu = document.getElementById('more-menu');
+  var backdrop = document.getElementById('more-menu-backdrop');
+
+  if (!moreBtn || !moreMenu || !backdrop) return;
+
+  moreBtn.addEventListener('click', function () {
+    var isOpen = !moreMenu.hidden;
+    moreMenu.hidden = isOpen;
+    backdrop.hidden = isOpen;
+  });
+
+  backdrop.addEventListener('click', function () {
+    moreMenu.hidden = true;
+    backdrop.hidden = true;
+  });
+
+  moreMenu.querySelectorAll('.more-menu-item').forEach(function (item) {
+    item.addEventListener('click', function () {
+      var screenId = item.getAttribute('data-screen');
+      if (screenId) {
+        navigateToScreen(screenId);
+        // Remove active from nav tabs (More screens aren't direct tabs)
+        document.querySelectorAll('.nav-tab').forEach(function (t) {
+          t.classList.remove('active');
+          t.removeAttribute('aria-current');
+        });
+      }
+      moreMenu.hidden = true;
+      backdrop.hidden = true;
+    });
+  });
+}
+
 /**
  * Initialize the application.
  * Sets up database, license, tab navigation, and defaults to Item Master screen.
@@ -124,6 +159,7 @@ async function initApp() {
 
   // Set up tab navigation
   setupTabNavigation();
+  setupMoreMenu();
 
   // Default to Item Master screen
   navigateToScreen('item-master-screen');

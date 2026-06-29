@@ -164,6 +164,20 @@
         </section>
     </main>
 
+    <!-- More popup menu -->
+    <div id="more-menu" class="more-menu" hidden>
+      <button class="more-menu-item" data-screen="history-screen">
+        <span class="more-menu-icon">📋</span><span>History</span>
+      </button>
+      <button class="more-menu-item" data-screen="reports-screen">
+        <span class="more-menu-icon">📊</span><span>Reports</span>
+      </button>
+      <button class="more-menu-item" data-screen="settings-screen">
+        <span class="more-menu-icon">⚙️</span><span>Settings</span>
+      </button>
+    </div>
+    <div id="more-menu-backdrop" class="more-menu-backdrop" hidden></div>
+
     <nav class="bottom-nav" aria-label="Main navigation">
         <button class="nav-tab active" data-screen="item-master-screen" aria-current="page">
             <span class="nav-icon">📦</span>
@@ -173,17 +187,9 @@
             <span class="nav-icon">🧾</span>
             <span class="nav-label">Billing</span>
         </button>
-        <button class="nav-tab" data-screen="history-screen">
-            <span class="nav-icon">📋</span>
-            <span class="nav-label">History</span>
-        </button>
-        <button class="nav-tab" data-screen="reports-screen">
-            <span class="nav-icon">📊</span>
-            <span class="nav-label">Reports</span>
-        </button>
-        <button class="nav-tab" data-screen="settings-screen">
-            <span class="nav-icon">⚙️</span>
-            <span class="nav-label">Settings</span>
+        <button class="nav-tab" id="more-btn">
+            <span class="nav-icon">⋯</span>
+            <span class="nav-label">More</span>
         </button>
     </nav>
 

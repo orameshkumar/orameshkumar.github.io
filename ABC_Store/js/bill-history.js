@@ -128,6 +128,7 @@ const BillHistory = (function () {
     html += '<span class="bill-number">' + escapeHtml(bill.billNumber) + '</span>';
     html += '<span class="bill-card-date">' + escapeHtml(formattedDate) + '</span>';
     html += '<span class="bill-card-total">' + escapeHtml(formattedTotal) + '</span>';
+    html += '<button class="bill-delete-btn" data-bill-id="' + bill.id + '" aria-label="Delete bill ' + escapeHtml(bill.billNumber) + '">🗑️</button>';
     html += '</div>';
 
     // Detail view (Task 7.3)
@@ -217,6 +218,42 @@ const BillHistory = (function () {
         }
       });
     });
+
+    // Delete buttons
+    var deleteBtns = historyListEl.querySelectorAll('.bill-delete-btn');
+    deleteBtns.forEach(function (btn) {
+      btn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var billId = btn.getAttribute('data-bill-id');
+        if (billId) {
+          handleDeleteBill(billId);
+        }
+      });
+    });
+  }
+
+  // ─── Delete Bill ───────────────────────────────────────────────────────────
+
+  /**
+   * Delete a bill after confirmation.
+   * Removes from IndexedDB and refreshes the list.
+   * @param {string} billId - The bill ID to delete
+   */
+  async function handleDeleteBill(billId) {
+    var bill = lastRenderedBills ? lastRenderedBills.find(function (b) { return b.id === billId; }) : null;
+    var billNum = bill ? bill.billNumber : billId;
+
+    var confirmed = confirm('Delete bill "' + billNum + '"? This cannot be undone.');
+    if (!confirmed) return;
+
+    try {
+      await DB.deleteBill(billId);
+      // Refresh the list
+      loadAndRenderBills();
+    } catch (err) {
+      console.error('Error deleting bill:', err);
+      alert('Failed to delete bill.');
+    }
   }
 
   // ─── WhatsApp Share (Task 7.4) ─────────────────────────────────────────────
