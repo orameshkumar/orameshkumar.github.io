@@ -118,6 +118,8 @@ const Settings = (function () {
 
     var guestFeeVal = parseFloat(guestFeeInput ? guestFeeInput.value : 50) || 50;
     if (guestFeeVal <= 0)   { if (errorEl) errorEl.textContent = 'Default guest fee must be greater than zero.'; return; }
+    var guestFeeLimit = typeof License !== 'undefined' ? License.checkGuestFee(guestFeeVal) : null;
+    if (guestFeeLimit) { if (errorEl) errorEl.textContent = guestFeeLimit; return; }
 
     setAppName(appVal);
     setUpiId(upiVal);

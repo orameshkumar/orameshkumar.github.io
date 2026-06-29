@@ -1,6 +1,69 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <!-- ══ Inline license limits — runs before any JS file, cannot be overridden ══ -->
+  <script>
+    // Version stamp — bump this with every release
+    window._APP_VERSION = '20';
+
+    // Self-contained license check — does NOT depend on license.js
+    window._isLicensed = (function () {
+      try {
+        var raw = localStorage.getItem('pys_license_key') || '';
+        var d   = JSON.parse(atob(raw.trim()));
+        return !!(d && d.n && d.h && typeof d.h === 'string' && d.h.length === 64);
+      } catch (e) { return false; }
+    }());
+
+    // Hard limits — single source of truth for entire app
+    window._LIMITS = { MAX_MEMBERS: 20, MAX_MONTHLY_FEE: 1000, MAX_GUEST_FEE: 1000 };
+
+    // Global guard functions — called from monthly.js, guestplay.js, members.js
+    window._checkMonthlyFee = function (amount) {
+      if (window._isLicensed) return null;
+      amount = parseFloat(amount) || 0;
+      if (amount > window._LIMITS.MAX_MONTHLY_FEE) {
+        return 'Unlicensed limit: monthly fee/payment cannot exceed ₹' + window._LIMITS.MAX_MONTHLY_FEE + '.\nYou entered ₹' + amount.toFixed(2) + '.\nActivate a license to remove this restriction.';
+      }
+      return null;
+    };
+
+    window._checkGuestFee = function (amount) {
+      if (window._isLicensed) return null;
+      amount = parseFloat(amount) || 0;
+      if (amount > window._LIMITS.MAX_GUEST_FEE) {
+        return 'Unlicensed limit: guest fee/payment cannot exceed ₹' + window._LIMITS.MAX_GUEST_FEE + '.\nYou entered ₹' + amount.toFixed(2) + '.\nActivate a license to remove this restriction.';
+      }
+      return null;
+    };
+
+    window._checkMemberLimit = async function () {
+      if (window._isLicensed) return null;
+      try {
+        // Count active members directly from IndexedDB
+        var count = await new Promise(function (resolve) {
+          var req = indexedDB.open('PayYourShuttle');
+          req.onsuccess = function (e) {
+            var db = e.target.result;
+            if (!db.objectStoreNames.contains('members')) { resolve(0); return; }
+            var tx    = db.transaction('members', 'readonly');
+            var store = tx.objectStore('members');
+            var all   = store.getAll();
+            all.onsuccess = function () {
+              var active = (all.result || []).filter(function (m) { return m.status !== 'inactive'; });
+              resolve(active.length);
+            };
+            all.onerror = function () { resolve(0); };
+          };
+          req.onerror = function () { resolve(0); };
+        });
+        if (count >= window._LIMITS.MAX_MEMBERS) {
+          return 'Unlicensed limit reached: max ' + window._LIMITS.MAX_MEMBERS + ' active members.\nActivate a license to add more.';
+        }
+      } catch (e) {}
+      return null;
+    };
+  </script>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <meta name="theme-color" content="#0d1f15">
@@ -404,6 +467,26 @@
 </main>
 
 <!-- ══ Bottom Navigation ══════════════════════════════ -->
+<!-- ══ More popup menu ════════════════════════════════ -->
+<div id="more-menu" class="more-menu" hidden>
+  <button class="more-menu-item" data-screen="history-screen">
+    <span class="more-menu-icon">📋</span><span>History</span>
+  </button>
+  <button class="more-menu-item" data-screen="contributions-screen">
+    <span class="more-menu-icon">💰</span><span>Fees</span>
+  </button>
+  <button class="more-menu-item" data-screen="expenses-screen">
+    <span class="more-menu-icon">🧾</span><span>Expenses</span>
+  </button>
+  <button class="more-menu-item" data-screen="reports-screen">
+    <span class="more-menu-icon">📊</span><span>Reports</span>
+  </button>
+  <button class="more-menu-item" data-screen="settings-screen">
+    <span class="more-menu-icon">⚙️</span><span>Settings</span>
+  </button>
+</div>
+<div id="more-menu-backdrop" class="more-menu-backdrop" hidden></div>
+
 <nav class="nav-bar">
   <button class="nav-tab active" data-screen="members-screen">
     <span class="nav-icon">👥</span><span>Members</span>
@@ -414,20 +497,9 @@
   <button class="nav-tab" data-screen="guest-screen">
     <span class="nav-icon">🏸</span><span>Guest</span>
   </button>
-  <button class="nav-tab" data-screen="contributions-screen">
-    <span class="nav-icon">💰</span><span>Fees</span>
-  </button>
-  <button class="nav-tab" data-screen="expenses-screen">
-    <span class="nav-icon">🧾</span><span>Expenses</span>
-  </button>
-  <button class="nav-tab" data-screen="history-screen">
-    <span class="nav-icon">📋</span><span>History</span>
-  </button>
-  <button class="nav-tab" data-screen="reports-screen">
-    <span class="nav-icon">📊</span><span>Reports</span>
-  </button>
-  <button class="nav-tab" data-screen="settings-screen">
-    <span class="nav-icon">⚙️</span><span>Settings</span>
+
+  <button class="nav-tab" id="more-btn">
+    <span class="nav-icon">⋯</span><span>More</span>
   </button>
 </nav>
 

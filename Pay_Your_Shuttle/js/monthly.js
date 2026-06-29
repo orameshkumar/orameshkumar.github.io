@@ -215,6 +215,10 @@ const Monthly = (function () {
     var amount = parseFloat(amountInput ? amountInput.value : 0);
     if (isNaN(amount) || amount <= 0) { alert('Enter a valid amount.'); return; }
 
+    // License limit — uses inline global defined in index.html (always available)
+    var _mFeeErr = window._checkMonthlyFee ? window._checkMonthlyFee(amount) : null;
+    if (_mFeeErr) { alert(_mFeeErr); return; }
+
     var dateInput = document.getElementById('monthly-ref-date');
     var refDate   = dateInput ? dateInput.value : getTodayISO();
     var payment   = { id: DB.generateId(), memberId: _pendingMemberId, date: refDate, amount: amount, type: 'monthly', createdAt: new Date().toISOString() };

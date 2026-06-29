@@ -1,14 +1,24 @@
 var App = (function () {
   'use strict';
   var currentScreen = 'members-screen';
+  var moreScreens   = ['history-screen','contributions-screen','expenses-screen','reports-screen','settings-screen'];
 
   async function initApp() {
     try {
       Settings.applyTheme();
-      await License.init();
+      // Clear any stale/invalid license key from previous versions
+      try {
+        var storedKey = localStorage.getItem('pys_license_key');
+        if (storedKey) {
+          // Validate format — must be base64 JSON with { n, h } where h is 64 chars
+          var valid = false;
+          try { var d = JSON.parse(atob(storedKey.trim())); valid = !!(d && d.n && d.h && d.h.length === 64); } catch(e) {}
+          if (!valid) { localStorage.removeItem('pys_license_key'); console.log('Cleared invalid license key'); }
+        }
+      } catch(e) {}
       await DB.init();
       Settings.init();
-      initLicenseUI();
+      if (typeof License !== 'undefined') License.init();
       Members.init();
       Contributions.init();
       Monthly.init();
@@ -27,63 +37,6 @@ var App = (function () {
       console.error('App init failed:', e);
       alert('Could not initialize app: ' + e.message);
     }
-  }
-
-  function initLicenseUI() {
-    var activateBtn   = document.getElementById('license-activate-btn');
-    var deactivateBtn = document.getElementById('license-deactivate-btn');
-    var keyInput      = document.getElementById('license-key-input');
-    var statusText    = document.getElementById('license-status-text');
-    var errorEl       = document.getElementById('license-error');
-    var successEl     = document.getElementById('license-success-msg');
-    var banner        = document.getElementById('license-banner');
-
-    function updateLicenseDisplay() {
-      var licensed = License.isLicensed();
-      var name     = License.getLicenseeName();
-
-      if (statusText) {
-        statusText.textContent = licensed
-          ? 'Status: Licensed to ' + name
-          : 'Status: Unlicensed';
-        statusText.style.color = licensed ? 'var(--success, #4caf50)' : 'var(--text2)';
-      }
-      if (activateBtn)   activateBtn.hidden   = licensed;
-      if (deactivateBtn) deactivateBtn.hidden = !licensed;
-      if (keyInput)      keyInput.hidden      = licensed;
-      if (banner) banner.hidden = licensed;
-    }
-
-    if (activateBtn) {
-      activateBtn.addEventListener('click', async function () {
-        if (errorEl) errorEl.textContent = '';
-        if (successEl) successEl.setAttribute('hidden', '');
-
-        var key = keyInput ? keyInput.value.trim() : '';
-        var result = await License.activate(key);
-
-        if (result.success) {
-          if (successEl) { successEl.textContent = result.message; successEl.removeAttribute('hidden'); }
-          if (keyInput) keyInput.value = '';
-          updateLicenseDisplay();
-        } else {
-          if (errorEl) errorEl.textContent = result.message;
-        }
-      });
-    }
-
-    if (deactivateBtn) {
-      deactivateBtn.addEventListener('click', function () {
-        if (!confirm('Deactivate your license? Restrictions will apply.')) return;
-        License.deactivate();
-        if (successEl) successEl.setAttribute('hidden', '');
-        if (errorEl) errorEl.textContent = '';
-        updateLicenseDisplay();
-      });
-    }
-
-    License.onStateChange(function () { updateLicenseDisplay(); });
-    updateLicenseDisplay();
   }
 
   function navigateToScreen(screenId) {
@@ -110,23 +63,91 @@ var App = (function () {
     }
   }
 
+  function openMoreMenu() {
+    var menu     = document.getElementById('more-menu');
+    var backdrop = document.getElementById('more-menu-backdrop');
+    if (menu)     menu.removeAttribute('hidden');
+    if (backdrop) backdrop.removeAttribute('hidden');
+  }
+
+  function closeMoreMenu() {
+    var menu     = document.getElementById('more-menu');
+    var backdrop = document.getElementById('more-menu-backdrop');
+    if (menu)     menu.setAttribute('hidden', '');
+    if (backdrop) backdrop.setAttribute('hidden', '');
+  }
+
   function setupTabNavigation() {
-    document.querySelectorAll('.nav-tab').forEach(function (tab) {
+    // Main nav tabs
+    document.querySelectorAll('.nav-tab[data-screen]').forEach(function (tab) {
       tab.addEventListener('click', function (e) {
         e.preventDefault();
-        var screenId = tab.getAttribute('data-screen');
-        if (screenId) navigateToScreen(screenId);
+        navigateToScreen(tab.getAttribute('data-screen'));
       });
     });
+
+    // More button
+    var moreBtn = document.getElementById('more-btn');
+    if (moreBtn) {
+      moreBtn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var menu = document.getElementById('more-menu');
+        if (menu && !menu.hasAttribute('hidden')) closeMoreMenu();
+        else openMoreMenu();
+      });
+    }
+
+    // More menu items
+    document.querySelectorAll('.more-menu-item').forEach(function (item) {
+      item.addEventListener('click', function () {
+        navigateToScreen(item.getAttribute('data-screen'));
+      });
+    });
+
+    // Backdrop closes menu
+    var backdrop = document.getElementById('more-menu-backdrop');
+    if (backdrop) backdrop.addEventListener('click', closeMoreMenu);
+
     navigateToScreen(currentScreen);
   }
 
   function registerServiceWorker() {
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('sw.js')
-        .then(function (reg) { console.log('SW registered:', reg.scope); })
-        .catch(function (err) { console.log('SW failed:', err); });
-    }
+    if (!('serviceWorker' in navigator)) return;
+
+    navigator.serviceWorker.register('sw.js')
+      .then(function (reg) {
+        console.log('SW registered:', reg.scope);
+
+        // Poll for new SW waiting to activate
+        reg.addEventListener('updatefound', function () {
+          var newWorker = reg.installing;
+          if (!newWorker) return;
+          newWorker.addEventListener('statechange', function () {
+            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+              // New SW installed — it will self-activate via skipWaiting
+              console.log('SW update found, waiting for activation...');
+            }
+          });
+        });
+      })
+      .catch(function (err) { console.log('SW failed:', err); });
+
+    // Listen for SW_UPDATED message — reload to get new files
+    navigator.serviceWorker.addEventListener('message', function (event) {
+      if (event.data && event.data.type === 'SW_UPDATED') {
+        console.log('New version available — reloading...');
+        window.location.reload();
+      }
+    });
+
+    // Also handle controller change (SW took control)
+    var refreshing = false;
+    navigator.serviceWorker.addEventListener('controllerchange', function () {
+      if (!refreshing) {
+        refreshing = true;
+        window.location.reload();
+      }
+    });
   }
 
   document.addEventListener('DOMContentLoaded', initApp);

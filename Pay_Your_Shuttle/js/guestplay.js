@@ -179,6 +179,8 @@ const GuestPlay = (function () {
 
   // ─── Enroll: create one guest_session for the date ───
   async function enrollSession(memberId, memberName, date, fee) {
+    var _gFeeErr1 = window._checkGuestFee ? window._checkGuestFee(fee) : null;
+    if (_gFeeErr1) { alert(_gFeeErr1); return; }
     try {
       var session = {
         id:        DB.generateId(),

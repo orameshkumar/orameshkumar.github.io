@@ -124,15 +124,6 @@ const Members = (function () {
     if (!mobile || !/^\d{10}$/.test(mobile)) errors.push({ field: 'member-mobile', msg: 'Mobile must be 10 digits.' });
     if (errors.length > 0) { showErrors(errors); return; }
 
-    // License check: enforce member limit for new members
-    if (!editingMemberId) {
-      var allMembers = await DB.getAllMembers();
-      if (!License.canAddMember(allMembers.length)) {
-        alert('You have reached the limit of ' + License.getMaxMembers() + ' members.\n\nPlease obtain a license key to add unlimited members.\nGo to Settings → License to activate.');
-        return;
-      }
-    }
-
     var member = {
       id: editingMemberId || DB.generateId(),
       name: name, mobile: mobile, notes: notes,
@@ -146,6 +137,11 @@ const Members = (function () {
         if (existing) { member.createdAt = existing.createdAt; member.status = existing.status; }
         await DB.updateMember(member);
       } else {
+        // License member limit — uses inline global from index.html
+        if (window._checkMemberLimit) {
+          var _mLimitErr = await window._checkMemberLimit();
+          if (_mLimitErr) { showErrors([{ field: 'member-name', msg: _mLimitErr }]); return; }
+        }
         await DB.addMember(member);
       }
       hideForm();
@@ -263,10 +259,6 @@ const Members = (function () {
         var header = parseCSVRow(lines[0]).map(function (h) { return h.toLowerCase(); });
         var idx    = function (col) { return header.indexOf(col); };
 
-        // License check: enforce member limit during import
-        var existingMembers = await DB.getAllMembers();
-        var memberCount = existingMembers.length;
-
         var addedMembers = 0, addedContribs = 0, skipped = 0;
 
         for (var i = 1; i < lines.length; i++) {
@@ -275,10 +267,11 @@ const Members = (function () {
           var mobile = (cols[idx('mobile')] || '').trim();
           if (!name || !mobile) { skipped++; continue; }
 
-          // Check member limit before adding
-          if (!License.canAddMember(memberCount)) {
+          // Check member limit before each add
+          var memberLimitErr = await License.checkMemberLimit();
+          if (memberLimitErr) {
             skipped += (lines.length - i);
-            alert('Member limit of ' + License.getMaxMembers() + ' reached during import.\n\nRemaining rows were skipped. Activate a license for unlimited members.');
+            alert('Import stopped at row ' + (i + 1) + ': ' + memberLimitErr);
             break;
           }
 
@@ -294,7 +287,6 @@ const Members = (function () {
           try {
             await DB.addMember(member);
             addedMembers++;
-            memberCount++;
 
             // Import contribution if fee columns present
             var monthlyFee     = parseFloat(cols[idx('monthlyfee')])     || null;
@@ -302,9 +294,12 @@ const Members = (function () {
             var activationDate = (cols[idx('activationdate')] || '').trim() || null;
             var dueDay         = parseInt(cols[idx('dueday')], 10)        || null;
 
-            // Cap monthly fee if unlicensed
-            if (monthlyFee && !License.canSetMonthlyFee(monthlyFee)) {
-              monthlyFee = License.getMaxMonthlyFee();
+            // Clamp fees to license limits
+            if (monthlyFee && License.checkMonthlyFee(monthlyFee)) {
+              monthlyFee = License.LIMITS.MAX_MONTHLY_FEE;
+            }
+            if (guestFee && License.checkGuestFee(guestFee)) {
+              guestFee = License.LIMITS.MAX_GUEST_FEE;
             }
 
             if (monthlyFee || guestFee || activationDate) {

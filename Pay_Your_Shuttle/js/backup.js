@@ -117,27 +117,67 @@ const Backup = (function () {
         var remainingCon = await DB.getAllContributions();
         for (var c  of remainingCon) await DB.deleteContribution(c.id);
 
-        // ── Restore in dependency order ──
-        for (var member   of members)        await DB.addMember(member);
-        for (var contrib  of contributions)  await DB.addContribution(contrib);
-        for (var payment  of payments)       await DB.addPayment(payment);
-        for (var expense  of expenses)       await DB.addExpense(expense);
-        for (var gs       of guestSessions)  await DB.addGuestSession(gs);
-        for (var mfr      of monthlyFeeRecs) await DB.addMonthlyFeeRecord(mfr);
+        // ── Restore in dependency order — enforce license limits ──
+        var maxMembers   = License.getMaxMembers();
+        var activeCount  = 0;
+        var skippedMembers = 0;
+
+        for (var member of members) {
+          if (member.status !== 'inactive') {
+            if (activeCount >= maxMembers) { skippedMembers++; continue; }
+            activeCount++;
+          }
+          await DB.addMember(member);
+        }
+
+        // Clamp fees on contributions to license limits
+        for (var contrib of contributions) {
+          if (License.checkMonthlyFee(contrib.monthlyFee || 0))
+            contrib.monthlyFee = License.LIMITS.MAX_MONTHLY_FEE;
+          if (License.checkGuestFee(contrib.guestFee || 0))
+            contrib.guestFee   = License.LIMITS.MAX_GUEST_FEE;
+          await DB.addContribution(contrib);
+        }
+
+        // Clamp payment/session amounts
+        for (var payment of payments) {
+          if (payment.type === 'monthly'    && License.checkMonthlyFee(payment.amount || 0))
+            payment.amount = License.LIMITS.MAX_MONTHLY_FEE;
+          if (payment.type === 'guest_play' && License.checkGuestFee(payment.amount || 0))
+            payment.amount = License.LIMITS.MAX_GUEST_FEE;
+          await DB.addPayment(payment);
+        }
+
+        for (var expense  of expenses)      await DB.addExpense(expense);
+
+        for (var gs of guestSessions) {
+          if (License.checkGuestFee(gs.fee || 0)) gs.fee = License.LIMITS.MAX_GUEST_FEE;
+          await DB.addGuestSession(gs);
+        }
+
+        for (var mfr of monthlyFeeRecs) {
+          if (License.checkMonthlyFee(mfr.fee || 0)) mfr.fee = License.LIMITS.MAX_MONTHLY_FEE;
+          await DB.addMonthlyFeeRecord(mfr);
+        }
+
+        if (skippedMembers > 0) {
+          alert('Note: ' + skippedMembers + ' member(s) were skipped — unlicensed limit of ' + maxMembers + ' active members reached. Fees above limits were capped automatically.');
+        }
 
         // ── Restore settings ──
         Settings.restoreSettings(settings);
         Settings.applyTheme();
         Settings.updateAppNameDisplay();
 
-        var msg = 'Restore complete!\n\n' +
-          '  Members:        ' + members.length        + '\n' +
-          '  Contributions:  ' + contributions.length  + '\n' +
-          '  Payments:       ' + payments.length       + '\n' +
-          '  Expenses:       ' + expenses.length       + '\n' +
-          '  Guest sessions: ' + guestSessions.length  + '\n' +
-          '  Fee records:    ' + monthlyFeeRecs.length;
-        alert(msg);
+        if (!skippedMembers) {
+          alert('Restore complete!\n\n' +
+            '  Members:        ' + members.length        + '\n' +
+            '  Contributions:  ' + contributions.length  + '\n' +
+            '  Payments:       ' + payments.length       + '\n' +
+            '  Expenses:       ' + expenses.length       + '\n' +
+            '  Guest sessions: ' + guestSessions.length  + '\n' +
+            '  Fee records:    ' + monthlyFeeRecs.length);
+        }
 
         Settings.setLastBackup(getTodayISO());
         displayLastBackupInfo();
