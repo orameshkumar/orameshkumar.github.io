@@ -126,6 +126,11 @@ const ItemMaster = (function () {
         thumbHtml = '<div class="item-thumb" style="width:64px;height:64px;display:flex;align-items:center;justify-content:center;font-size:1.5rem;background:#e8eaed;border-radius:4px;">📷</div>';
       }
 
+      var isFav = item.isFavorite === true;
+      var favClass = 'favorite-btn' + (isFav ? ' active' : '');
+      var favIcon = isFav ? '★' : '☆';
+      var favLabel = isFav ? 'Remove ' + _escapeHtml(item.name) + ' from favorites' : 'Add ' + _escapeHtml(item.name) + ' to favorites';
+
       html +=
         '<div class="item-card" data-item-id="' + item.id + '">' +
           thumbHtml +
@@ -133,6 +138,7 @@ const ItemMaster = (function () {
             '<div class="item-name">' + _escapeHtml(item.name) + '</div>' +
             '<div class="item-price" style="font-size:0.7rem;color:#5f6368;">' + _escapeHtml(item.itemCode || '') + ' | ₹' + Number(item.basePricePerKg).toFixed(2) + '/' + _unitLabel(item.baseUnit) + '</div>' +
           '</div>' +
+          '<button class="' + favClass + '" data-item-id="' + item.id + '" aria-label="' + favLabel + '">' + favIcon + '</button>' +
           '<button class="item-edit-btn" data-item-id="' + item.id + '" aria-label="Edit ' + _escapeHtml(item.name) + '">✏️</button>' +
           '<button class="item-delete-btn" data-item-id="' + item.id + '" aria-label="Delete ' + _escapeHtml(item.name) + '">🗑️</button>' +
         '</div>';
@@ -162,6 +168,19 @@ const ItemMaster = (function () {
         var item = allItems.find(function (i) { return i.id === itemId; });
         if (item) {
           _handleDeleteItem(item);
+        }
+      });
+    });
+
+    // Attach favorite toggle button listeners
+    var favBtns = container.querySelectorAll('.favorite-btn');
+    favBtns.forEach(function (btn) {
+      btn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var itemId = btn.getAttribute('data-item-id');
+        var item = allItems.find(function (i) { return i.id === itemId; });
+        if (item) {
+          _handleFavoriteToggle(item, btn);
         }
       });
     });
@@ -576,6 +595,7 @@ const ItemMaster = (function () {
           baseUnit: baseUnit,
           voiceTag: voiceTag,
           imageBase64: capturedImageBase64 || (existingItem ? existingItem.imageBase64 : null),
+          isFavorite: existingItem ? (existingItem.isFavorite || false) : false,
           createdAt: existingItem ? existingItem.createdAt : now,
           updatedAt: now
         };
@@ -658,6 +678,58 @@ const ItemMaster = (function () {
       }
     } catch (e) {
       console.error('Failed to update bills with new item code:', e);
+    }
+  }
+
+  // ─── Favorite Toggle (Requirement 4) ──────────────────────────────────────
+
+  /**
+   * Handles the favorite toggle click on an item card.
+   * Optimistically updates the star icon, persists to DB, and reverts on failure.
+   * @param {Object} item - The item object to toggle
+   * @param {HTMLElement} btn - The favorite button element
+   */
+  async function _handleFavoriteToggle(item, btn) {
+    var previousState = item.isFavorite === true;
+    var newState = !previousState;
+
+    // Optimistically update the icon state immediately
+    if (newState) {
+      btn.classList.add('active');
+      btn.textContent = '★';
+      btn.setAttribute('aria-label', 'Remove ' + item.name + ' from favorites');
+    } else {
+      btn.classList.remove('active');
+      btn.textContent = '☆';
+      btn.setAttribute('aria-label', 'Add ' + item.name + ' to favorites');
+    }
+
+    // Update the item in memory
+    item.isFavorite = newState;
+
+    // Persist to DB
+    try {
+      var updatedItem = Object.assign({}, item, { isFavorite: newState, updatedAt: new Date().toISOString() });
+      await DB.updateItem(updatedItem);
+      // Update the in-memory reference
+      var idx = allItems.findIndex(function (i) { return i.id === item.id; });
+      if (idx !== -1) {
+        allItems[idx] = updatedItem;
+      }
+    } catch (error) {
+      console.error('Failed to update favorite status:', error);
+      // Revert icon to previous state
+      item.isFavorite = previousState;
+      if (previousState) {
+        btn.classList.add('active');
+        btn.textContent = '★';
+        btn.setAttribute('aria-label', 'Remove ' + item.name + ' from favorites');
+      } else {
+        btn.classList.remove('active');
+        btn.textContent = '☆';
+        btn.setAttribute('aria-label', 'Add ' + item.name + ' to favorites');
+      }
+      alert('Failed to update favorite status. Please try again.');
     }
   }
 

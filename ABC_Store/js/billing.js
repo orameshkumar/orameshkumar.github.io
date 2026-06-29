@@ -111,6 +111,48 @@ const Billing = (function () {
     if (finalizeBtn) {
       finalizeBtn.addEventListener('click', onFinalizeBill);
     }
+
+    // Templates button
+    var templatesBtn = document.getElementById('templates-btn');
+    if (templatesBtn) {
+      templatesBtn.addEventListener('click', function () {
+        if (typeof Templates !== 'undefined' && Templates.showTemplateList) {
+          Templates.showTemplateList();
+        }
+      });
+    }
+
+    // Repeat Last Bill button
+    var repeatLastBillBtn = document.getElementById('repeat-last-bill-btn');
+    if (repeatLastBillBtn) {
+      repeatLastBillBtn.addEventListener('click', function () {
+        if (typeof Templates !== 'undefined' && Templates.repeatLastBill) {
+          Templates.repeatLastBill();
+        }
+      });
+    }
+  }
+
+  // ─── Item Sort (Favorites First) ─────────────────────────────────────────────
+
+  /**
+   * Sort items with favorites first, then alphabetical by name within each group.
+   * @param {Array} items - Array of item objects to sort
+   * @returns {Array} Sorted array (new array, does not mutate original)
+   */
+  function sortItemsFavoritesFirst(items) {
+    return items.slice().sort(function (a, b) {
+      var aFav = a.isFavorite === true ? 1 : 0;
+      var bFav = b.isFavorite === true ? 1 : 0;
+
+      // Favorites first (descending: 1 before 0)
+      if (bFav !== aFav) {
+        return bFav - aFav;
+      }
+
+      // Alphabetical by name within each group (case-insensitive)
+      return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+    });
   }
 
   // ─── Item Grid (5.1, 5.2) ──────────────────────────────────────────────────
@@ -136,6 +178,7 @@ const Billing = (function () {
 
   /**
    * Render items as selectable cards in the item grid.
+   * Items are sorted with favorites first, then alphabetical within each group.
    * @param {Array} items - Array of item objects to display
    */
   function renderItemGrid(items) {
@@ -146,14 +189,18 @@ const Billing = (function () {
       return;
     }
 
-    itemGrid.innerHTML = items.map(function (item) {
+    // Sort items: favorites first, then alphabetical by name within each group
+    var sortedItems = sortItemsFavoritesFirst(items);
+
+    itemGrid.innerHTML = sortedItems.map(function (item) {
       const isSelected = item.id === selectedItemId;
+      const isFavorite = item.isFavorite === true;
       const thumbnail = item.imageBase64
         ? '<img src="' + item.imageBase64 + '" alt="' + item.name + '" class="item-thumb">'
         : '<span class="item-thumb-placeholder">📦</span>';
       const voiceTag = item.voiceTag ? '<span class="item-voice-tag">' + item.voiceTag + '</span>' : '';
 
-      return '<button class="item-card' + (isSelected ? ' selected' : '') + '" data-item-id="' + item.id + '" aria-pressed="' + isSelected + '">'
+      return '<button class="item-card' + (isSelected ? ' selected' : '') + (isFavorite ? ' item-card-favorite' : '') + '" data-item-id="' + item.id + '" aria-pressed="' + isSelected + '">'
         + thumbnail
         + '<span class="item-card-name">' + item.name + '</span>'
         + voiceTag

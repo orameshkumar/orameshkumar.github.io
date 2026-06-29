@@ -192,6 +192,12 @@ async function initApp() {
   if (typeof ImportExport !== 'undefined' && ImportExport.init) {
     ImportExport.init();
   }
+  if (typeof Templates !== 'undefined' && Templates.init) {
+    Templates.init();
+  }
+  if (typeof Backup !== 'undefined' && Backup.init) {
+    Backup.init();
+  }
 }
 
 // Register service worker and initialize app on DOM ready

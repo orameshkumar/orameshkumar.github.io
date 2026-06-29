@@ -1,18 +1,19 @@
 /**
  * db.js - IndexedDB Wrapper for ABC Provisional Store
  * 
- * Provides a global DB object with methods for managing items and bills
+ * Provides a global DB object with methods for managing items, bills, and templates
  * using IndexedDB as the persistence layer.
  * 
- * Database: "ABCStore" (version 1)
+ * Database: "ABCStore" (version 2)
  * Object Stores:
  *   - items: keyPath "id", indexes on "name" and "voiceTag"
  *   - bills: keyPath "id", indexes on "billNumber" and "date"
+ *   - templates: keyPath "id", index on "name"
  */
 
 const DB = (function () {
   const DB_NAME = 'ABCStore';
-  const DB_VERSION = 1;
+  const DB_VERSION = 2;
   let db = null;
 
   /**
@@ -52,6 +53,12 @@ const DB = (function () {
           const billsStore = database.createObjectStore('bills', { keyPath: 'id' });
           billsStore.createIndex('billNumber', 'billNumber', { unique: true });
           billsStore.createIndex('date', 'date', { unique: false });
+        }
+
+        // Create "templates" object store with keyPath "id"
+        if (!database.objectStoreNames.contains('templates')) {
+          const templatesStore = database.createObjectStore('templates', { keyPath: 'id' });
+          templatesStore.createIndex('name', 'name', { unique: false });
         }
       };
     });
@@ -216,6 +223,79 @@ const DB = (function () {
     return requestToPromise(store.delete(id));
   }
 
+  // ─── Template CRUD Methods ─────────────────────────────────────────────────
+
+  /**
+   * Add a new template to the templates store.
+   * @param {Object} template - Template object with id, name, items, createdAt, updatedAt
+   * @returns {Promise<string>} The key of the added template
+   */
+  function addTemplate(template) {
+    const store = getStore('templates', 'readwrite');
+    return requestToPromise(store.add(template));
+  }
+
+  /**
+   * Get a single template by its id.
+   * @param {string} id - The template id
+   * @returns {Promise<Object|undefined>} The template object or undefined if not found
+   */
+  function getTemplate(id) {
+    const store = getStore('templates', 'readonly');
+    return requestToPromise(store.get(id));
+  }
+
+  /**
+   * Get all templates from the templates store.
+   * @returns {Promise<Object[]>} Array of all template objects
+   */
+  function getAllTemplates() {
+    const store = getStore('templates', 'readonly');
+    return requestToPromise(store.getAll());
+  }
+
+  /**
+   * Update an existing template (put operation - replaces the template with the same id).
+   * @param {Object} template - Template object with id and updated fields
+   * @returns {Promise<string>} The key of the updated template
+   */
+  function updateTemplate(template) {
+    const store = getStore('templates', 'readwrite');
+    return requestToPromise(store.put(template));
+  }
+
+  /**
+   * Delete a template by its id.
+   * @param {string} id - The template id to delete
+   * @returns {Promise<undefined>}
+   */
+  function deleteTemplate(id) {
+    const store = getStore('templates', 'readwrite');
+    return requestToPromise(store.delete(id));
+  }
+
+  // ─── Utility Methods ───────────────────────────────────────────────────────
+
+  /**
+   * Clear all records from a given object store.
+   * @param {string} storeName - The name of the object store to clear
+   * @returns {Promise<undefined>}
+   */
+  function clearStore(storeName) {
+    return new Promise((resolve, reject) => {
+      if (!db) {
+        reject(new Error('Database not initialized. Call DB.init() first.'));
+        return;
+      }
+      const tx = db.transaction(storeName, 'readwrite');
+      const store = tx.objectStore(storeName);
+      const request = store.clear();
+
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+  }
+
   // ─── Public API ────────────────────────────────────────────────────────────
 
   return {
@@ -229,6 +309,12 @@ const DB = (function () {
     getBill,
     getAllBills,
     getBillsByDateRange,
-    deleteBill
+    deleteBill,
+    addTemplate,
+    getTemplate,
+    getAllTemplates,
+    updateTemplate,
+    deleteTemplate,
+    clearStore
   };
 })();
