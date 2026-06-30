@@ -28,7 +28,6 @@
 
   <div class="room-grid" id="room-grid"></div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script type="module">
 import { db, collection, onSnapshot, query, where, orderBy, doc } from "./js/firebase-config.js";
 import { computeACT, calculateETAs, formatETA, todayKey, STATUS_LABELS, applyClinicBranding } from "./js/queue-logic.js";
@@ -44,28 +43,39 @@ tickClock();
 setInterval(tickClock, 1000 * 15);
 
 // Real, scannable QR code pointing at this clinic's self-service booking page.
+// Loaded as a proper ES module import (awaited) rather than a classic <script> tag,
+// which avoids any race between script-load order and this module's execution.
 const selfServiceUrl = new URL("self-service.html", window.location.href).toString();
 const qrBox = document.getElementById("qr-box");
 qrBox.title = selfServiceUrl;
-try {
-  // eslint-disable-next-line no-undef
-  new QRCode(qrBox, {
-    text: selfServiceUrl,
-    width: 64,
-    height: 64,
-    colorDark: "#0F4C4F",
-    colorLight: "#ffffff",
-    correctLevel: QRCode.CorrectLevel.M,
-  });
-} catch (err) {
-  // If the QR library failed to load (e.g. offline / CDN blocked), fall back to a clickable text link
-  // rather than leaving a blank/broken box.
-  console.error("QR code generation failed, falling back to text link:", err);
-  qrBox.textContent = "TAP";
-  qrBox.style.cursor = "pointer";
-  qrBox.onclick = () => window.open(selfServiceUrl, "_blank");
-}
 
+async function renderQrCode() {
+  try {
+    const QRCodeStyling = (await import("https://cdn.jsdelivr.net/npm/qr-code-styling@1.6.0-rc.1/lib/qr-code-styling.js")).default;
+    const qr = new QRCodeStyling({
+      width: 64,
+      height: 64,
+      data: selfServiceUrl,
+      margin: 0,
+      dotsOptions: { color: "#0F4C4F", type: "square" },
+      backgroundOptions: { color: "#ffffff" },
+    });
+    qrBox.innerHTML = "";
+    qr.append(qrBox);
+  } catch (err) {
+    // If the CDN is unreachable (offline device, blocked network, etc.), fall back
+    // to a clickable text box rather than leaving a blank/broken box.
+    console.error("QR code generation failed, falling back to tap-to-open:", err);
+    qrBox.textContent = "TAP TO BOOK";
+    qrBox.style.cursor = "pointer";
+    qrBox.style.fontSize = "0.6rem";
+    qrBox.style.fontWeight = "700";
+    qrBox.style.color = "#0F4C4F";
+    qrBox.style.textAlign = "center";
+    qrBox.onclick = () => window.open(selfServiceUrl, "_blank");
+  }
+}
+renderQrCode();
 
 let doctors = [];
 let visitsToday = [];
