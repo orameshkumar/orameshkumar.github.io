@@ -30,12 +30,20 @@
     <div class="card" style="margin-bottom:1.5rem;">
       <h2>Clinic branding</h2>
       <p class="helper">This name appears in the banner across every screen — Reception, Doctor, the Queue Board, and the self-service booking page.</p>
-      <form id="branding-form" class="field-row" style="align-items:flex-end;">
-        <div class="field" style="flex:2;margin-bottom:0;">
-          <label for="clinic-name-input">Clinic name</label>
-          <input id="clinic-name-input" placeholder="e.g. Sunrise Family Clinic" required />
+      <form id="branding-form">
+        <div class="field-row" style="align-items:flex-end;">
+          <div class="field" style="flex:2;margin-bottom:0;">
+            <label for="clinic-name-input">Clinic name</label>
+            <input id="clinic-name-input" placeholder="e.g. Sunrise Family Clinic" required />
+          </div>
+          <button class="btn btn-primary" type="submit">Save</button>
         </div>
-        <button class="btn btn-primary" type="submit">Save</button>
+        <hr class="section-divider" />
+        <div class="field">
+          <label for="self-service-url-input">Self-service booking URL (used to generate the QR code on the Queue Board)</label>
+          <input id="self-service-url-input" placeholder="https://yourname.github.io/your-repo/self-service.html" />
+          <p class="helper">Leave blank to auto-use this device's current page location — works fine for most single-deployment setups. Only set this explicitly if your deployed URL differs from what the Queue Board's own browser tab shows (e.g. a custom domain), or if you want to be certain the QR stays correct even if board.html is ever opened from a different/incorrect URL.</p>
+        </div>
       </form>
     </div>
 
@@ -126,19 +134,21 @@ import { applyClinicBranding } from "./js/queue-logic.js";
 applyClinicBranding();
 await authReady;
 
-// Pre-fill the branding form with the currently configured name, if any.
+// Pre-fill the branding form with the currently configured values, if any.
 (async () => {
   const snap = await getDoc(doc(db, "clinicSettings", "main"));
-  if (snap.exists() && snap.data().name) {
-    document.getElementById("clinic-name-input").value = snap.data().name;
+  if (snap.exists()) {
+    if (snap.data().name) document.getElementById("clinic-name-input").value = snap.data().name;
+    if (snap.data().selfServiceUrl) document.getElementById("self-service-url-input").value = snap.data().selfServiceUrl;
   }
 })();
 
 document.getElementById("branding-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const name = document.getElementById("clinic-name-input").value.trim();
+  const selfServiceUrl = document.getElementById("self-service-url-input").value.trim();
   if (!name) return;
-  await setDoc(doc(db, "clinicSettings", "main"), { name, updatedAt: new Date().toISOString() });
+  await setDoc(doc(db, "clinicSettings", "main"), { name, selfServiceUrl: selfServiceUrl || null, updatedAt: new Date().toISOString() });
   await applyClinicBranding(); // refresh this page's own banner immediately
   alert("Saved. The new name will appear on every screen the next time it loads.");
 });

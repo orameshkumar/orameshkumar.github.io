@@ -19,7 +19,7 @@
   </div>
 
   <div class="board-self-service">
-    <img class="qr-box" id="qr-box" src="assets/self-service-qr.svg" alt="Scan to book a token" />
+    <div id="qr-box" class="qr-box"></div>
     <div class="copy">
       <strong>New here? Scan to book your token</strong>
       <span>Self-service registration opens on your phone — no app needed.</span>
@@ -29,8 +29,9 @@
   <div class="room-grid" id="room-grid"></div>
 
 <script type="module">
-import { db, collection, onSnapshot, query, where, orderBy, doc } from "./js/firebase-config.js";
+import { db, collection, onSnapshot, query, where, orderBy, doc, getDoc } from "./js/firebase-config.js";
 import { computeACT, calculateETAs, formatETA, todayKey, STATUS_LABELS, applyClinicBranding } from "./js/queue-logic.js";
+import { generateQR } from "./js/qrcode-lib.js";
 
 applyClinicBranding();
 
@@ -42,19 +43,46 @@ function tickClock() {
 tickClock();
 setInterval(tickClock, 1000 * 15);
 
-// The QR code is a static, pre-generated SVG (assets/self-service-qr.svg) pointing
-// at this clinic's deployed self-service URL — no runtime library, no CDN dependency,
-// no possible import/version mismatch. If you ever change your GitHub Pages URL
-// (different repo name, custom domain, etc.), this image needs to be regenerated
-// to match — it will not update itself automatically.
-const qrBox = document.getElementById("qr-box");
-qrBox.title = new URL("self-service.html", window.location.href).toString();
-qrBox.onerror = () => {
-  // If the image file itself is ever missing (e.g. not deployed), fail visibly
-  // rather than showing a broken image icon.
-  console.error("QR code image failed to load — check that assets/self-service-qr.svg was deployed.");
-  qrBox.outerHTML = '<div class="qr-box" style="display:flex;align-items:center;justify-content:center;font-size:0.6rem;font-weight:700;color:#0F4C4F;text-align:center;">QR image missing</div>';
-};
+// The QR code is generated live in the browser using our own verified QR encoder
+// (js/qrcode-lib.js), pointed at a configurable URL rather than a baked static
+// image. This means: (a) it self-corrects if you ever change the deployed URL
+// (configure it once in Admin Setup, no need to regenerate an image file), and
+// (b) it's no longer tied to one specific hardcoded GitHub Pages URL.
+//
+// Fallback order: explicit clinicSettings.selfServiceUrl (if an admin has set
+// one) -> the current page's own location (works correctly out of the box for
+// almost every deployment, since self-service.html normally lives alongside
+// board.html) -> if even that fails, show a clear error rather than a blank box.
+async function renderSelfServiceQr() {
+  const qrBox = document.getElementById("qr-box");
+  let url;
+  try {
+    const snap = await getDoc(doc(db, "clinicSettings", "main"));
+    url = snap.exists() && snap.data().selfServiceUrl ? snap.data().selfServiceUrl : null;
+  } catch (err) {
+    console.error("Could not load configured self-service URL, falling back to current page location.", err);
+  }
+  if (!url) {
+    url = new URL("self-service.html", window.location.href).toString();
+  }
+  qrBox.title = url;
+  try {
+    const { matrix, size } = generateQR(url, { errorCorrectionLevel: "M" });
+    const quietZone = 2;
+    const total = size + quietZone * 2;
+    let path = "";
+    for (let r = 0; r < size; r++) {
+      for (let c = 0; c < size; c++) {
+        if (matrix[r][c] === 1) path += `M${c + quietZone},${r + quietZone}h1v1h-1z `;
+      }
+    }
+    qrBox.innerHTML = `<svg viewBox="0 0 ${total} ${total}" xmlns="http://www.w3.org/2000/svg" shape-rendering="crispEdges" style="width:100%;height:100%;"><rect width="${total}" height="${total}" fill="#ffffff"/><path d="${path}" fill="#0F4C4F"/></svg>`;
+  } catch (err) {
+    console.error("QR generation failed:", err);
+    qrBox.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;font-size:0.55rem;font-weight:700;color:#0F4C4F;text-align:center;">QR error — see console</div>';
+  }
+}
+renderSelfServiceQr();
 
 let doctors = [];
 let visitsToday = [];

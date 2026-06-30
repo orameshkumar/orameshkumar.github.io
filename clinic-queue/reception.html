@@ -265,7 +265,8 @@ function fillPatientForm(p) {
   document.getElementById("p-age").value = p.age;
   document.getElementById("p-gender").value = p.gender;
   document.getElementById("p-address").value = p.address || "";
-  document.getElementById("form-mode-label").textContent = `Editing existing patient — ID: ${p.patientCode || "(legacy, no ID)"}`;
+  const registeredStr = p.registeredAt ? new Date(p.registeredAt).toLocaleDateString([], { day: "numeric", month: "short", year: "numeric" }) : "unknown date";
+  document.getElementById("form-mode-label").textContent = `Editing existing patient — ID: ${p.patientCode || "(legacy, no ID)"} · Registered ${registeredStr}`;
   document.getElementById("patient-edit-actions").style.display = "flex";
 }
 

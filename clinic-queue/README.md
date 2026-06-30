@@ -100,13 +100,21 @@ Reception, Doctor, and Admin roles can all see what's been collected — today, 
 
 ## Self-service QR code
 
-The QR code on the Queue Board (`board.html`) is a pre-generated static SVG file (`assets/self-service-qr.svg`), not something rendered by a JavaScript library at runtime. This was a deliberate fix after repeated issues with third-party QR libraries loaded from CDNs (export-shape mismatches, script-load-order races, network/CORS failures) — a static image has none of those failure modes.
+The QR code on the Queue Board (`board.html`) is generated **live in the browser**, using our own verified-correct QR encoder (`js/qrcode-lib.js` — see "Printable patient card" below for how that was verified). This replaced an earlier static-image approach that required manually regenerating an SVG file any time the deployed URL changed.
 
-**Important**: this QR code is baked to point at one specific URL: `https://orameshkumar.github.io/clinic-queue/self-service.html`. If you ever change your GitHub Pages URL — different repository name, a custom domain, moving to a different host — this image will silently point at the wrong (old) address and **will not update itself**. You'll need to regenerate it (any QR generator tool works; encode your new self-service.html URL) and replace `assets/self-service-qr.svg`.
+The URL it encodes is resolved in this order:
+1. An explicit `selfServiceUrl` set in Admin Setup → "Clinic branding" (recommended if you have a custom domain, or want certainty regardless of how the board's browser tab was opened).
+2. If nothing is configured, it falls back to the Queue Board's own current page location with `self-service.html` substituted in — which works correctly out of the box for the overwhelming majority of single-deployment setups, since both pages normally live in the same folder.
+
+This means: if you ever move to a new GitHub Pages URL, a custom domain, or a different host entirely, the QR code on the board self-corrects automatically — no asset to regenerate, unless you've explicitly pinned a URL in Admin Setup, in which case update it there.
+
+The `assets/self-service-qr.svg` file from an earlier version is no longer used by any page but is harmless to leave in the repo if you don't want to bother deleting it.
 
 ## Clinic branding
 
 The clinic's name shown in the banner across every page (and in the browser tab title) is configurable from Admin Setup → "Clinic branding" — no need to edit any code. It's stored in a `clinicSettings/main` Firestore document and falls back to the placeholder "Clinic Queue" until an admin sets a real name. The Queue Board and self-service booking page (both public, no login) read it too, so update it once and it shows everywhere on next page load.
+
+The same Admin Setup card also lets you optionally pin an explicit self-service booking URL (`selfServiceUrl` on the same document), used to generate the Queue Board's QR code — see "Self-service QR code" above for when you'd actually want to set this versus leaving it blank.
 
 ## Patient IDs
 

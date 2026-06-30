@@ -140,7 +140,7 @@ function renderTable(list) {
   }
   wrap.innerHTML = `
     <table>
-      <thead><tr><th>Patient ID</th><th>Name</th><th>Age/Gender</th><th>Mobile</th><th>Address</th><th>Source</th><th></th></tr></thead>
+      <thead><tr><th>Patient ID</th><th>Name</th><th>Age/Gender</th><th>Mobile</th><th>Address</th><th>Registered</th><th>Source</th><th></th></tr></thead>
       <tbody>
         ${list.map((p) => `
           <tr>
@@ -149,6 +149,7 @@ function renderTable(list) {
             <td class="small">${p.age || "—"}/${p.gender || "—"}</td>
             <td class="small">${escapeHtml(p.mobile || "—")}</td>
             <td class="small">${escapeHtml(p.address || "—")}</td>
+            <td class="small">${formatRegisteredDate(p.registeredAt)}</td>
             <td class="small">${sourceLabel(p.registrationSource)}</td>
             <td><button class="btn btn-sm btn-outline" data-view="${p.id}">View</button></td>
           </tr>`).join("")}
@@ -180,7 +181,7 @@ async function openDetail(patientId) {
   exitEditMode(); // always reopen in view mode, not mid-edit from a previous patient
   document.getElementById("detail-name").textContent = p.name;
   document.getElementById("detail-code").textContent = p.patientCode || "—";
-  document.getElementById("detail-meta").textContent = `${p.age || "—"} years · ${p.gender || "—"} · ${p.mobile || "—"} · ${p.address || "No address on file"}`;
+  document.getElementById("detail-meta").textContent = `${p.age || "—"} years · ${p.gender || "—"} · ${p.mobile || "—"} · ${p.address || "No address on file"} · Registered ${formatRegisteredDate(p.registeredAt)}`;
 
   document.getElementById("edit-name").value = p.name || "";
   document.getElementById("edit-mobile").value = p.mobile || "";
@@ -276,6 +277,11 @@ document.getElementById("delete-patient-btn").onclick = async () => {
   }
   // Any other input (including empty/cancel) does nothing.
 };
+
+function formatRegisteredDate(iso) {
+  if (!iso) return "—"; // legacy records created before this field existed
+  return new Date(iso).toLocaleDateString([], { day: "numeric", month: "short", year: "numeric" });
+}
 
 function escapeHtml(s) {
   return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));

@@ -200,19 +200,23 @@ function renderQueue(visits) {
   const waiting = active.filter((v) => v.status === "waiting").sort((a,b) => a.tokenNumber - b.tokenNumber);
   const list = document.getElementById("waiting-list");
   if (waiting.length === 0) { list.innerHTML = '<div class="empty-state">No patients waiting.</div>'; return; }
-  list.innerHTML = waiting.map((v, idx) => `
-    <div class="flex-between" style="padding:0.6rem 0;border-bottom:1px solid var(--paper-dim);">
+  list.innerHTML = waiting.map((v, idx) => {
+    const hasVitals = !!v.vitals;
+    return `
+    <div class="flex-between waiting-row ${hasVitals ? "vitals-ready" : ""}" style="padding:0.6rem 0.75rem;border-bottom:1px solid var(--paper-dim);${hasVitals ? "border-left:3px solid var(--sage-500);background:var(--sage-100);" : ""}">
       <div>
         <span class="token-tag">#${v.tokenNumber}</span>
         <strong style="margin-left:0.5rem;">${escapeHtml(v.patientName)}</strong>
         ${idx === 0 ? '<span class="badge badge-waiting" style="margin-left:0.5rem;">Next up</span>' : ""}
         ${(v.preferredDoctorIds || []).length > 1 ? '<span class="small muted" style="margin-left:0.5rem;">multi-doctor</span>' : ""}
+        <span class="vitals-indicator ${hasVitals ? "vitals-done" : "vitals-pending"}" title="${hasVitals ? "Vitals captured — ready to be seen" : "Vitals not yet captured"}">🩺</span>
       </div>
       <div style="text-align:right;">
         <div class="small muted">ETA ${formatETA(etas[v.id])}</div>
         <button class="btn btn-sm btn-amber" data-call="${v.id}" ${serving ? "disabled" : ""}>Call</button>
       </div>
-    </div>`).join("");
+    </div>`;
+  }).join("");
   list.querySelectorAll("[data-call]").forEach((b) => b.addEventListener("click", () => callToken(b.dataset.call)));
 }
 
