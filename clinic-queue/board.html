@@ -19,7 +19,7 @@
   </div>
 
   <div class="board-self-service">
-    <div class="qr-box" id="qr-box">QR</div>
+    <div class="qr-box" id="qr-box"></div>
     <div class="copy">
       <strong>New here? Scan to book your token</strong>
       <span>Self-service registration opens on your phone — no app needed.</span>
@@ -28,6 +28,7 @@
 
   <div class="room-grid" id="room-grid"></div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script type="module">
 import { db, collection, onSnapshot, query, where, orderBy, doc } from "./js/firebase-config.js";
 import { computeACT, calculateETAs, formatETA, todayKey, STATUS_LABELS } from "./js/queue-logic.js";
@@ -40,11 +41,29 @@ function tickClock() {
 tickClock();
 setInterval(tickClock, 1000 * 15);
 
-// Self-service QR — encodes the booking URL as plain text fallback (no external QR lib used to keep this fully static/offline-friendly).
+// Real, scannable QR code pointing at this clinic's self-service booking page.
 const selfServiceUrl = new URL("self-service.html", window.location.href).toString();
-document.getElementById("qr-box").title = selfServiceUrl;
-document.getElementById("qr-box").textContent = "SCAN";
-document.getElementById("qr-box").onclick = () => alert(`Self-service booking link:\n${selfServiceUrl}\n\n(For production, render this as a real QR code image pointing to this URL.)`);
+const qrBox = document.getElementById("qr-box");
+qrBox.title = selfServiceUrl;
+try {
+  // eslint-disable-next-line no-undef
+  new QRCode(qrBox, {
+    text: selfServiceUrl,
+    width: 64,
+    height: 64,
+    colorDark: "#0F4C4F",
+    colorLight: "#ffffff",
+    correctLevel: QRCode.CorrectLevel.M,
+  });
+} catch (err) {
+  // If the QR library failed to load (e.g. offline / CDN blocked), fall back to a clickable text link
+  // rather than leaving a blank/broken box.
+  console.error("QR code generation failed, falling back to text link:", err);
+  qrBox.textContent = "TAP";
+  qrBox.style.cursor = "pointer";
+  qrBox.onclick = () => window.open(selfServiceUrl, "_blank");
+}
+
 
 let doctors = [];
 let visitsToday = [];

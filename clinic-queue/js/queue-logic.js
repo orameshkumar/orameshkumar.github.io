@@ -15,13 +15,23 @@ export const NO_SHOW_GRACE_SECONDS = 3 * 60;
  */
 export async function computeACT(doctorId) {
   const visitsRef = collection(db, "visits");
-  const q = query(
-    visitsRef,
-    where("doctorId", "==", doctorId),
-    where("status", "==", "completed"),
-    orderBy("consultEndAt", "desc")
-  );
-  const snap = await getDocs(q);
+  let snap;
+  try {
+    const q = query(
+      visitsRef,
+      where("doctorId", "==", doctorId),
+      where("status", "==", "completed"),
+      orderBy("consultEndAt", "desc")
+    );
+    snap = await getDocs(q);
+  } catch (err) {
+    // Most commonly: Firestore needs a composite index for this combination of
+    // where()+orderBy() clauses on a brand-new project. Firestore's error message
+    // in the browser console includes a direct link to auto-create the index —
+    // open that link, click "Create index", wait a minute, and this will resolve itself.
+    console.error(`computeACT: query failed for doctor ${doctorId} — likely a missing Firestore index. Check the browser console for a link to create it.`, err);
+    return DEFAULT_ACT_SECONDS;
+  }
   const durations = [];
   snap.forEach((d) => {
     const v = d.data();

@@ -142,8 +142,15 @@ let actCache = {};
 onSnapshot(doctorsRef, async (snap) => {
   doctors = [];
   snap.forEach((d) => doctors.push({ id: d.id, ...d.data() }));
-  for (const doc_ of doctors) actCache[doc_.id] = await computeACT(doc_.id);
-  renderDoctorCheckboxes();
+  renderDoctorCheckboxes(); // render immediately so the UI never blocks on ACT lookups
+  for (const doc_ of doctors) {
+    try {
+      actCache[doc_.id] = await computeACT(doc_.id);
+    } catch (err) {
+      console.error("computeACT failed for doctor", doc_.id, err);
+      actCache[doc_.id] = (doc_.seedActMinutes || 8) * 60; // fall back to seed value
+    }
+  }
 });
 
 function renderDoctorCheckboxes() {
