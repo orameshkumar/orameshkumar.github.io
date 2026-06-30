@@ -13,6 +13,7 @@
     <div class="brand"><span class="dot"></span> Clinic Queue</div>
     <nav>
       <a href="doctor.html" class="active">My Queue</a>
+      <a href="patients.html">Patients</a>
       <a href="board.html">Queue Board</a>
     </nav>
     <div class="user-pill"><span id="user-email">—</span><button id="logout-btn">Sign out</button></div>
@@ -245,13 +246,24 @@ document.getElementById("lookup-btn").onclick = async () => {
   const idVal = document.getElementById("lookup-input").value.trim();
   const resultBox = document.getElementById("lookup-result");
   if (!idVal) return;
-  const snap = await getDoc(doc(db, "patients", idVal));
-  if (!snap.exists()) { resultBox.innerHTML = '<p class="helper">No patient found with that ID.</p>'; return; }
-  const p = snap.data();
-  const history = await getLastVisits(idVal, null);
+
+  let patientId, p;
+  // Try matching the human-readable Patient ID (e.g. CLN-000123) first.
+  const codeSnap = await getDocs(query(collection(db, "patients"), where("patientCode", "==", idVal.toUpperCase())));
+  if (!codeSnap.empty) {
+    patientId = codeSnap.docs[0].id;
+    p = codeSnap.docs[0].data();
+  } else {
+    // Fall back to a raw Firestore document ID, for older records created before patientCode existed.
+    const directSnap = await getDoc(doc(db, "patients", idVal));
+    if (directSnap.exists()) { patientId = idVal; p = directSnap.data(); }
+  }
+
+  if (!p) { resultBox.innerHTML = '<p class="helper">No patient found with that ID.</p>'; return; }
+  const history = await getLastVisits(patientId, null);
   resultBox.innerHTML = `
     <div class="card" style="background:var(--paper-dim);margin-top:0.75rem;">
-      <strong>${escapeHtml(p.name)}</strong> · ${p.age}/${p.gender} · ${escapeHtml(p.mobile)}
+      <strong>${escapeHtml(p.name)}</strong> · ${p.age}/${p.gender} · ${escapeHtml(p.mobile)} <span class="small muted">· ${p.patientCode || "no ID"}</span>
       ${renderHistory(history)}
     </div>`;
 };

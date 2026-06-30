@@ -14,8 +14,9 @@ This is a **functional proof-of-concept**, not a production-hardened system. See
 | `doctor.html` | Doctor's live queue, call/start/complete consultation, patient history lookup by Patient ID, break control |
 | `board.html` | Public, no-login, animated visual queue board for a waiting-room TV |
 | `self-service.html` | Patient-facing booking form opened by scanning the QR shown on the board |
+| `patients.html` | Browsable, searchable directory of every registered patient with full details and visit history |
 | `js/firebase-config.js` | Firebase connection (already configured with your project keys) |
-| `js/queue-logic.js` | ACT (average consultation time) and ETA calculation logic — shared by all pages |
+| `js/queue-logic.js` | ACT (average consultation time), ETA calculation, and Patient ID generation — shared by all pages |
 
 ## One-time setup
 
@@ -65,6 +66,12 @@ python3 -m http.server 8080
 2. Repo → Settings → Pages → Source: deploy from the branch containing this folder (root, or `/docs` if you move it there).
 3. Your app will be live at `https://<username>.github.io/<repo>/`.
 4. Bookmark `board.html` on the waiting-room TV, `reception.html` on the front-desk device, and have each doctor bookmark `doctor.html` on their tablet/phone.
+
+## Patient IDs
+
+Every newly registered patient (via Reception or self-service booking) now gets a sequential, human-readable Patient ID like `CLN-000001`, generated through a Firestore transaction against a `counters/patientId` document so two simultaneous registrations never collide on the same number. This ID is what gets shown to staff, searched on, and is intended to go on a printed token slip/patient card once barcode printing is wired up (see limitations below).
+
+Patients registered before this feature was added won't have a `patientCode` — they'll show as "—" in the directory and lookup screens until/unless you backfill them (not currently automated).
 
 ## Known limitations (read before relying on this)
 

@@ -1,8 +1,30 @@
 // Core business logic: ACT (average consultation time) and ETA calculation,
 // shared by Reception, Doctor, and Queue Board views.
 import {
-  db, collection, query, where, orderBy, getDocs, doc, updateDoc, onSnapshot
+  db, collection, query, where, orderBy, getDocs, doc, updateDoc, onSnapshot, runTransaction
 } from "./firebase-config.js";
+
+const PATIENT_ID_PREFIX = "CLN";
+const PATIENT_ID_PAD = 6;
+
+/**
+ * Generates a sequential, human-readable Patient ID (e.g. CLN-000001) using a
+ * Firestore transaction against a single counters/patientId document, so two
+ * simultaneous registrations (e.g. Reception + a self-service booking at the
+ * same moment) never collide on the same number.
+ */
+export async function generatePatientId() {
+  const counterRef = doc(db, "counters", "patientId");
+  const newNumber = await runTransaction(db, async (tx) => {
+    const snap = await tx.get(counterRef);
+    const current = snap.exists() ? snap.data().value || 0 : 0;
+    const next = current + 1;
+    tx.set(counterRef, { value: next });
+    return next;
+  });
+  return `${PATIENT_ID_PREFIX}-${String(newNumber).padStart(PATIENT_ID_PAD, "0")}`;
+}
+
 
 export const DEFAULT_ACT_SECONDS = 8 * 60; // 8 min seed value until real history exists
 export const ACT_WINDOW_N = 25;

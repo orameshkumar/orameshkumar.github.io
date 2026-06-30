@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Patients — Clinic Queue</title>
+<link rel="manifest" href="manifest.json" />
+<link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+<div class="app-shell">
+  <header class="topbar">
+    <div class="brand"><span class="dot"></span> Clinic Queue</div>
+    <nav id="nav-links">
+      <a href="reception.html">Reception</a>
+      <a href="patients.html" class="active">Patients</a>
+      <a href="board.html">Queue Board</a>
+    </nav>
+    <div class="user-pill"><span id="user-email">—</span><button id="logout-btn">Sign out</button></div>
+  </header>
+
+  <main class="page">
+    <div class="page-header flex-between">
+      <div>
+        <h1>Patient directory</h1>
+        <p>Browse every registered patient, their details, and visit history.</p>
+      </div>
+      <div style="min-width:260px;">
+        <input id="search-box" placeholder="Search by name, mobile, or Patient ID…" />
+      </div>
+    </div>
+
+    <div class="card flush">
+      <div id="patient-table-wrap"><div class="empty-state">Loading patients…</div></div>
+    </div>
+  </main>
+</div>
+
+<!-- Patient detail modal -->
+<div id="detail-modal" style="display:none;position:fixed;inset:0;background:rgba(28,36,34,0.55);z-index:100;align-items:center;justify-content:center;overflow:auto;padding:1.5rem;">
+  <div class="card" style="max-width:600px;width:100%;">
+    <div class="flex-between">
+      <h2 id="detail-name">—</h2>
+      <span class="token-tag" id="detail-code">—</span>
+    </div>
+    <p class="small muted" id="detail-meta">—</p>
+    <hr class="section-divider" />
+    <h3>Visit history</h3>
+    <div id="detail-history"></div>
+    <div class="flex-between" style="margin-top:1rem;">
+      <button class="btn btn-outline" id="detail-close">Close</button>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import {
+  auth, db, onAuthStateChanged, signOut,
+  collection, getDocs, getDoc, doc, query, where, orderBy
+} from "./js/firebase-config.js";
+
+let allPatients = [];
+let currentRole = null;
+
+onAuthStateChanged(auth, async (user) => {
+  if (!user) { window.location.href = "index.html"; return; }
+  document.getElementById("user-email").textContent = user.email;
+  const userSnap = await getDoc(doc(db, "users", user.uid));
+  currentRole = userSnap.exists() ? userSnap.data().role : null;
+  adjustNavForRole();
+  await loadPatients();
+});
+document.getElementById("logout-btn").onclick = () => signOut(auth).then(() => window.location.href = "index.html");
+
+function adjustNavForRole() {
+  const nav = document.getElementById("nav-links");
+  if (currentRole === "doctor") {
+    nav.innerHTML = `<a href="doctor.html">My Queue</a><a href="patients.html" class="active">Patients</a><a href="board.html">Queue Board</a>`;
+  } else if (currentRole === "admin") {
+    nav.innerHTML = `<a href="admin.html">Admin Setup</a><a href="reception.html">Reception</a><a href="patients.html" class="active">Patients</a><a href="board.html">Queue Board</a>`;
+  }
+}
+
+async function loadPatients() {
+  const snap = await getDocs(collection(db, "patients"));
+  allPatients = [];
+  snap.forEach((d) => allPatients.push({ id: d.id, ...d.data() }));
+  // Newest first where we have a registration timestamp; legacy/no-timestamp records sort last.
+  allPatients.sort((a, b) => new Date(b.registeredAt || 0) - new Date(a.registeredAt || 0));
+  renderTable(allPatients);
+}
+
+function renderTable(list) {
+  const wrap = document.getElementById("patient-table-wrap");
+  if (list.length === 0) {
+    wrap.innerHTML = '<div class="empty-state">No patients registered yet.</div>';
+    return;
+  }
+  wrap.innerHTML = `
+    <table>
+      <thead><tr><th>Patient ID</th><th>Name</th><th>Age/Gender</th><th>Mobile</th><th>Address</th><th>Source</th><th></th></tr></thead>
+      <tbody>
+        ${list.map((p) => `
+          <tr>
+            <td><span class="small" style="font-family:var(--mono);font-weight:700;">${p.patientCode || "—"}</span></td>
+            <td><strong>${escapeHtml(p.name)}</strong></td>
+            <td class="small">${p.age || "—"}/${p.gender || "—"}</td>
+            <td class="small">${escapeHtml(p.mobile || "—")}</td>
+            <td class="small">${escapeHtml(p.address || "—")}</td>
+            <td class="small">${sourceLabel(p.registrationSource)}</td>
+            <td><button class="btn btn-sm btn-outline" data-view="${p.id}">View</button></td>
+          </tr>`).join("")}
+      </tbody>
+    </table>`;
+  wrap.querySelectorAll("[data-view]").forEach((b) => b.addEventListener("click", () => openDetail(b.dataset.view)));
+}
+
+function sourceLabel(s) {
+  return { reception: "Reception", kiosk_qr_self_service: "Self-service" }[s] || "—";
+}
+
+document.getElementById("search-box").addEventListener("input", (e) => {
+  const term = e.target.value.trim().toLowerCase();
+  if (!term) { renderTable(allPatients); return; }
+  const filtered = allPatients.filter((p) => {
+    const hay = `${p.name || ""} ${p.mobile || ""} ${p.patientCode || ""}`.toLowerCase();
+    return hay.includes(term);
+  });
+  renderTable(filtered);
+});
+
+async function openDetail(patientId) {
+  const p = allPatients.find((x) => x.id === patientId);
+  if (!p) return;
+  document.getElementById("detail-name").textContent = p.name;
+  document.getElementById("detail-code").textContent = p.patientCode || "—";
+  document.getElementById("detail-meta").textContent = `${p.age || "—"} years · ${p.gender || "—"} · ${p.mobile || "—"} · ${p.address || "No address on file"}`;
+
+  const histBox = document.getElementById("detail-history");
+  histBox.innerHTML = "<p class='small muted'>Loading visit history…</p>";
+
+  const visitsSnap = await getDocs(query(collection(db, "visits"), where("patientId", "==", patientId)));
+  const visits = [];
+  visitsSnap.forEach((d) => visits.push({ id: d.id, ...d.data() }));
+  visits.sort((a, b) => new Date(b.issuedAt || 0) - new Date(a.issuedAt || 0));
+
+  if (visits.length === 0) {
+    histBox.innerHTML = '<p class="small muted">No visits recorded yet.</p>';
+  } else {
+    histBox.innerHTML = visits.map((v) => `
+      <div style="padding:0.6rem 0;border-bottom:1px solid var(--paper-dim);">
+        <div class="flex-between">
+          <span><span class="token-tag" style="font-size:0.85rem;padding:0.2rem 0.5rem;">#${v.tokenNumber}</span> <span class="small muted" style="margin-left:0.5rem;">${v.visitDate}</span></span>
+          <span class="badge badge-${v.status}">${v.status.replace("_"," ")}</span>
+        </div>
+        ${v.doctorNotes ? `<p class="small" style="margin-top:0.4rem;">${escapeHtml(v.doctorNotes)}</p>` : ""}
+        ${v.vitals ? `<p class="small muted">Wt ${v.vitals.weight || "—"}kg · Temp ${v.vitals.temperature || "—"}°F · BP ${v.vitals.bpSystolic || "—"}/${v.vitals.bpDiastolic || "—"}</p>` : ""}
+        ${v.fees ? `<p class="small muted">Fee collected: ₹${v.fees.total} (${v.fees.mode})</p>` : ""}
+      </div>`).join("");
+  }
+  document.getElementById("detail-modal").style.display = "flex";
+}
+document.getElementById("detail-close").onclick = () => document.getElementById("detail-modal").style.display = "none";
+
+function escapeHtml(s) {
+  return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+}
+</script>
+<script>if("serviceWorker" in navigator){navigator.serviceWorker.register("sw.js").catch(()=>{});}</script>
+</body>
+</html>

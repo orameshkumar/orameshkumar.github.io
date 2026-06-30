@@ -1,7 +1,7 @@
 const CACHE_NAME = "clinic-queue-v1";
 const SHELL_FILES = [
   "./index.html", "./reception.html", "./doctor.html", "./board.html",
-  "./self-service.html", "./admin.html",
+  "./self-service.html", "./admin.html", "./patients.html",
   "./css/styles.css", "./css/board.css", "./manifest.json"
 ];
 

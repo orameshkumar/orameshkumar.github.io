@@ -13,6 +13,7 @@
     <div class="brand"><span class="dot"></span> Clinic Queue</div>
     <nav>
       <a href="reception.html" class="active">Reception</a>
+      <a href="patients.html">Patients</a>
       <a href="board.html">Queue Board</a>
       <a href="admin.html">Admin Setup</a>
     </nav>
@@ -122,7 +123,7 @@ import {
   collection, addDoc, doc, updateDoc, getDoc, getDocs, onSnapshot,
   query, where, orderBy
 } from "./js/firebase-config.js";
-import { computeACT, calculateETAs, formatETA, todayKey, STATUS_LABELS, NO_SHOW_GRACE_SECONDS } from "./js/queue-logic.js";
+import { computeACT, calculateETAs, formatETA, todayKey, STATUS_LABELS, NO_SHOW_GRACE_SECONDS, generatePatientId } from "./js/queue-logic.js";
 
 onAuthStateChanged(auth, (user) => {
   if (!user) { window.location.href = "index.html"; return; }
@@ -232,7 +233,7 @@ async function doSearch(term) {
   if (results.length === 0) { box.innerHTML = '<p class="helper">No match — fill the form below to register a new patient.</p>'; return; }
   box.innerHTML = results.slice(0, 5).map((p) => `
     <div class="flex-between" style="padding:0.5rem 0;border-bottom:1px solid var(--paper-dim);cursor:pointer;" data-pick="${p.id}">
-      <span><strong>${escapeHtml(p.name)}</strong> · ${p.age}/${p.gender} · ${escapeHtml(p.mobile)}</span>
+      <span><strong>${escapeHtml(p.name)}</strong> · ${p.age}/${p.gender} · ${escapeHtml(p.mobile)} <span class="small muted">· ${p.patientCode || "no ID yet"}</span></span>
       <span class="small muted">Select</span>
     </div>`).join("");
   box.querySelectorAll("[data-pick]").forEach((row) => {
@@ -247,7 +248,7 @@ function fillPatientForm(p) {
   document.getElementById("p-age").value = p.age;
   document.getElementById("p-gender").value = p.gender;
   document.getElementById("p-address").value = p.address || "";
-  document.getElementById("form-mode-label").textContent = `Editing existing patient (ID: ${p.id.slice(0,8)}…)`;
+  document.getElementById("form-mode-label").textContent = `Editing existing patient — ID: ${p.patientCode || "(legacy, no ID)"}`;
 }
 
 // ----- Token issuance -----
@@ -266,9 +267,14 @@ document.getElementById("patient-form").addEventListener("submit", async (e) => 
   };
 
   let patientId = existingId;
+  let patientCode;
   if (!patientId) {
-    const newDoc = await addDoc(patientsRef, { ...patientData, registeredAt: new Date().toISOString() });
+    patientCode = await generatePatientId();
+    const newDoc = await addDoc(patientsRef, { ...patientData, patientCode, registeredAt: new Date().toISOString() });
     patientId = newDoc.id;
+  } else {
+    const existingSnap = await getDoc(doc(db, "patients", patientId));
+    patientCode = existingSnap.exists() ? existingSnap.data().patientCode : null;
   }
 
   const preferredDoctorIds = Array.from(selectedDoctorIds);
@@ -276,6 +282,7 @@ document.getElementById("patient-form").addEventListener("submit", async (e) => 
 
   await addDoc(visitsRef, {
     patientId,
+    patientCode: patientCode || null,
     patientName: patientData.name,
     patientAge: patientData.age,
     patientGender: patientData.gender,
@@ -291,7 +298,7 @@ document.getElementById("patient-form").addEventListener("submit", async (e) => 
     fees: null,
   });
 
-  alert(`Token #${tokenNumber} issued for ${patientData.name}.`);
+  alert(`Token #${tokenNumber} issued for ${patientData.name}.\nPatient ID: ${patientCode || "(existing patient, no ID on record)"}`);
   e.target.reset();
   document.getElementById("patient-id").value = "";
   document.getElementById("form-mode-label").textContent = "New patient details";
@@ -322,17 +329,18 @@ let activeBillingVisitId = null;
 onSnapshot(query(visitsRef, where("visitDate", "==", todayKey()), orderBy("tokenNumber")), (snap) => {
   const list = document.getElementById("today-tokens");
   if (snap.empty) { list.innerHTML = '<div class="empty-state">No tokens issued yet today.</div>'; return; }
-  let html = "<table><thead><tr><th>Token</th><th>Patient</th><th>Doctor(s)</th><th>Status</th><th>Actions</th></tr></thead><tbody>";
+  let html = "<table><thead><tr><th>Token</th><th>Patient</th><th>Patient ID</th><th>Doctor(s)</th><th>Status</th><th>Actions</th></tr></thead><tbody>";
   snap.forEach((d) => {
     const v = { id: d.id, ...d.data() };
     const docNames = (v.preferredDoctorIds || []).map((id) => doctors.find((x) => x.id === id)?.name || "—").join(", ");
     html += `<tr>
       <td><span class="token-tag">#${v.tokenNumber}</span></td>
       <td>${escapeHtml(v.patientName)}<br/><span class="small muted">${v.patientAge}/${v.patientGender}</span></td>
+      <td class="small">${v.patientCode || "—"}</td>
       <td class="small">${docNames}</td>
       <td><span class="badge badge-${v.status}">${STATUS_LABELS[v.status] || v.status}</span></td>
       <td>
-        ${v.status === "waiting" ? `<button class="btn btn-sm btn-outline" data-vitals="${v.id}">Vitals</button> <button class="btn btn-sm btn-danger" data-cancel="${v.id}">Cancel</button>` : ""}
+        ${v.status === "waiting" ? `<button class="btn btn-sm btn-outline" data-visit='${escapeHtmlAttr(JSON.stringify(v))}'>Vitals</button> <button class="btn btn-sm btn-danger" data-cancel="${v.id}">Cancel</button>` : ""}
         ${v.status === "completed" && !v.fees ? `<button class="btn btn-sm btn-amber" data-bill="${v.id}" data-fee="${docFeeFor(v)}">Collect fee</button>` : ""}
         ${v.fees ? `<span class="small muted">Paid ₹${v.fees.total}</span>` : ""}
       </td>
@@ -341,7 +349,7 @@ onSnapshot(query(visitsRef, where("visitDate", "==", todayKey()), orderBy("token
   html += "</tbody></table>";
   list.innerHTML = html;
 
-  list.querySelectorAll("[data-vitals]").forEach((b) => b.addEventListener("click", () => openVitals(b.dataset.vitals)));
+  list.querySelectorAll("[data-visit]").forEach((b) => b.addEventListener("click", () => openVitals(JSON.parse(b.getAttribute("data-visit")))));
   list.querySelectorAll("[data-cancel]").forEach((b) => b.addEventListener("click", () => cancelToken(b.dataset.cancel)));
   list.querySelectorAll("[data-bill]").forEach((b) => b.addEventListener("click", () => openBilling(b.dataset.bill, Number(b.dataset.fee))));
 });
@@ -356,10 +364,16 @@ async function cancelToken(visitId) {
   await updateDoc(doc(db, "visits", visitId), { status: "cancelled", cancelledAt: new Date().toISOString() });
 }
 
-function openVitals(visitId) {
-  activeVitalsVisitId = visitId;
-  document.getElementById("vitals-token").textContent = "patient visit";
-  ["v-weight","v-temp","v-bp-sys","v-bp-dia","v-complaint","v-prior"].forEach((id) => document.getElementById(id).value = "");
+function openVitals(visit) {
+  activeVitalsVisitId = visit.id;
+  document.getElementById("vitals-token").textContent = `#${visit.tokenNumber} — ${visit.patientName}`;
+  const existing = visit.vitals || {};
+  document.getElementById("v-weight").value = existing.weight || "";
+  document.getElementById("v-temp").value = existing.temperature || "";
+  document.getElementById("v-bp-sys").value = existing.bpSystolic || "";
+  document.getElementById("v-bp-dia").value = existing.bpDiastolic || "";
+  document.getElementById("v-complaint").value = existing.chiefComplaint || "";
+  document.getElementById("v-prior").value = existing.priorNotes || "";
   document.getElementById("vitals-modal").style.display = "flex";
 }
 document.getElementById("vitals-cancel").onclick = () => document.getElementById("vitals-modal").style.display = "none";
@@ -409,6 +423,12 @@ document.getElementById("billing-save").onclick = async () => {
 };
 
 function escapeHtml(s) {
+  return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+}
+
+function escapeHtmlAttr(s) {
+  // Same escaping as escapeHtml, but kept as a separate name for clarity at call sites
+  // that are specifically embedding JSON inside a single-quoted HTML attribute.
   return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
 }
 </script>
