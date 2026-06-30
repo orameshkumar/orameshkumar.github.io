@@ -11,7 +11,7 @@
 <body class="board-body">
 
   <div class="board-header">
-    <div class="brand"><span class="dot"></span> Clinic Queue Board</div>
+    <div class="brand"><span class="dot"></span> <span data-clinic-name data-clinic-name-suffix=" Board">Clinic Queue Board</span></div>
     <div class="board-clock">
       <div class="time" id="clock-time">--:--</div>
       <div class="date" id="clock-date">—</div>
@@ -31,7 +31,9 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script type="module">
 import { db, collection, onSnapshot, query, where, orderBy, doc } from "./js/firebase-config.js";
-import { computeACT, calculateETAs, formatETA, todayKey, STATUS_LABELS } from "./js/queue-logic.js";
+import { computeACT, calculateETAs, formatETA, todayKey, STATUS_LABELS, applyClinicBranding } from "./js/queue-logic.js";
+
+applyClinicBranding();
 
 function tickClock() {
   const now = new Date();

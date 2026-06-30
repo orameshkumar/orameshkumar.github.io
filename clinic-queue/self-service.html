@@ -10,7 +10,7 @@
 <body>
   <div class="login-wrap" style="align-items:flex-start;padding-top:3rem;">
     <div class="login-card" style="max-width:460px;">
-      <div class="brand"><span class="dot"></span> Clinic Queue</div>
+      <div class="brand"><span class="dot"></span> <span data-clinic-name>Clinic Queue</span></div>
       <p class="sub">Book your token before you reach the reception desk.</p>
 
       <div id="form-view">
@@ -48,7 +48,9 @@
 
 <script type="module">
 import { db, collection, addDoc, getDocs, query, where } from "./js/firebase-config.js";
-import { computeACT, todayKey, generatePatientId } from "./js/queue-logic.js";
+import { computeACT, todayKey, generatePatientId, applyClinicBranding } from "./js/queue-logic.js";
+
+applyClinicBranding();
 
 let doctors = [];
 let selectedDoctorIds = new Set();

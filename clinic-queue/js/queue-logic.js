@@ -1,7 +1,7 @@
 // Core business logic: ACT (average consultation time) and ETA calculation,
 // shared by Reception, Doctor, and Queue Board views.
 import {
-  db, collection, query, where, orderBy, getDocs, doc, updateDoc, onSnapshot, runTransaction
+  db, collection, query, where, orderBy, getDocs, getDoc, doc, updateDoc, onSnapshot, runTransaction
 } from "./firebase-config.js";
 
 const PATIENT_ID_PREFIX = "CLN";
@@ -145,6 +145,32 @@ export function todayKey(date = new Date()) {
   const m = String(date.getMonth() + 1).padStart(2, "0");
   const d = String(date.getDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
+}
+
+export const DEFAULT_CLINIC_NAME = "Clinic Queue";
+
+/**
+ * Fetches the configured clinic name from Firestore (clinicSettings/main) and
+ * applies it to every element with data-clinic-name on the page, plus swaps
+ * it into document.title in place of the placeholder "Clinic Queue" text.
+ * Falls back to DEFAULT_CLINIC_NAME if nothing has been configured yet.
+ */
+export async function applyClinicBranding() {
+  let name = DEFAULT_CLINIC_NAME;
+  try {
+    const snap = await getDoc(doc(db, "clinicSettings", "main"));
+    if (snap.exists() && snap.data().name) name = snap.data().name;
+  } catch (err) {
+    console.error("Could not load clinic name, using default.", err);
+  }
+  document.querySelectorAll("[data-clinic-name]").forEach((el) => {
+    const suffix = el.dataset.clinicNameSuffix || "";
+    el.textContent = name + suffix;
+  });
+  if (document.title.includes(DEFAULT_CLINIC_NAME)) {
+    document.title = document.title.replace(DEFAULT_CLINIC_NAME, name);
+  }
+  return name;
 }
 
 export const STATUS_LABELS = {

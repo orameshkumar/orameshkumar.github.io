@@ -10,7 +10,7 @@
 <body>
 <div class="app-shell">
   <header class="topbar">
-    <div class="brand"><span class="dot"></span> Clinic Queue</div>
+    <div class="brand"><span class="dot"></span> <span data-clinic-name>Clinic Queue</span></div>
     <nav id="nav-links">
       <a href="reception.html">Reception</a>
       <a href="patients.html" class="active">Patients</a>
@@ -55,9 +55,13 @@
 
 <script type="module">
 import {
-  auth, db, onAuthStateChanged, signOut,
+  auth, authReady, db, onAuthStateChanged, signOut,
   collection, getDocs, getDoc, doc, query, where, orderBy
 } from "./js/firebase-config.js";
+import { applyClinicBranding } from "./js/queue-logic.js";
+
+applyClinicBranding();
+await authReady;
 
 let allPatients = [];
 let currentRole = null;

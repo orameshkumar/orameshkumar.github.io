@@ -10,7 +10,7 @@
 <body>
   <div class="login-wrap">
     <div class="login-card">
-      <div class="brand"><span class="dot"></span> Clinic Queue</div>
+      <div class="brand"><span class="dot"></span> <span data-clinic-name>Clinic Queue</span></div>
       <p class="sub">Sign in to manage the patient queue.</p>
       <form id="login-form">
         <div class="field">
@@ -31,7 +31,11 @@
   </div>
 
   <script type="module">
-    import { auth, signInWithEmailAndPassword, onAuthStateChanged, db, doc, getDoc } from "./js/firebase-config.js";
+    import { auth, authReady, signInWithEmailAndPassword, onAuthStateChanged, db, doc, getDoc } from "./js/firebase-config.js";
+    import { applyClinicBranding } from "./js/queue-logic.js";
+
+    applyClinicBranding();
+    await authReady;
 
     onAuthStateChanged(auth, async (user) => {
       if (user) {

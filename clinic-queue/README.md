@@ -34,6 +34,7 @@ service cloud.firestore {
     match /patients/{doc} { allow read, create: if true; allow update, delete: if isSignedIn(); }
     match /visits/{doc} { allow read, create: if true; allow update: if isSignedIn() || true; }
     match /users/{doc} { allow read: if isSignedIn(); allow write: if isSignedIn() && myRole() == 'admin'; }
+    match /clinicSettings/{doc} { allow read: if true; allow write: if isSignedIn() && myRole() == 'admin'; }
   }
 }
 ```
@@ -67,11 +68,21 @@ python3 -m http.server 8080
 3. Your app will be live at `https://<username>.github.io/<repo>/`.
 4. Bookmark `board.html` on the waiting-room TV, `reception.html` on the front-desk device, and have each doctor bookmark `doctor.html` on their tablet/phone.
 
+## Clinic branding
+
+The clinic's name shown in the banner across every page (and in the browser tab title) is configurable from Admin Setup → "Clinic branding" — no need to edit any code. It's stored in a `clinicSettings/main` Firestore document and falls back to the placeholder "Clinic Queue" until an admin sets a real name. The Queue Board and self-service booking page (both public, no login) read it too, so update it once and it shows everywhere on next page load.
+
 ## Patient IDs
 
 Every newly registered patient (via Reception or self-service booking) now gets a sequential, human-readable Patient ID like `CLN-000001`, generated through a Firestore transaction against a `counters/patientId` document so two simultaneous registrations never collide on the same number. This ID is what gets shown to staff, searched on, and is intended to go on a printed token slip/patient card once barcode printing is wired up (see limitations below).
 
 Patients registered before this feature was added won't have a `patientCode` — they'll show as "—" in the directory and lookup screens until/unless you backfill them (not currently automated).
+
+## Login sessions are per-tab, not per-browser
+
+Each browser tab holds its own independent login. This is deliberate: if two doctors share one physical machine, each can open their own tab and sign in as themselves without affecting the other's tab or any other open tab/window.
+
+The tradeoff: a session does not survive closing the tab, and does not survive being shared with a new tab — each new tab starts logged out and needs sign-in again. A refresh **within the same tab** keeps you logged in. This matches doctors typically opening one fresh tab per shift rather than expecting to stay logged in across browser restarts.
 
 ## Known limitations (read before relying on this)
 
