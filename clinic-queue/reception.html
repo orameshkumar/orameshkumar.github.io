@@ -441,25 +441,35 @@ async function cancelToken(visitId) {
 async function moveToEndOfQueue(visit) {
   if (!confirm(`Move token #${visit.tokenNumber} (${visit.patientName}) to the end of the queue? Their token number stays the same — only their position in line changes.`)) return;
 
-  // Find the current highest queueSequence among Waiting tokens for the same doctor(s)
-  // this token is eligible for, and place this token just behind it.
+  // Find the current highest queueSequence among OTHER Waiting tokens that share
+  // at least one preferred doctor with this token, and place this token just
+  // behind it. Deliberately starts at null (not this token's own current
+  // sequence) so that a token already at the end is correctly left unchanged
+  // instead of having its sequence number incremented every time the button
+  // is clicked, which was the original (harmless-but-sloppy) behavior here.
   const relevantDoctorIds = visit.preferredDoctorIds && visit.preferredDoctorIds.length > 0
     ? visit.preferredDoctorIds
     : [visit.doctorId];
 
   const todaySnap = await getDocs(query(visitsRef, where("visitDate", "==", todayKey()), where("status", "==", "waiting")));
-  let maxSeq = visit.queueSequence || visit.tokenNumber;
+  let maxOtherSeq = null;
   todaySnap.forEach((d) => {
     const other = d.data();
     if (d.id === visit.id) return;
     const sharesADoctor = (other.preferredDoctorIds || []).some((id) => relevantDoctorIds.includes(id)) || relevantDoctorIds.includes(other.doctorId);
     if (sharesADoctor) {
       const seq = other.queueSequence ?? other.tokenNumber;
-      if (seq > maxSeq) maxSeq = seq;
+      if (maxOtherSeq === null || seq > maxOtherSeq) maxOtherSeq = seq;
     }
   });
 
-  await updateDoc(doc(db, "visits", visit.id), { queueSequence: maxSeq + 1 });
+  const currentSeq = visit.queueSequence ?? visit.tokenNumber;
+  if (maxOtherSeq === null || maxOtherSeq < currentSeq) {
+    // No other relevant waiting token, or this token is already last — nothing to do.
+    return;
+  }
+
+  await updateDoc(doc(db, "visits", visit.id), { queueSequence: maxOtherSeq + 1 });
 }
 
 function openVitals(visit) {
