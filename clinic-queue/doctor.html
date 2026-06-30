@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Doctor — Clinic Queue</title>
+<link rel="manifest" href="manifest.json" />
+<link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+<div class="app-shell">
+  <header class="topbar">
+    <div class="brand"><span class="dot"></span> Clinic Queue</div>
+    <nav>
+      <a href="doctor.html" class="active">My Queue</a>
+      <a href="board.html">Queue Board</a>
+    </nav>
+    <div class="user-pill"><span id="user-email">—</span><button id="logout-btn">Sign out</button></div>
+  </header>
+
+  <main class="page">
+    <div class="page-header flex-between">
+      <div>
+        <h1 id="doctor-name">My queue</h1>
+        <p>Call patients, run consultations, and look up patient history.</p>
+      </div>
+      <div>
+        <button class="btn btn-outline" id="break-btn">Take a short break</button>
+        <button class="btn btn-outline" id="end-break-btn" style="display:none;">End break</button>
+      </div>
+    </div>
+
+    <div id="break-banner" style="display:none;" class="warning-box">
+      ☕ <div><strong>On break</strong> <span id="break-detail"></span> — new tokens won't be called until you end the break. Wait-time estimates have been refreshed for your queue.</div>
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <h2>Now serving / next up</h2>
+        <div id="now-serving-box"></div>
+        <hr class="section-divider" />
+        <h3>Waiting (FIFO by default — tap any token to call it out of order)</h3>
+        <div id="waiting-list"><div class="empty-state">No patients waiting.</div></div>
+      </div>
+
+      <div class="card">
+        <h2>Patient lookup</h2>
+        <p class="helper">Search by Patient ID or simulate a barcode scan to pull up history.</p>
+        <div class="field"><input id="lookup-input" placeholder="Enter Patient ID or scan barcode…" /></div>
+        <button class="btn btn-outline btn-block" id="lookup-btn">Look up patient</button>
+        <div id="lookup-result"></div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- Consultation modal -->
+<div id="consult-modal" style="display:none;position:fixed;inset:0;background:rgba(28,36,34,0.55);z-index:100;align-items:center;justify-content:center;overflow:auto;padding:1.5rem;">
+  <div class="card" style="max-width:560px;width:100%;">
+    <h2>Consultation — <span id="consult-token-label"></span></h2>
+    <div id="consult-patient-info" class="small muted" style="margin-bottom:0.75rem;"></div>
+    <div id="consult-history"></div>
+    <hr class="section-divider" />
+    <div class="field"><label>Consultation notes</label><textarea id="c-notes" rows="4" placeholder="Diagnosis, advice, follow-up…"></textarea></div>
+    <div class="flex-between">
+      <button class="btn btn-outline" id="consult-close">Close</button>
+      <button class="btn btn-primary" id="consult-complete">Complete consultation</button>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import {
+  auth, db, onAuthStateChanged, signOut,
+  collection, doc, updateDoc, getDoc, getDocs, addDoc, onSnapshot,
+  query, where, orderBy
+} from "./js/firebase-config.js";
+import { computeACT, calculateETAs, formatETA, todayKey, STATUS_LABELS, NO_SHOW_GRACE_SECONDS } from "./js/queue-logic.js";
+
+let currentUser = null;
+let doctorId = null;
+let doctorOnBreakUntil = null;
+let act = 8 * 60;
+
+onAuthStateChanged(auth, async (user) => {
+  if (!user) { window.location.href = "index.html"; return; }
+  currentUser = user;
+  document.getElementById("user-email").textContent = user.email;
+  const userSnap = await getDoc(doc(db, "users", user.uid));
+  if (!userSnap.exists() || userSnap.data().role !== "doctor") {
+    alert("This login isn't linked to a doctor profile yet. Ask an admin to set it up.");
+    return;
+  }
+  doctorId = userSnap.data().doctorId;
+  const docSnap = await getDoc(doc(db, "doctors", doctorId));
+  document.getElementById("doctor-name").textContent = `${docSnap.data().name}'s queue`;
+  act = await computeACT(doctorId);
+  watchQueue();
+});
+
+document.getElementById("logout-btn").onclick = () => signOut(auth).then(() => window.location.href = "index.html");
+
+// ---- Break controls ----
+document.getElementById("break-btn").onclick = async () => {
+  const mins = prompt("Break duration in minutes:", "10");
+  if (!mins) return;
+  doctorOnBreakUntil = Date.now() + Number(mins) * 60 * 1000;
+  await updateDoc(doc(db, "doctors", doctorId), { onBreakUntil: doctorOnBreakUntil });
+  document.getElementById("break-btn").style.display = "none";
+  document.getElementById("end-break-btn").style.display = "inline-flex";
+  document.getElementById("break-banner").style.display = "flex";
+  document.getElementById("break-detail").textContent = `Back around ${formatETA(doctorOnBreakUntil)}`;
+};
+document.getElementById("end-break-btn").onclick = async () => {
+  doctorOnBreakUntil = null;
+  await updateDoc(doc(db, "doctors", doctorId), { onBreakUntil: null });
+  document.getElementById("break-btn").style.display = "inline-flex";
+  document.getElementById("end-break-btn").style.display = "none";
+  document.getElementById("break-banner").style.display = "none";
+};
+
+// ---- Queue ----
+function watchQueue() {
+  const visitsRef = collection(db, "visits");
+  onSnapshot(query(visitsRef, where("visitDate", "==", todayKey()), orderBy("tokenNumber")), (snap) => {
+    const all = [];
+    snap.forEach((d) => all.push({ id: d.id, ...d.data() }));
+    const mine = all.filter((v) => v.doctorId === doctorId || (v.preferredDoctorIds || []).includes(doctorId));
+    renderQueue(mine);
+  });
+}
+
+function renderQueue(visits) {
+  const active = visits.filter((v) => ["waiting", "called", "in_consultation"].includes(v.status));
+  const eligible = active.filter((v) => v.doctorId === doctorId || v.status === "waiting");
+  const etas = calculateETAs(eligible.map(v => ({...v, consultStartAt: v.consultStartAt ? new Date(v.consultStartAt) : null})), act, doctorOnBreakUntil);
+
+  const serving = active.find((v) => v.doctorId === doctorId && (v.status === "called" || v.status === "in_consultation"));
+  const servingBox = document.getElementById("now-serving-box");
+  if (serving) {
+    servingBox.innerHTML = `
+      <div class="flex-between">
+        <div><span class="token-tag amber pulse">#${serving.tokenNumber}</span> <strong>${escapeHtml(serving.patientName)}</strong></div>
+        <span class="badge badge-${serving.status}">${STATUS_LABELS[serving.status]}</span>
+      </div>
+      <div style="margin-top:0.75rem;">
+        ${serving.status === "called"
+          ? `<button class="btn btn-primary btn-block" data-start="${serving.id}">Start consultation</button>`
+          : `<button class="btn btn-primary btn-block" data-open-consult="${serving.id}">Open consultation</button>`}
+      </div>`;
+    servingBox.querySelectorAll("[data-start]").forEach((b) => b.addEventListener("click", () => startConsultation(b.dataset.start)));
+    servingBox.querySelectorAll("[data-open-consult]").forEach((b) => b.addEventListener("click", () => openConsultModal(serving)));
+  } else {
+    servingBox.innerHTML = '<div class="empty-state">No patient currently called. Tap a waiting token to call them.</div>';
+  }
+
+  const waiting = active.filter((v) => v.status === "waiting").sort((a,b) => a.tokenNumber - b.tokenNumber);
+  const list = document.getElementById("waiting-list");
+  if (waiting.length === 0) { list.innerHTML = '<div class="empty-state">No patients waiting.</div>'; return; }
+  list.innerHTML = waiting.map((v, idx) => `
+    <div class="flex-between" style="padding:0.6rem 0;border-bottom:1px solid var(--paper-dim);">
+      <div>
+        <span class="token-tag">#${v.tokenNumber}</span>
+        <strong style="margin-left:0.5rem;">${escapeHtml(v.patientName)}</strong>
+        ${idx === 0 ? '<span class="badge badge-waiting" style="margin-left:0.5rem;">Next up</span>' : ""}
+        ${(v.preferredDoctorIds || []).length > 1 ? '<span class="small muted" style="margin-left:0.5rem;">multi-doctor</span>' : ""}
+      </div>
+      <div style="text-align:right;">
+        <div class="small muted">ETA ${formatETA(etas[v.id])}</div>
+        <button class="btn btn-sm btn-amber" data-call="${v.id}" ${serving ? "disabled" : ""}>Call</button>
+      </div>
+    </div>`).join("");
+  list.querySelectorAll("[data-call]").forEach((b) => b.addEventListener("click", () => callToken(b.dataset.call)));
+}
+
+async function callToken(visitId) {
+  await updateDoc(doc(db, "visits", visitId), {
+    status: "called",
+    doctorId,
+    calledAt: new Date().toISOString(),
+    calledBy: currentUser.uid,
+  });
+}
+
+async function startConsultation(visitId) {
+  await updateDoc(doc(db, "visits", visitId), { status: "in_consultation", consultStartAt: new Date().toISOString() });
+  const snap = await getDoc(doc(db, "visits", visitId));
+  openConsultModal({ id: visitId, ...snap.data() });
+}
+
+async function openConsultModal(visit) {
+  document.getElementById("consult-token-label").textContent = `#${visit.tokenNumber}`;
+  document.getElementById("consult-patient-info").textContent = `${visit.patientName} · ${visit.patientAge}/${visit.patientGender}`;
+  document.getElementById("c-notes").value = "";
+  document.getElementById("consult-modal").dataset.visitId = visit.id;
+
+  const histBox = document.getElementById("consult-history");
+  histBox.innerHTML = "<p class='small muted'>Loading vitals & history…</p>";
+  const vitalsHtml = visit.vitals ? `
+    <div class="card" style="background:var(--paper-dim);margin-bottom:0.75rem;">
+      <strong class="small">Intake vitals</strong>
+      <p class="small">Weight: ${visit.vitals.weight || "—"} kg · Temp: ${visit.vitals.temperature || "—"}°F · BP: ${visit.vitals.bpSystolic || "—"}/${visit.vitals.bpDiastolic || "—"}</p>
+      ${visit.vitals.chiefComplaint ? `<p class="small">Reason: ${escapeHtml(visit.vitals.chiefComplaint)}</p>` : ""}
+      ${visit.vitals.priorNotes ? `<p class="small">Prior notes: ${escapeHtml(visit.vitals.priorNotes)}</p>` : ""}
+    </div>` : "<p class='small muted'>No intake vitals recorded.</p>";
+
+  const history = await getLastVisits(visit.patientId, visit.id);
+  histBox.innerHTML = vitalsHtml + renderHistory(history);
+  document.getElementById("consult-modal").style.display = "flex";
+}
+
+document.getElementById("consult-close").onclick = () => document.getElementById("consult-modal").style.display = "none";
+document.getElementById("consult-complete").onclick = async () => {
+  const visitId = document.getElementById("consult-modal").dataset.visitId;
+  const notes = document.getElementById("c-notes").value.trim();
+  await updateDoc(doc(db, "visits", visitId), {
+    status: "completed",
+    consultEndAt: new Date().toISOString(),
+    doctorNotes: notes,
+  });
+  document.getElementById("consult-modal").style.display = "none";
+  act = await computeACT(doctorId); // refresh rolling average for next ETA calc
+};
+
+async function getLastVisits(patientId, excludeVisitId, limit = 3) {
+  const q = query(collection(db, "visits"), where("patientId", "==", patientId), where("status", "==", "completed"));
+  const snap = await getDocs(q);
+  const visits = [];
+  snap.forEach((d) => { if (d.id !== excludeVisitId) visits.push({ id: d.id, ...d.data() }); });
+  visits.sort((a, b) => new Date(b.consultEndAt || 0) - new Date(a.consultEndAt || 0));
+  return visits.slice(0, limit);
+}
+
+function renderHistory(visits) {
+  if (visits.length === 0) return "<p class='small muted'>No prior visits on record.</p>";
+  return `<strong class="small">Last ${visits.length} visit(s)</strong>` + visits.map((v) => `
+    <div style="padding:0.5rem 0;border-bottom:1px dashed var(--line);">
+      <p class="small"><strong>${v.visitDate}</strong> — ${v.doctorNotes ? escapeHtml(v.doctorNotes) : '<span class="muted">No notes recorded</span>'}</p>
+      ${v.vitals ? `<p class="small muted">Wt ${v.vitals.weight || "—"}kg · BP ${v.vitals.bpSystolic || "—"}/${v.vitals.bpDiastolic || "—"}</p>` : ""}
+    </div>`).join("");
+}
+
+// ---- Patient lookup (simulated barcode scan via manual ID entry) ----
+document.getElementById("lookup-btn").onclick = async () => {
+  const idVal = document.getElementById("lookup-input").value.trim();
+  const resultBox = document.getElementById("lookup-result");
+  if (!idVal) return;
+  const snap = await getDoc(doc(db, "patients", idVal));
+  if (!snap.exists()) { resultBox.innerHTML = '<p class="helper">No patient found with that ID.</p>'; return; }
+  const p = snap.data();
+  const history = await getLastVisits(idVal, null);
+  resultBox.innerHTML = `
+    <div class="card" style="background:var(--paper-dim);margin-top:0.75rem;">
+      <strong>${escapeHtml(p.name)}</strong> · ${p.age}/${p.gender} · ${escapeHtml(p.mobile)}
+      ${renderHistory(history)}
+    </div>`;
+};
+
+function escapeHtml(s) {
+  return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+}
+</script>
+<script>if("serviceWorker" in navigator){navigator.serviceWorker.register("sw.js").catch(()=>{});}</script>
+</body>
+</html>

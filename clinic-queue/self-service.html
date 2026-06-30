@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Book a token — Clinic Queue</title>
+<link rel="manifest" href="manifest.json" />
+<link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+  <div class="login-wrap" style="align-items:flex-start;padding-top:3rem;">
+    <div class="login-card" style="max-width:460px;">
+      <div class="brand"><span class="dot"></span> Clinic Queue</div>
+      <p class="sub">Book your token before you reach the reception desk.</p>
+
+      <div id="form-view">
+        <form id="booking-form">
+          <div class="field"><label for="name">Full name</label><input id="name" required /></div>
+          <div class="field-row">
+            <div class="field"><label for="mobile">Mobile number</label><input id="mobile" required /></div>
+            <div class="field"><label for="age">Age</label><input id="age" type="number" min="0" required /></div>
+          </div>
+          <div class="field">
+            <label for="gender">Gender</label>
+            <select id="gender" required><option value="">Select</option><option>Male</option><option>Female</option><option>Other</option></select>
+          </div>
+          <div class="field"><label for="address">Address (optional)</label><input id="address" /></div>
+
+          <label>Preferred doctor(s)</label>
+          <div class="checkbox-group" id="doctor-checkboxes"></div>
+          <p class="helper" id="availability-helper"></p>
+          <div id="overcapacity-warning"></div>
+
+          <button class="btn btn-primary btn-block" type="submit" style="margin-top:1rem;">Book my token</button>
+        </form>
+      </div>
+
+      <div id="confirm-view" style="display:none;text-align:center;">
+        <p class="small muted">Your token</p>
+        <div class="token-tag" style="font-size:1.8rem;padding:0.6rem 1.2rem;" id="confirm-token">#--</div>
+        <p style="margin-top:1rem;">Estimated time: <strong id="confirm-eta">--:--</strong></p>
+        <p class="helper">Watch the waiting-room display board for your token number, or check back here.</p>
+        <a href="board.html" class="btn btn-outline btn-block" style="margin-top:1rem;">View live queue board</a>
+      </div>
+    </div>
+  </div>
+
+<script type="module">
+import { db, collection, addDoc, getDocs, query, where } from "./js/firebase-config.js";
+import { computeACT, todayKey } from "./js/queue-logic.js";
+
+let doctors = [];
+let selectedDoctorIds = new Set();
+let actCache = {};
+
+const doctorsRef = collection(db, "doctors");
+const visitsRef = collection(db, "visits");
+const patientsRef = collection(db, "patients");
+
+(async function init() {
+  const snap = await getDocs(doctorsRef);
+  doctors = [];
+  snap.forEach((d) => doctors.push({ id: d.id, ...d.data() }));
+  for (const d of doctors) actCache[d.id] = await computeACT(d.id);
+  renderDoctorCheckboxes();
+})();
+
+function renderDoctorCheckboxes() {
+  const box = document.getElementById("doctor-checkboxes");
+  if (doctors.length === 0) { box.innerHTML = '<p class="helper">No doctors available right now.</p>'; return; }
+  box.innerHTML = doctors.map((d) => `
+    <label class="checkbox-chip ${selectedDoctorIds.has(d.id) ? "checked" : ""}" data-doc="${d.id}">
+      <input type="checkbox" value="${d.id}" ${selectedDoctorIds.has(d.id) ? "checked" : ""} />
+      ${escapeHtml(d.name)}
+    </label>`).join("");
+  box.querySelectorAll(".checkbox-chip").forEach((chip) => {
+    chip.addEventListener("click", (e) => {
+      e.preventDefault();
+      const id = chip.dataset.doc;
+      if (selectedDoctorIds.has(id)) selectedDoctorIds.delete(id); else selectedDoctorIds.add(id);
+      renderDoctorCheckboxes();
+      updateHelper();
+    });
+  });
+  updateHelper();
+}
+
+async function updateHelper() {
+  const helper = document.getElementById("availability-helper");
+  const warnBox = document.getElementById("overcapacity-warning");
+  warnBox.innerHTML = "";
+  if (selectedDoctorIds.size === 0) { helper.textContent = ""; return; }
+  const lines = [];
+  let anyWarning = false;
+  for (const id of selectedDoctorIds) {
+    const d = doctors.find((x) => x.id === id);
+    const waitingCount = await countWaiting(id);
+    const act = actCache[id] || (d.seedActMinutes || 8) * 60;
+    const etaMinutes = Math.round((waitingCount * act) / 60);
+    lines.push(`${d.name}: ~${etaMinutes} min wait`);
+    if (etaMinutes > 120) anyWarning = true;
+  }
+  helper.textContent = lines.join("  ·  ");
+  if (anyWarning) {
+    warnBox.innerHTML = `<div class="warning-box">⚠️ <div><strong>Long wait expected</strong>Your estimated wait may run beyond this doctor's remaining hours today. You can still book and a member of staff will help if anything changes.</div></div>`;
+  }
+}
+
+async function countWaiting(doctorId) {
+  const q = query(visitsRef, where("visitDate", "==", todayKey()), where("status", "in", ["waiting", "called"]));
+  const snap = await getDocs(q);
+  let count = 0;
+  snap.forEach((d) => {
+    const v = d.data();
+    if (v.doctorId === doctorId || (v.preferredDoctorIds || []).includes(doctorId)) count++;
+  });
+  return count;
+}
+
+document.getElementById("booking-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  if (selectedDoctorIds.size === 0) { alert("Please select at least one doctor."); return; }
+
+  const patientData = {
+    name: document.getElementById("name").value.trim(),
+    mobile: document.getElementById("mobile").value.trim(),
+    age: Number(document.getElementById("age").value),
+    gender: document.getElementById("gender").value,
+    address: document.getElementById("address").value.trim(),
+    registrationSource: "kiosk_qr_self_service",
+    registeredAt: new Date().toISOString(),
+  };
+
+  // Try to match an existing patient by mobile number to avoid duplicates.
+  const existingSnap = await getDocs(query(patientsRef, where("mobile", "==", patientData.mobile)));
+  let patientId;
+  if (!existingSnap.empty) {
+    patientId = existingSnap.docs[0].id;
+  } else {
+    const newDoc = await addDoc(patientsRef, patientData);
+    patientId = newDoc.id;
+  }
+
+  const preferredDoctorIds = Array.from(selectedDoctorIds);
+  const tokenNumber = await nextTokenNumber(preferredDoctorIds[0]);
+
+  await addDoc(visitsRef, {
+    patientId,
+    patientName: patientData.name,
+    patientAge: patientData.age,
+    patientGender: patientData.gender,
+    preferredDoctorIds,
+    doctorId: null,
+    tokenNumber,
+    status: "waiting",
+    source: "kiosk_qr_self_service",
+    visitDate: todayKey(),
+    overCapacityWarningAcknowledged: document.getElementById("overcapacity-warning").innerHTML.includes("warning-box"),
+    issuedAt: new Date().toISOString(),
+    vitals: null,
+    fees: null,
+  });
+
+  const act = actCache[preferredDoctorIds[0]] || 8 * 60;
+  const waitingCount = await countWaiting(preferredDoctorIds[0]);
+  const etaMs = Date.now() + waitingCount * act * 1000;
+
+  document.getElementById("form-view").style.display = "none";
+  document.getElementById("confirm-view").style.display = "block";
+  document.getElementById("confirm-token").textContent = `#${tokenNumber}`;
+  document.getElementById("confirm-eta").textContent = new Date(etaMs).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+});
+
+async function nextTokenNumber(doctorId) {
+  const allToday = await getDocs(query(visitsRef, where("visitDate", "==", todayKey())));
+  let max = 0;
+  allToday.forEach((d) => {
+    const v = d.data();
+    if (v.doctorId === doctorId || (v.preferredDoctorIds || []).includes(doctorId)) {
+      if (v.tokenNumber > max) max = v.tokenNumber;
+    }
+  });
+  return max + 1;
+}
+
+function escapeHtml(s) {
+  return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+}
+</script>
+<script>if("serviceWorker" in navigator){navigator.serviceWorker.register("sw.js").catch(()=>{});}</script>
+</body>
+</html>

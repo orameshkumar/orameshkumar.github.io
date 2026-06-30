@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Queue Board — Clinic</title>
+<link rel="manifest" href="manifest.json" />
+<link rel="stylesheet" href="css/styles.css" />
+<link rel="stylesheet" href="css/board.css" />
+</head>
+<body class="board-body">
+
+  <div class="board-header">
+    <div class="brand"><span class="dot"></span> Clinic Queue Board</div>
+    <div class="board-clock">
+      <div class="time" id="clock-time">--:--</div>
+      <div class="date" id="clock-date">—</div>
+    </div>
+  </div>
+
+  <div class="board-self-service">
+    <div class="qr-box" id="qr-box">QR</div>
+    <div class="copy">
+      <strong>New here? Scan to book your token</strong>
+      <span>Self-service registration opens on your phone — no app needed.</span>
+    </div>
+  </div>
+
+  <div class="room-grid" id="room-grid"></div>
+
+<script type="module">
+import { db, collection, onSnapshot, query, where, orderBy, doc } from "./js/firebase-config.js";
+import { computeACT, calculateETAs, formatETA, todayKey, STATUS_LABELS } from "./js/queue-logic.js";
+
+function tickClock() {
+  const now = new Date();
+  document.getElementById("clock-time").textContent = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  document.getElementById("clock-date").textContent = now.toLocaleDateString([], { weekday: "long", day: "numeric", month: "long" });
+}
+tickClock();
+setInterval(tickClock, 1000 * 15);
+
+// Self-service QR — encodes the booking URL as plain text fallback (no external QR lib used to keep this fully static/offline-friendly).
+const selfServiceUrl = new URL("self-service.html", window.location.href).toString();
+document.getElementById("qr-box").title = selfServiceUrl;
+document.getElementById("qr-box").textContent = "SCAN";
+document.getElementById("qr-box").onclick = () => alert(`Self-service booking link:\n${selfServiceUrl}\n\n(For production, render this as a real QR code image pointing to this URL.)`);
+
+let doctors = [];
+let visitsToday = [];
+let actCache = {};
+
+onSnapshot(collection(db, "doctors"), async (snap) => {
+  doctors = [];
+  snap.forEach((d) => doctors.push({ id: d.id, ...d.data() }));
+  for (const d of doctors) actCache[d.id] = await computeACT(d.id);
+  render();
+});
+
+onSnapshot(query(collection(db, "visits"), where("visitDate", "==", todayKey()), orderBy("tokenNumber")), (snap) => {
+  visitsToday = [];
+  snap.forEach((d) => visitsToday.push({ id: d.id, ...d.data() }));
+  render();
+});
+
+let lastServingByDoctor = {};
+
+function render() {
+  const grid = document.getElementById("room-grid");
+  if (doctors.length === 0) {
+    grid.innerHTML = '<p class="queue-empty">No doctors configured yet.</p>';
+    return;
+  }
+
+  grid.innerHTML = doctors.map((d) => {
+    const onBreak = d.onBreakUntil && d.onBreakUntil > Date.now();
+    const mine = visitsToday.filter((v) => v.doctorId === d.id || (v.preferredDoctorIds || []).includes(d.id));
+    const active = mine.filter((v) => ["waiting","called","in_consultation"].includes(v.status));
+    const serving = active.find((v) => v.doctorId === d.id && (v.status === "called" || v.status === "in_consultation"));
+    const waiting = active.filter((v) => v.status === "waiting").sort((a,b) => a.tokenNumber - b.tokenNumber);
+
+    const act = actCache[d.id] || (d.seedActMinutes || 8) * 60;
+    const etas = calculateETAs(
+      waiting.map(v => ({...v})),
+      act,
+      onBreak ? d.onBreakUntil : null
+    );
+
+    const statusClass = onBreak ? "on_break" : (serving ? "in_session" : "available");
+    const statusLabel = onBreak ? "On break" : (serving ? "In session" : "Available");
+
+    const isNewServing = serving && lastServingByDoctor[d.id] !== serving.id;
+    lastServingByDoctor[d.id] = serving ? serving.id : null;
+
+    return `
+      <div class="room-card status-${statusClass}">
+        <div class="room-top">
+          <div>
+            <div class="doctor-name">${escapeHtml(d.name)}</div>
+            <div class="doctor-spec">${escapeHtml(d.specialization || "")} · ${escapeHtml(d.room || "")}</div>
+          </div>
+          <span class="room-status-pill ${statusClass}">${statusLabel}</span>
+        </div>
+
+        ${serving ? `
+          <div class="now-serving ${isNewServing ? "board-token-anim" : ""}">
+            <div>
+              <div class="label">Now serving</div>
+              <div class="tok">#${serving.tokenNumber}</div>
+            </div>
+            <div class="small" style="text-align:right;opacity:0.75;">${STATUS_LABELS[serving.status]}</div>
+          </div>
+        ` : `<div class="now-serving empty">${onBreak ? "On a short break" : "No patient called yet"}</div>`}
+
+        ${waiting.slice(0, 5).map((v, idx) => `
+          <div class="up-next-row ${idx === 0 ? "next-up" : ""}">
+            <span class="tok">#${v.tokenNumber}</span>
+            <span class="eta">${idx === 0 ? "Next up · " : ""}ETA ${formatETA(etas[v.id])}</span>
+          </div>`).join("") || '<div class="queue-empty">Queue is empty.</div>'}
+
+        ${waiting.length > 5 ? `<div class="queue-empty">+ ${waiting.length - 5} more waiting</div>` : ""}
+      </div>`;
+  }).join("");
+}
+
+function escapeHtml(s) {
+  return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+}
+</script>
+<script>if("serviceWorker" in navigator){navigator.serviceWorker.register("sw.js").catch(()=>{});}</script>
+</body>
+</html>

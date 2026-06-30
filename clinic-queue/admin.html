@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Admin Setup — Clinic Queue</title>
+<link rel="manifest" href="manifest.json" />
+<link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+<div class="app-shell">
+  <header class="topbar">
+    <div class="brand"><span class="dot"></span> Clinic Queue</div>
+    <nav>
+      <a href="admin.html" class="active">Admin Setup</a>
+      <a href="reception.html">Reception</a>
+      <a href="board.html">Queue Board</a>
+    </nav>
+    <div class="user-pill"><span id="user-email">—</span><button id="logout-btn">Sign out</button></div>
+  </header>
+
+  <main class="page">
+    <div class="page-header">
+      <h1>Clinic setup</h1>
+      <p>Configure doctors, consultation rooms, and fees. This drives availability and ETA calculations everywhere else in the app.</p>
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <h2>Add a doctor</h2>
+        <form id="doctor-form">
+          <div class="field">
+            <label for="doc-name">Full name</label>
+            <input id="doc-name" placeholder="Dr. Anjali Sharma" required />
+          </div>
+          <div class="field">
+            <label for="doc-spec">Specialization</label>
+            <input id="doc-spec" placeholder="General Physician" />
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label for="doc-fee">Consultation fee (₹)</label>
+              <input id="doc-fee" type="number" min="0" placeholder="500" required />
+            </div>
+            <div class="field">
+              <label for="doc-act">Seed avg. consult time (min)</label>
+              <input id="doc-act" type="number" min="1" placeholder="8" required />
+            </div>
+          </div>
+          <div class="field">
+            <label for="doc-room">Default room</label>
+            <input id="doc-room" placeholder="Room 1" required />
+          </div>
+          <button class="btn btn-primary btn-block" type="submit">Add doctor</button>
+        </form>
+      </div>
+
+      <div class="card">
+        <h2>Doctors</h2>
+        <p class="helper">To let a doctor log in, create their account in Firebase Authentication first, then paste their User UID below to link it.</p>
+        <div id="doctor-list"><div class="empty-state">No doctors yet — add one on the left.</div></div>
+      </div>
+    </div>
+
+    <hr class="section-divider" />
+
+    <div class="grid-2">
+      <div class="card">
+        <h2>Link a staff login</h2>
+        <p class="helper">Create the user in Firebase Auth (email/password) first, then map their UID to a role here.</p>
+        <form id="user-form">
+          <div class="field">
+            <label for="user-uid">Firebase Auth UID</label>
+            <input id="user-uid" placeholder="Paste UID from Firebase Console → Authentication → Users" required />
+          </div>
+          <div class="field">
+            <label for="user-name">Display name</label>
+            <input id="user-name" placeholder="Front Desk" required />
+          </div>
+          <div class="field">
+            <label for="user-role">Role</label>
+            <select id="user-role" required>
+              <option value="">Select role</option>
+              <option value="reception">Reception</option>
+              <option value="doctor">Doctor</option>
+              <option value="admin">Admin</option>
+            </select>
+          </div>
+          <div class="field" id="doctor-link-field" style="display:none;">
+            <label for="user-doctor">Linked doctor</label>
+            <select id="user-doctor"></select>
+          </div>
+          <button class="btn btn-primary btn-block" type="submit">Save login mapping</button>
+        </form>
+      </div>
+
+      <div class="card">
+        <h2>Staff logins configured</h2>
+        <div id="user-list"><div class="empty-state">No staff logins linked yet.</div></div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script type="module">
+import {
+  auth, db, onAuthStateChanged, signOut,
+  collection, addDoc, doc, setDoc, getDocs, onSnapshot, query, orderBy, getDoc
+} from "./js/firebase-config.js";
+
+onAuthStateChanged(auth, async (user) => {
+  if (!user) { window.location.href = "index.html"; return; }
+  document.getElementById("user-email").textContent = user.email;
+});
+document.getElementById("logout-btn").onclick = () => signOut(auth).then(() => window.location.href = "index.html");
+
+const doctorsRef = collection(db, "doctors");
+const usersRef = collection(db, "users");
+
+let doctorsCache = [];
+
+onSnapshot(query(doctorsRef, orderBy("name")), (snap) => {
+  doctorsCache = [];
+  const list = document.getElementById("doctor-list");
+  const doctorSelect = document.getElementById("user-doctor");
+  if (snap.empty) {
+    list.innerHTML = '<div class="empty-state">No doctors yet — add one on the left.</div>';
+    doctorSelect.innerHTML = "";
+    return;
+  }
+  let html = "";
+  doctorSelect.innerHTML = "";
+  snap.forEach((d) => {
+    const doc_ = { id: d.id, ...d.data() };
+    doctorsCache.push(doc_);
+    html += `
+      <div class="flex-between" style="padding:0.6rem 0;border-bottom:1px solid var(--paper-dim);">
+        <div>
+          <strong>${escapeHtml(doc_.name)}</strong><br/>
+          <span class="small muted">${escapeHtml(doc_.specialization || "")} · ${doc_.room || "no room"} · ₹${doc_.consultationFee} · seed ACT ${doc_.seedActMinutes}m</span>
+        </div>
+        <span class="small muted">ID: ${doc_.id.slice(0,6)}…</span>
+      </div>`;
+    const opt = document.createElement("option");
+    opt.value = doc_.id;
+    opt.textContent = doc_.name;
+    doctorSelect.appendChild(opt);
+  });
+  list.innerHTML = html;
+});
+
+document.getElementById("doctor-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const name = document.getElementById("doc-name").value.trim();
+  const specialization = document.getElementById("doc-spec").value.trim();
+  const consultationFee = Number(document.getElementById("doc-fee").value);
+  const seedActMinutes = Number(document.getElementById("doc-act").value);
+  const room = document.getElementById("doc-room").value.trim();
+  await addDoc(doctorsRef, {
+    name, specialization, consultationFee, seedActMinutes, room,
+    status: "active", createdAt: new Date().toISOString()
+  });
+  e.target.reset();
+});
+
+document.getElementById("user-role").addEventListener("change", (e) => {
+  document.getElementById("doctor-link-field").style.display = e.target.value === "doctor" ? "block" : "none";
+});
+
+onSnapshot(usersRef, (snap) => {
+  const list = document.getElementById("user-list");
+  if (snap.empty) {
+    list.innerHTML = '<div class="empty-state">No staff logins linked yet.</div>';
+    return;
+  }
+  let html = "";
+  snap.forEach((d) => {
+    const u = d.data();
+    html += `
+      <div class="flex-between" style="padding:0.6rem 0;border-bottom:1px solid var(--paper-dim);">
+        <div><strong>${escapeHtml(u.displayName)}</strong><br/><span class="small muted">${u.role}${u.doctorId ? " · linked to doctor" : ""}</span></div>
+        <span class="badge badge-waiting">${u.role}</span>
+      </div>`;
+  });
+  list.innerHTML = html;
+});
+
+document.getElementById("user-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const uid = document.getElementById("user-uid").value.trim();
+  const displayName = document.getElementById("user-name").value.trim();
+  const role = document.getElementById("user-role").value;
+  const doctorId = role === "doctor" ? document.getElementById("user-doctor").value : null;
+  await setDoc(doc(db, "users", uid), { displayName, role, doctorId, createdAt: new Date().toISOString() });
+  e.target.reset();
+  document.getElementById("doctor-link-field").style.display = "none";
+  alert("Saved. That user can now sign in and will land on the right screen for their role.");
+});
+
+function escapeHtml(s) {
+  return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+}
+</script>
+<script>if("serviceWorker" in navigator){navigator.serviceWorker.register("sw.js").catch(()=>{});}</script>
+</body>
+</html>

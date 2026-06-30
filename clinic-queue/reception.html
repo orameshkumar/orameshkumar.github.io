@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Reception — Clinic Queue</title>
+<link rel="manifest" href="manifest.json" />
+<link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+<div class="app-shell">
+  <header class="topbar">
+    <div class="brand"><span class="dot"></span> Clinic Queue</div>
+    <nav>
+      <a href="reception.html" class="active">Reception</a>
+      <a href="board.html">Queue Board</a>
+      <a href="admin.html">Admin Setup</a>
+    </nav>
+    <div class="user-pill"><span id="user-email">—</span><button id="logout-btn">Sign out</button></div>
+  </header>
+
+  <main class="page">
+    <div class="page-header">
+      <h1>Reception desk</h1>
+      <p>Register patients, issue tokens, capture intake vitals, and collect fees.</p>
+    </div>
+
+    <div class="grid-2">
+      <!-- LEFT: Patient lookup / registration / token issuance -->
+      <div class="card">
+        <h2>Find or register a patient</h2>
+        <div class="field">
+          <label for="search-input">Mobile number, Patient ID, or name</label>
+          <input id="search-input" placeholder="Start typing to search…" />
+        </div>
+        <div id="search-results"></div>
+
+        <hr class="section-divider" />
+
+        <form id="patient-form">
+          <p class="small muted" id="form-mode-label">New patient details</p>
+          <input type="hidden" id="patient-id" />
+          <div class="field-row">
+            <div class="field"><label for="p-name">Full name</label><input id="p-name" required /></div>
+            <div class="field"><label for="p-mobile">Mobile number</label><input id="p-mobile" required /></div>
+          </div>
+          <div class="field-row">
+            <div class="field"><label for="p-age">Age</label><input id="p-age" type="number" min="0" required /></div>
+            <div class="field">
+              <label for="p-gender">Gender</label>
+              <select id="p-gender" required>
+                <option value="">Select</option>
+                <option>Male</option><option>Female</option><option>Other</option>
+              </select>
+            </div>
+          </div>
+          <div class="field"><label for="p-address">Address</label><input id="p-address" /></div>
+
+          <hr class="section-divider" />
+
+          <label>Preferred doctor(s) — patient will be served by whichever is free first</label>
+          <div class="checkbox-group" id="doctor-checkboxes"></div>
+          <p class="helper" id="availability-helper"></p>
+          <div id="overcapacity-warning"></div>
+
+          <button class="btn btn-primary btn-block" type="submit" style="margin-top:1rem;">Issue token</button>
+        </form>
+      </div>
+
+      <!-- RIGHT: Today's tokens at this desk + vitals + billing -->
+      <div class="card">
+        <h2>Today's tokens</h2>
+        <div id="today-tokens"><div class="empty-state">No tokens issued yet today.</div></div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- Vitals modal -->
+<div id="vitals-modal" style="display:none;position:fixed;inset:0;background:rgba(28,36,34,0.55);z-index:100;align-items:center;justify-content:center;">
+  <div class="card" style="max-width:420px;width:90%;">
+    <h2>Intake vitals — <span id="vitals-token"></span></h2>
+    <div class="field-row">
+      <div class="field"><label>Weight (kg)</label><input id="v-weight" type="number" /></div>
+      <div class="field"><label>Temp (°F)</label><input id="v-temp" type="number" step="0.1" /></div>
+    </div>
+    <div class="field-row">
+      <div class="field"><label>BP Systolic</label><input id="v-bp-sys" type="number" /></div>
+      <div class="field"><label>BP Diastolic</label><input id="v-bp-dia" type="number" /></div>
+    </div>
+    <div class="field"><label>Chief complaint / reason for visit</label><textarea id="v-complaint" rows="2"></textarea></div>
+    <div class="field"><label>Already consulted notes (referrals etc.)</label><textarea id="v-prior" rows="2"></textarea></div>
+    <div class="flex-between">
+      <button class="btn btn-outline" id="vitals-cancel">Cancel</button>
+      <button class="btn btn-primary" id="vitals-save">Save vitals</button>
+    </div>
+  </div>
+</div>
+
+<!-- Billing modal -->
+<div id="billing-modal" style="display:none;position:fixed;inset:0;background:rgba(28,36,34,0.55);z-index:100;align-items:center;justify-content:center;">
+  <div class="card" style="max-width:420px;width:90%;">
+    <h2>Collect fee — <span id="billing-token"></span></h2>
+    <div class="field"><label>Consultation fee (₹)</label><input id="b-consult-fee" type="number" /></div>
+    <div class="field"><label>Medicine / pharmacy fee (₹)</label><input id="b-med-fee" type="number" value="0" /></div>
+    <div class="field"><label>Other charges (₹)</label><input id="b-other-fee" type="number" value="0" /></div>
+    <div class="field">
+      <label>Payment mode</label>
+      <select id="b-mode"><option>Cash</option><option>Card</option><option>UPI</option><option>Other</option></select>
+    </div>
+    <p class="flex-between"><strong>Total</strong> <strong id="b-total">₹0</strong></p>
+    <div class="flex-between">
+      <button class="btn btn-outline" id="billing-cancel">Cancel</button>
+      <button class="btn btn-primary" id="billing-save">Collect &amp; receipt</button>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import {
+  auth, db, onAuthStateChanged, signOut,
+  collection, addDoc, doc, updateDoc, getDoc, getDocs, onSnapshot,
+  query, where, orderBy
+} from "./js/firebase-config.js";
+import { computeACT, calculateETAs, formatETA, todayKey, STATUS_LABELS, NO_SHOW_GRACE_SECONDS } from "./js/queue-logic.js";
+
+onAuthStateChanged(auth, (user) => {
+  if (!user) { window.location.href = "index.html"; return; }
+  document.getElementById("user-email").textContent = user.email;
+});
+document.getElementById("logout-btn").onclick = () => signOut(auth).then(() => window.location.href = "index.html");
+
+const doctorsRef = collection(db, "doctors");
+const patientsRef = collection(db, "patients");
+const visitsRef = collection(db, "visits");
+
+let doctors = [];
+let selectedDoctorIds = new Set();
+let actCache = {};
+
+// Load doctors + render checkboxes
+onSnapshot(doctorsRef, async (snap) => {
+  doctors = [];
+  snap.forEach((d) => doctors.push({ id: d.id, ...d.data() }));
+  for (const doc_ of doctors) actCache[doc_.id] = await computeACT(doc_.id);
+  renderDoctorCheckboxes();
+});
+
+function renderDoctorCheckboxes() {
+  const box = document.getElementById("doctor-checkboxes");
+  if (doctors.length === 0) {
+    box.innerHTML = '<p class="helper">No doctors configured yet. Add one in Admin Setup.</p>';
+    return;
+  }
+  box.innerHTML = doctors.map((d) => `
+    <label class="checkbox-chip ${selectedDoctorIds.has(d.id) ? "checked" : ""}" data-doc="${d.id}">
+      <input type="checkbox" value="${d.id}" ${selectedDoctorIds.has(d.id) ? "checked" : ""} />
+      ${escapeHtml(d.name)}
+    </label>`).join("");
+  box.querySelectorAll(".checkbox-chip").forEach((chip) => {
+    chip.addEventListener("click", (e) => {
+      e.preventDefault();
+      const id = chip.dataset.doc;
+      if (selectedDoctorIds.has(id)) selectedDoctorIds.delete(id); else selectedDoctorIds.add(id);
+      renderDoctorCheckboxes();
+      updateAvailabilityHelper();
+    });
+  });
+  updateAvailabilityHelper();
+}
+
+async function updateAvailabilityHelper() {
+  const helper = document.getElementById("availability-helper");
+  const warnBox = document.getElementById("overcapacity-warning");
+  warnBox.innerHTML = "";
+  if (selectedDoctorIds.size === 0) { helper.textContent = ""; return; }
+
+  const lines = [];
+  let anyWarning = false;
+  for (const id of selectedDoctorIds) {
+    const d = doctors.find((x) => x.id === id);
+    const waitingCount = await countWaiting(id);
+    const act = actCache[id] || d.seedActMinutes * 60;
+    const etaMinutes = Math.round((waitingCount * act) / 60);
+    lines.push(`${d.name}: ${waitingCount} ahead, ~${etaMinutes} min wait`);
+    // Simple availability check placeholder — full calendar windows can be added later;
+    // for now we warn if estimated wait exceeds a configurable session length proxy (120 min).
+    if (etaMinutes > 120) anyWarning = true;
+  }
+  helper.textContent = lines.join("  ·  ");
+  if (anyWarning) {
+    warnBox.innerHTML = `<div class="warning-box">⚠️ <div><strong>Estimated wait is long</strong>The expected consultation time may fall outside this doctor's remaining availability today. You can still issue the token if the patient agrees to wait.</div></div>`;
+  }
+}
+
+async function countWaiting(doctorId) {
+  const q = query(visitsRef, where("visitDate", "==", todayKey()), where("status", "in", ["waiting", "called"]));
+  const snap = await getDocs(q);
+  let count = 0;
+  snap.forEach((d) => {
+    const v = d.data();
+    if (v.doctorId === doctorId || (v.preferredDoctorIds || []).includes(doctorId)) count++;
+  });
+  return count;
+}
+
+// ----- Patient search -----
+let searchTimeout;
+document.getElementById("search-input").addEventListener("input", (e) => {
+  clearTimeout(searchTimeout);
+  const term = e.target.value.trim();
+  if (term.length < 2) { document.getElementById("search-results").innerHTML = ""; return; }
+  searchTimeout = setTimeout(() => doSearch(term), 250);
+});
+
+async function doSearch(term) {
+  const snap = await getDocs(patientsRef);
+  const results = [];
+  snap.forEach((d) => {
+    const p = { id: d.id, ...d.data() };
+    const hay = `${p.name} ${p.mobile} ${p.id}`.toLowerCase();
+    if (hay.includes(term.toLowerCase())) results.push(p);
+  });
+  const box = document.getElementById("search-results");
+  if (results.length === 0) { box.innerHTML = '<p class="helper">No match — fill the form below to register a new patient.</p>'; return; }
+  box.innerHTML = results.slice(0, 5).map((p) => `
+    <div class="flex-between" style="padding:0.5rem 0;border-bottom:1px solid var(--paper-dim);cursor:pointer;" data-pick="${p.id}">
+      <span><strong>${escapeHtml(p.name)}</strong> · ${p.age}/${p.gender} · ${escapeHtml(p.mobile)}</span>
+      <span class="small muted">Select</span>
+    </div>`).join("");
+  box.querySelectorAll("[data-pick]").forEach((row) => {
+    row.addEventListener("click", () => fillPatientForm(results.find((p) => p.id === row.dataset.pick)));
+  });
+}
+
+function fillPatientForm(p) {
+  document.getElementById("patient-id").value = p.id;
+  document.getElementById("p-name").value = p.name;
+  document.getElementById("p-mobile").value = p.mobile;
+  document.getElementById("p-age").value = p.age;
+  document.getElementById("p-gender").value = p.gender;
+  document.getElementById("p-address").value = p.address || "";
+  document.getElementById("form-mode-label").textContent = `Editing existing patient (ID: ${p.id.slice(0,8)}…)`;
+}
+
+// ----- Token issuance -----
+document.getElementById("patient-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  if (selectedDoctorIds.size === 0) { alert("Select at least one preferred doctor."); return; }
+
+  const existingId = document.getElementById("patient-id").value;
+  const patientData = {
+    name: document.getElementById("p-name").value.trim(),
+    mobile: document.getElementById("p-mobile").value.trim(),
+    age: Number(document.getElementById("p-age").value),
+    gender: document.getElementById("p-gender").value,
+    address: document.getElementById("p-address").value.trim(),
+    registrationSource: "reception",
+  };
+
+  let patientId = existingId;
+  if (!patientId) {
+    const newDoc = await addDoc(patientsRef, { ...patientData, registeredAt: new Date().toISOString() });
+    patientId = newDoc.id;
+  }
+
+  const preferredDoctorIds = Array.from(selectedDoctorIds);
+  const tokenNumber = await nextTokenNumber(preferredDoctorIds[0]);
+
+  await addDoc(visitsRef, {
+    patientId,
+    patientName: patientData.name,
+    patientAge: patientData.age,
+    patientGender: patientData.gender,
+    preferredDoctorIds,
+    doctorId: null, // set once a doctor actually calls it
+    tokenNumber,
+    status: "waiting",
+    source: "reception",
+    visitDate: todayKey(),
+    overCapacityWarningAcknowledged: document.getElementById("overcapacity-warning").innerHTML.includes("warning-box"),
+    issuedAt: new Date().toISOString(),
+    vitals: null,
+    fees: null,
+  });
+
+  alert(`Token #${tokenNumber} issued for ${patientData.name}.`);
+  e.target.reset();
+  document.getElementById("patient-id").value = "";
+  document.getElementById("form-mode-label").textContent = "New patient details";
+  document.getElementById("search-results").innerHTML = "";
+  selectedDoctorIds.clear();
+  renderDoctorCheckboxes();
+});
+
+async function nextTokenNumber(doctorId) {
+  const q = query(visitsRef, where("visitDate", "==", todayKey()), where("doctorId", "==", doctorId));
+  const snap = await getDocs(q);
+  // Also count tokens still pending across preferences for this doctor (doctorId null but listed as preferred)
+  const allToday = await getDocs(query(visitsRef, where("visitDate", "==", todayKey())));
+  let max = 0;
+  allToday.forEach((d) => {
+    const v = d.data();
+    if (v.doctorId === doctorId || (v.preferredDoctorIds || []).includes(doctorId)) {
+      if (v.tokenNumber > max) max = v.tokenNumber;
+    }
+  });
+  return max + 1;
+}
+
+// ----- Today's tokens list with vitals/billing actions -----
+let activeVitalsVisitId = null;
+let activeBillingVisitId = null;
+
+onSnapshot(query(visitsRef, where("visitDate", "==", todayKey()), orderBy("tokenNumber")), (snap) => {
+  const list = document.getElementById("today-tokens");
+  if (snap.empty) { list.innerHTML = '<div class="empty-state">No tokens issued yet today.</div>'; return; }
+  let html = "<table><thead><tr><th>Token</th><th>Patient</th><th>Doctor(s)</th><th>Status</th><th>Actions</th></tr></thead><tbody>";
+  snap.forEach((d) => {
+    const v = { id: d.id, ...d.data() };
+    const docNames = (v.preferredDoctorIds || []).map((id) => doctors.find((x) => x.id === id)?.name || "—").join(", ");
+    html += `<tr>
+      <td><span class="token-tag">#${v.tokenNumber}</span></td>
+      <td>${escapeHtml(v.patientName)}<br/><span class="small muted">${v.patientAge}/${v.patientGender}</span></td>
+      <td class="small">${docNames}</td>
+      <td><span class="badge badge-${v.status}">${STATUS_LABELS[v.status] || v.status}</span></td>
+      <td>
+        ${v.status === "waiting" ? `<button class="btn btn-sm btn-outline" data-vitals="${v.id}">Vitals</button> <button class="btn btn-sm btn-danger" data-cancel="${v.id}">Cancel</button>` : ""}
+        ${v.status === "completed" && !v.fees ? `<button class="btn btn-sm btn-amber" data-bill="${v.id}" data-fee="${docFeeFor(v)}">Collect fee</button>` : ""}
+        ${v.fees ? `<span class="small muted">Paid ₹${v.fees.total}</span>` : ""}
+      </td>
+    </tr>`;
+  });
+  html += "</tbody></table>";
+  list.innerHTML = html;
+
+  list.querySelectorAll("[data-vitals]").forEach((b) => b.addEventListener("click", () => openVitals(b.dataset.vitals)));
+  list.querySelectorAll("[data-cancel]").forEach((b) => b.addEventListener("click", () => cancelToken(b.dataset.cancel)));
+  list.querySelectorAll("[data-bill]").forEach((b) => b.addEventListener("click", () => openBilling(b.dataset.bill, Number(b.dataset.fee))));
+});
+
+function docFeeFor(v) {
+  const id = v.doctorId || (v.preferredDoctorIds || [])[0];
+  return doctors.find((d) => d.id === id)?.consultationFee || 0;
+}
+
+async function cancelToken(visitId) {
+  if (!confirm("Cancel this token?")) return;
+  await updateDoc(doc(db, "visits", visitId), { status: "cancelled", cancelledAt: new Date().toISOString() });
+}
+
+function openVitals(visitId) {
+  activeVitalsVisitId = visitId;
+  document.getElementById("vitals-token").textContent = "patient visit";
+  ["v-weight","v-temp","v-bp-sys","v-bp-dia","v-complaint","v-prior"].forEach((id) => document.getElementById(id).value = "");
+  document.getElementById("vitals-modal").style.display = "flex";
+}
+document.getElementById("vitals-cancel").onclick = () => document.getElementById("vitals-modal").style.display = "none";
+document.getElementById("vitals-save").onclick = async () => {
+  await updateDoc(doc(db, "visits", activeVitalsVisitId), {
+    vitals: {
+      weight: document.getElementById("v-weight").value,
+      temperature: document.getElementById("v-temp").value,
+      bpSystolic: document.getElementById("v-bp-sys").value,
+      bpDiastolic: document.getElementById("v-bp-dia").value,
+      chiefComplaint: document.getElementById("v-complaint").value,
+      priorNotes: document.getElementById("v-prior").value,
+      capturedAt: new Date().toISOString(),
+    }
+  });
+  document.getElementById("vitals-modal").style.display = "none";
+};
+
+function openBilling(visitId, defaultFee) {
+  activeBillingVisitId = visitId;
+  document.getElementById("billing-token").textContent = "visit";
+  document.getElementById("b-consult-fee").value = defaultFee;
+  document.getElementById("b-med-fee").value = 0;
+  document.getElementById("b-other-fee").value = 0;
+  updateTotal();
+  document.getElementById("billing-modal").style.display = "flex";
+}
+["b-consult-fee","b-med-fee","b-other-fee"].forEach((id) => document.getElementById(id).addEventListener("input", updateTotal));
+function updateTotal() {
+  const total = Number(document.getElementById("b-consult-fee").value || 0)
+    + Number(document.getElementById("b-med-fee").value || 0)
+    + Number(document.getElementById("b-other-fee").value || 0);
+  document.getElementById("b-total").textContent = `₹${total}`;
+}
+document.getElementById("billing-cancel").onclick = () => document.getElementById("billing-modal").style.display = "none";
+document.getElementById("billing-save").onclick = async () => {
+  const consultationFee = Number(document.getElementById("b-consult-fee").value || 0);
+  const medicineFee = Number(document.getElementById("b-med-fee").value || 0);
+  const otherFee = Number(document.getElementById("b-other-fee").value || 0);
+  const total = consultationFee + medicineFee + otherFee;
+  const mode = document.getElementById("b-mode").value;
+  await updateDoc(doc(db, "visits", activeBillingVisitId), {
+    fees: { consultationFee, medicineFee, otherFee, total, mode, collectedAt: new Date().toISOString(), receiptNumber: `RCPT-${Date.now()}` }
+  });
+  document.getElementById("billing-modal").style.display = "none";
+  alert(`Receipt generated. Total collected: ₹${total} via ${mode}.`);
+};
+
+function escapeHtml(s) {
+  return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+}
+</script>
+<script>if("serviceWorker" in navigator){navigator.serviceWorker.register("sw.js").catch(()=>{});}</script>
+</body>
+</html>

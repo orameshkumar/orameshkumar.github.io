@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Sign in — Clinic Queue</title>
+<link rel="manifest" href="manifest.json" />
+<link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+  <div class="login-wrap">
+    <div class="login-card">
+      <div class="brand"><span class="dot"></span> Clinic Queue</div>
+      <p class="sub">Sign in to manage the patient queue.</p>
+      <form id="login-form">
+        <div class="field">
+          <label for="email">Staff login</label>
+          <input id="email" type="email" placeholder="reception@clinic.local" required autocomplete="username" />
+        </div>
+        <div class="field">
+          <label for="password">Password</label>
+          <input id="password" type="password" required autocomplete="current-password" />
+        </div>
+        <button class="btn btn-primary btn-block" type="submit">Sign in</button>
+        <p class="error-msg" id="error-msg" style="display:none;"></p>
+      </form>
+      <hr class="section-divider" />
+      <p class="small muted">Looking for the waiting-room display? <a href="board.html">Open the queue board</a> — no login needed.</p>
+      <p class="small muted">Walk-in patient? <a href="self-service.html">Book a token here</a>.</p>
+    </div>
+  </div>
+
+  <script type="module">
+    import { auth, signInWithEmailAndPassword, onAuthStateChanged, db, doc, getDoc } from "./js/firebase-config.js";
+
+    onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        const role = await resolveRole(user.uid);
+        redirectForRole(role);
+      }
+    });
+
+    async function resolveRole(uid) {
+      const snap = await getDoc(doc(db, "users", uid));
+      return snap.exists() ? snap.data().role : null;
+    }
+
+    function redirectForRole(role) {
+      if (role === "doctor") window.location.href = "doctor.html";
+      else if (role === "admin") window.location.href = "admin.html";
+      else window.location.href = "reception.html";
+    }
+
+    const form = document.getElementById("login-form");
+    const errorMsg = document.getElementById("error-msg");
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      errorMsg.style.display = "none";
+      const email = document.getElementById("email").value.trim();
+      const password = document.getElementById("password").value;
+      try {
+        const cred = await signInWithEmailAndPassword(auth, email, password);
+        const role = await resolveRole(cred.user.uid);
+        if (!role) {
+          errorMsg.textContent = "No role assigned to this account yet. Ask an admin to set one up in the 'users' collection.";
+          errorMsg.style.display = "block";
+          return;
+        }
+        redirectForRole(role);
+      } catch (err) {
+        errorMsg.textContent = "Sign-in failed. Check the email/password and try again.";
+        errorMsg.style.display = "block";
+      }
+    });
+  </script>
+<script>if("serviceWorker" in navigator){navigator.serviceWorker.register("sw.js").catch(()=>{});}</script>
+</body>
+</html>
