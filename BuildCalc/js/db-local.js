@@ -25,7 +25,7 @@ const DBLocal = (function () {
 
   // ── Store helpers ─────────────────────────────────────────────────────────
   var STORES = ['clients','projects','estimates','config',
-                'workers','assignments','tasks','vendors','rfqs','purchaseOrders'];
+                'workers','assignments','tasks','vendors','rfqs','purchaseOrders','taskPhotos'];
 
   function key(storeName) { return 'bc_store_' + storeName; }
 
@@ -188,6 +188,14 @@ const DBLocal = (function () {
   function updatePO(po)        { return put("purchaseOrders", po); }
   function deletePO(id)        { return remove("purchaseOrders", id); }
 
+  // ── Task Photo CRUD ──────────────────────────────────────────────────────
+  function addTaskPhoto(p)         { return add("taskPhotos", p); }
+  function getTaskPhoto(id)        { return getById("taskPhotos", id); }
+  function getPhotosByTask(tid)        { return getByIndex("taskPhotos","taskId",tid); }
+  function getPhotosByEstimate(eid)    { return getByIndex("taskPhotos","estimateId",eid); }
+  function getPhotosByProject(pid) { return getByIndex("taskPhotos","projectId",pid); }
+  function deleteTaskPhoto(id)     { return remove("taskPhotos", id); }
+
   // ── Public API ────────────────────────────────────────────────────────────
   return {
     init: init,
@@ -216,6 +224,9 @@ const DBLocal = (function () {
     addRfq: addRfq, getRfq: getRfq, getRfqsByProject: getRfqsByProject,
     updateRfq: updateRfq, deleteRfq: deleteRfq,
     addPO: addPO, getPO: getPO, getPOsByProject: getPOsByProject,
-    updatePO: updatePO, deletePO: deletePO
+    updatePO: updatePO, deletePO: deletePO,
+    addTaskPhoto: addTaskPhoto, getTaskPhoto: getTaskPhoto,
+    getPhotosByTask: getPhotosByTask, getPhotosByEstimate: getPhotosByEstimate, getPhotosByProject: getPhotosByProject,
+    deleteTaskPhoto: deleteTaskPhoto
   };
 })();

@@ -23,6 +23,7 @@ const Schedule = (function () {
   // Assignment detail overlay
   var assignOverlay, assignEstTitle, assignEstDetail;
   var assignWorkersContainer, assignDurationEl, headcountSlider, headcountVal;
+  var currentEstimateId = null;
   var btnSaveAssign, btnCloseAssign;
   var currentEstimate = null;
 
@@ -97,6 +98,14 @@ const Schedule = (function () {
     });
 
     if (btnSaveAssign) btnSaveAssign.addEventListener('click', saveAssignment);
+
+    var btnAssignAddPhoto = document.getElementById('btn-assign-add-photo');
+    if (btnAssignAddPhoto) {
+      btnAssignAddPhoto.addEventListener('click', function () {
+        if (!currentEstimateId) return;
+        _openPhotoCapture({ estimateId: currentEstimateId, stage: 'assignment', stageLabel: 'Assignment' });
+      });
+    }
     if (btnCloseAssign) btnCloseAssign.addEventListener('click', function () { assignOverlay.hidden = true; });
     if (assignOverlay) assignOverlay.addEventListener('click', function (e) { if (e.target === assignOverlay) assignOverlay.hidden = true; });
 
@@ -175,6 +184,7 @@ const Schedule = (function () {
     DB.getEstimate(estimateId).then(function (est) {
       if (!est) return;
       currentEstimate = est;
+      currentEstimateId = estimateId;
       assignEstTitle.textContent = cap(est.category) + (est.tag ? ' — ' + est.tag : '');
       var qty = getEstQty(est);
       var labor = (est.laborResults || {});
@@ -189,6 +199,7 @@ const Schedule = (function () {
       });
     }).then(function () {
       assignOverlay.hidden = false;
+      _renderAssignPhotoStrip(estimateId);
     });
   }
 
@@ -312,12 +323,14 @@ const Schedule = (function () {
           var label = STATUS_LABELS[t.status] || t.status;
           var css   = STATUS_CSS[t.status]   || '';
           var end   = t.startDate && t.durationDays ? datePlusDays(t.startDate, t.durationDays - 1) : '—';
-          return '<div class="list-item task-item">'
+          return '<div class="list-item task-item" data-task-id="' + t.id + '">'
             + '<div class="list-item-info">'
             + '<div class="list-item-title">' + esc(t.title) + ' <span class="task-status-badge ' + css + '">' + label + '</span></div>'
             + '<div class="list-item-subtitle">Worker: ' + esc(workerName) + ' · ' + esc(t.startDate || '—') + ' → ' + esc(end) + ' (' + (t.durationDays||0) + ' days)</div>'
+            + '<div class="task-photo-strip" id="task-photos-' + t.id + '"></div>'
             + '</div>'
             + '<div class="task-status-btns">'
+            + '<button class="btn-icon task-photo-btn" data-id="' + t.id + '" data-status="' + t.status + '" title="Add photo">📷</button>'
             + (t.status !== 'inprogress' ? '<button class="btn-icon task-next" data-id="' + t.id + '" data-status="inprogress" title="Mark in progress">▶</button>' : '')
             + (t.status !== 'done'       ? '<button class="btn-icon task-next" data-id="' + t.id + '" data-status="done"       title="Mark done">✔</button>' : '')
             + (t.status !== 'todo'       ? '<button class="btn-icon task-next" data-id="' + t.id + '" data-status="todo"        title="Reset to To Do">↺</button>' : '')
@@ -325,6 +338,15 @@ const Schedule = (function () {
             + '</div></div>';
         }).join('');
         tasksList.innerHTML = html;
+
+        // Render photo thumbnails per task + bind photo button
+        tasks.forEach(function (t) { _renderTaskPhotoStrip(t.id); });
+        tasksList.querySelectorAll('.task-photo-btn').forEach(function (btn) {
+          btn.addEventListener('click', function () {
+            var st = btn.getAttribute('data-status');
+            _openPhotoCapture({ taskId: btn.getAttribute('data-id'), stage: st, stageLabel: STAGE_LABELS[st] || st });
+          });
+        });
 
         tasksList.querySelectorAll('.task-next').forEach(function (btn) {
           btn.addEventListener('click', function () {
@@ -507,6 +529,217 @@ const Schedule = (function () {
   }
 
   // ── Date helpers ──────────────────────────────────────────────────────────
+  // ── Photo capture & gallery ──────────────────────────────────────────────
+  var STAGE_LABELS = { todo: 'Start', inprogress: 'In Progress', done: 'Completion' };
+  var TAG_OPTIONS = [
+    { v: 'work-photo', l: '📸 Work Photo' },
+    { v: 'invoice',     l: '🧾 Invoice' },
+    { v: 'bill',        l: '💵 Bill / Receipt' },
+    { v: 'material',    l: '📦 Material Delivery' },
+    { v: 'other',       l: '📁 Other' }
+  ];
+
+  // opts: { taskId } OR { estimateId }, plus optional stageOverride / stageLabelOverride
+  function _openPhotoCapture(opts) {
+    var taskId      = opts.taskId || null;
+    var estimateId  = opts.estimateId || null;
+    var currentStatus = opts.stage || 'assignment';
+    var stage = opts.stageLabel || STAGE_LABELS[currentStatus] || currentStatus;
+    var stripTargetId = taskId || estimateId;
+    var overlay = document.getElementById('task-photo-overlay');
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.id = 'task-photo-overlay';
+      overlay.className = 'modal-overlay';
+      document.querySelector('main#app').appendChild(overlay);
+    }
+    overlay.innerHTML =
+      '<div class="modal-content task-photo-modal">'
+      + '<h2>Add Photo — ' + esc(stage) + ' stage</h2>'
+      + '<div class="form-group">'
+      + '<label for="tp-tag-select">Tag this photo</label>'
+      + '<select id="tp-tag-select">'
+      + TAG_OPTIONS.map(function(o){ return '<option value="' + o.v + '">' + o.l + '</option>'; }).join('')
+      + '</select>'
+      + '</div>'
+      + '<div class="task-photo-source-btns">'
+      + '<label class="btn-primary task-photo-source-btn">'
+      + '📷 Take Photo<input type="file" accept="image/*" capture="environment" id="tp-camera-input" hidden>'
+      + '</label>'
+      + '<label class="btn-outlined task-photo-source-btn">'
+      + '🖼️ Choose from Gallery<input type="file" accept="image/*" id="tp-gallery-input" hidden>'
+      + '</label>'
+      + '</div>'
+      + '<div id="tp-preview-area"></div>'
+      + '<div class="form-actions">'
+      + '<button class="btn-outlined" id="tp-cancel-btn">Cancel</button>'
+      + '</div>'
+      + '</div>';
+    overlay.hidden = false;
+
+    function handleFile(file) {
+      if (!file) return;
+      var preview = document.getElementById('tp-preview-area');
+      preview.innerHTML = '<p class="panel-hint">Compressing photo…</p>';
+      var _ps = (typeof Config !== "undefined" && Config.getPhotoSettings) ? Config.getPhotoSettings() : { maxDimension: 1280, quality: 0.72 };
+      _compressImage(file, _ps.maxDimension, _ps.quality).then(function (result) {
+        var dataUrl = result.dataUrl;
+        var tag = document.getElementById('tp-tag-select').value;
+        var sizeKb = Math.round(result.sizeBytes / 1024);
+        preview.innerHTML =
+          '<img src="' + dataUrl + '" class="task-photo-preview-img" alt="Preview">'
+          + '<p class="panel-hint" style="margin:6px 0 0">Compressed to ~' + sizeKb + ' KB (' + result.width + '×' + result.height + 'px)</p>'
+          + '<button class="btn-primary" id="tp-save-btn" style="margin-top:10px;width:100%">💾 Save Photo</button>';
+        document.getElementById('tp-save-btn').addEventListener('click', function () {
+          var photo = {
+            taskId: taskId,
+            estimateId: estimateId,
+            projectId: currentProjectId,
+            stage: currentStatus,
+            stageLabel: stage,
+            tag: tag,
+            tagLabel: (TAG_OPTIONS.find(function(o){ return o.v === tag; }) || {}).l || tag,
+            dataUrl: dataUrl,
+            sizeBytes: result.sizeBytes,
+            width: result.width,
+            height: result.height,
+            capturedAt: new Date().toISOString()
+          };
+          DB.addTaskPhoto(photo).then(function () {
+            showToast('Photo saved ✓ (' + sizeKb + ' KB)');
+            overlay.hidden = true;
+            if (taskId)     _renderTaskPhotoStrip(taskId);
+            if (estimateId) _renderAssignPhotoStrip(estimateId);
+          }).catch(function(err){ showToast('Save failed: ' + err.message); });
+        });
+      }).catch(function (err) {
+        preview.innerHTML = '<p class="panel-hint" style="color:var(--danger,#e24b4a)">Could not process image: ' + err.message + '</p>';
+      });
+    }
+
+    // ── Resize + compress an image file via canvas ─────────────────────────
+    // maxDim: longest side in px after resize. quality: JPEG quality 0-1.
+    function _compressImage(file, maxDim, quality) {
+      return new Promise(function (resolve, reject) {
+        var img = new Image();
+        var url = URL.createObjectURL(file);
+        img.onload = function () {
+          URL.revokeObjectURL(url);
+          var w = img.width, h = img.height;
+          if (w > maxDim || h > maxDim) {
+            if (w >= h) { h = Math.round(h * (maxDim / w)); w = maxDim; }
+            else        { w = Math.round(w * (maxDim / h)); h = maxDim; }
+          }
+          var canvas = document.createElement('canvas');
+          canvas.width = w; canvas.height = h;
+          var ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, w, h);
+          var dataUrl = canvas.toDataURL('image/jpeg', quality);
+          // Estimate byte size from base64 length
+          var base64Len = dataUrl.length - dataUrl.indexOf(',') - 1;
+          var sizeBytes = Math.round(base64Len * 0.75);
+          resolve({ dataUrl: dataUrl, width: w, height: h, sizeBytes: sizeBytes });
+        };
+        img.onerror = function () {
+          URL.revokeObjectURL(url);
+          reject(new Error('Failed to load image'));
+        };
+        img.src = url;
+      });
+    }
+
+    var camInput = document.getElementById('tp-camera-input');
+    var galInput = document.getElementById('tp-gallery-input');
+    if (camInput) camInput.addEventListener('change', function () { handleFile(this.files[0]); });
+    if (galInput) galInput.addEventListener('change', function () { handleFile(this.files[0]); });
+
+    document.getElementById('tp-cancel-btn').addEventListener('click', function () { overlay.hidden = true; });
+    overlay.addEventListener('click', function (e) { if (e.target === overlay) overlay.hidden = true; });
+  }
+
+  function _renderTaskPhotoStrip(taskId) {
+    var strip = document.getElementById('task-photos-' + taskId);
+    if (!strip) return;
+    DB.getPhotosByTask(taskId).then(function (photos) {
+      if (!photos.length) { strip.innerHTML = ''; return; }
+      photos.sort(function(a,b){ return a.capturedAt < b.capturedAt ? 1 : -1; });
+      strip.innerHTML = photos.map(function (p) {
+        return '<div class="task-photo-thumb" data-photo-id="' + p.id + '" title="' + esc(p.tagLabel) + ' — ' + esc(p.stageLabel) + '">'
+          + '<img src="' + p.dataUrl + '" alt="' + esc(p.tagLabel) + '">'
+          + '<span class="task-photo-thumb-tag">' + esc(p.tagLabel.split(' ')[0]) + '</span>'
+          + '</div>';
+      }).join('');
+      strip.querySelectorAll('.task-photo-thumb').forEach(function (thumb) {
+        thumb.addEventListener('click', function () {
+          _viewPhoto(thumb.getAttribute('data-photo-id'));
+        });
+      });
+    });
+  }
+
+  function _renderAssignPhotoStrip(estimateId) {
+    var strip = document.getElementById('assign-photo-strip');
+    if (!strip) return;
+    DB.getPhotosByEstimate(estimateId).then(function (photos) {
+      if (!photos.length) { strip.innerHTML = ''; return; }
+      photos.sort(function(a,b){ return a.capturedAt < b.capturedAt ? 1 : -1; });
+      strip.innerHTML = photos.map(function (p) {
+        return '<div class="task-photo-thumb" data-photo-id="' + p.id + '" title="' + esc(p.tagLabel) + '">'
+          + '<img src="' + p.dataUrl + '" alt="' + esc(p.tagLabel) + '">'
+          + '<span class="task-photo-thumb-tag">' + esc(p.tagLabel.split(' ')[0]) + '</span>'
+          + '</div>';
+      }).join('');
+      strip.querySelectorAll('.task-photo-thumb').forEach(function (thumb) {
+        thumb.addEventListener('click', function () { _viewPhoto(thumb.getAttribute('data-photo-id')); });
+      });
+    });
+  }
+
+  function _viewPhoto(photoId) {
+    DB.getTaskPhoto(photoId).then(function (p) {
+      if (!p) return;
+      var overlay = document.getElementById('task-photo-view-overlay');
+      if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = 'task-photo-view-overlay';
+        overlay.className = 'modal-overlay';
+        document.querySelector('main#app').appendChild(overlay);
+      }
+      var d = new Date(p.capturedAt).toLocaleString('en-IN', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' });
+      overlay.innerHTML =
+        '<div class="modal-content task-photo-view-modal">'
+        + '<img src="' + p.dataUrl + '" class="task-photo-view-img" alt="' + esc(p.tagLabel) + '">'
+        + '<div class="task-photo-view-meta">'
+        + '<span class="task-status-badge">' + esc(p.tagLabel) + '</span>'
+        + '<span class="task-status-badge">' + esc(p.stageLabel) + '</span>'
+        + '<span class="panel-hint">' + d + '</span>'
+        + '</div>'
+        + '<div class="form-actions">'
+        + '<button class="btn-outlined" id="tp-view-close">Close</button>'
+        + '<button class="btn-outlined" id="tp-view-delete" style="color:var(--danger,#e24b4a)">🗑️ Delete Photo</button>'
+        + '</div></div>';
+      overlay.hidden = false;
+      document.getElementById('tp-view-close').addEventListener('click', function () { overlay.hidden = true; });
+      document.getElementById('tp-view-delete').addEventListener('click', function () {
+        if (!confirm('Delete this photo?')) return;
+        DB.deleteTaskPhoto(photoId).then(function () {
+          overlay.hidden = true;
+          if (p.taskId)     _renderTaskPhotoStrip(p.taskId);
+          if (p.estimateId) _renderAssignPhotoStrip(p.estimateId);
+          showToast('Photo deleted');
+        });
+      });
+      overlay.addEventListener('click', function (e) { if (e.target === overlay) overlay.hidden = true; });
+    });
+  }
+
+  function getProjectPhotoStorageSummary() {
+    return DB.getPhotosByProject(currentProjectId).then(function(photos) {
+      var totalBytes = photos.reduce(function(s,p){ return s + (p.sizeBytes || 0); }, 0);
+      return { count: photos.length, totalKb: Math.round(totalBytes/1024) };
+    });
+  }
+
   function todayStr() { return new Date().toISOString().slice(0,10); }
   function datePlusDays(dateStr, n) {
     var d = new Date(dateStr); d.setDate(d.getDate() + n);
@@ -528,6 +761,7 @@ const Schedule = (function () {
   return {
     init: init,
     setProject: setProject,
-    refresh: refresh
+    refresh: refresh,
+    getProjectPhotoStorageSummary: getProjectPhotoStorageSummary
   };
 })();

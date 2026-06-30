@@ -99,6 +99,25 @@ const Settings = (function () {
     // License UI
     _initLicenseUI();
 
+    // Task Photo Settings
+    var photoResSelect  = document.getElementById("photo-resolution-select");
+    var photoQualSelect = document.getElementById("photo-quality-select");
+    var btnSavePhotoSettings = document.getElementById("btn-save-photo-settings");
+    if (photoResSelect && photoQualSelect) {
+      var ps = Config.getPhotoSettings();
+      photoResSelect.value  = String(ps.maxDimension || 1280);
+      photoQualSelect.value = String(ps.quality || 0.72);
+    }
+    if (btnSavePhotoSettings) {
+      btnSavePhotoSettings.addEventListener("click", function () {
+        var maxDim  = parseInt(photoResSelect.value, 10);
+        var quality = parseFloat(photoQualSelect.value);
+        Config.setPhotoSettings(maxDim, quality).then(function () {
+          showToast("Photo settings saved");
+        });
+      });
+    }
+
     // Base Assumptions
     var btnSaveAssumptions = document.getElementById('btn-save-assumptions');
     if (btnSaveAssumptions) {

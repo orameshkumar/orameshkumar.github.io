@@ -103,8 +103,10 @@ const Procurement = (function () {
         tabPanels.forEach(function (p) { p.hidden = true; });
         this.classList.add('active');
         document.getElementById('proc-panel-' + target).hidden = false;
-        if (target === 'vendors') renderVendors();
-        if (target === 'rfq')     renderRfqSetup();
+        if (target === 'vendors')    renderVendors();
+        if (target === 'rfq')        renderRfqSetup();
+        if (target === 'saved-rfqs') renderSavedRfqs();
+        if (target === 'pos')        renderPOs();
       }.bind(btn));
     });
 
@@ -160,6 +162,8 @@ const Procurement = (function () {
     });
     renderMaterials();
     renderRfqSetup();
+    renderSavedRfqs();
+    renderPOs();
   }
 
   // ── MATERIALS TAB ─────────────────────────────────────────────────────────

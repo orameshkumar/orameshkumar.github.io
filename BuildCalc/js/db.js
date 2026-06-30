@@ -16,7 +16,7 @@
 
 const DB = (function () {
   const DB_NAME = 'BuildCalcDB';
-  const DB_VERSION = 2;
+  const DB_VERSION = 5;
   let db = null;
 
   // ─── ID Generation ───────────────────────────────────────────────────────
@@ -114,6 +114,28 @@ const DB = (function () {
         if (!database.objectStoreNames.contains('vendors')) {
           var vendorsStore = database.createObjectStore('vendors', { keyPath: 'id' });
           vendorsStore.createIndex('name', 'name', { unique: false });
+        }
+
+        // ── New stores (v3) — RFQ / Purchase Order ─────────────────────────
+        if (!database.objectStoreNames.contains('rfqs')) {
+          var rfqStore = database.createObjectStore('rfqs', { keyPath: 'id' });
+          rfqStore.createIndex('projectId', 'projectId', { unique: false });
+          rfqStore.createIndex('vendorId',  'vendorId',  { unique: false });
+        }
+        if (!database.objectStoreNames.contains('purchaseOrders')) {
+          var poStore = database.createObjectStore('purchaseOrders', { keyPath: 'id' });
+          poStore.createIndex('projectId', 'projectId', { unique: false });
+          poStore.createIndex('rfqId',     'rfqId',     { unique: false });
+        }
+
+        // ── New store (v4) — Task Photos ────────────────────────────────────
+        if (!database.objectStoreNames.contains('taskPhotos')) {
+          var photoStore = database.createObjectStore('taskPhotos', { keyPath: 'id' });
+          photoStore.createIndex('taskId',     'taskId',     { unique: false });
+          photoStore.createIndex('estimateId', 'estimateId', { unique: false });
+          photoStore.createIndex('projectId',  'projectId',  { unique: false });
+          photoStore.createIndex('stage',      'stage',      { unique: false });
+          photoStore.createIndex('tag',        'tag',        { unique: false });
         }
       };
     });
@@ -412,6 +434,14 @@ const DB = (function () {
   function updatePO(po)        { return _storePut('purchaseOrders', po); }
   function deletePO(id)        { return _storeDel('purchaseOrders', id); }
 
+  // ─── Task Photo CRUD ─────────────────────────────────────────────────────
+  function addTaskPhoto(p)            { return _storeAdd('taskPhotos', p); }
+  function getTaskPhoto(id)           { return _storeGet('taskPhotos', id); }
+  function getPhotosByTask(taskId)        { return _storeGetByIndex('taskPhotos','taskId',taskId); }
+  function getPhotosByEstimate(estimateId){ return _storeGetByIndex('taskPhotos','estimateId',estimateId); }
+  function getPhotosByProject(pid)    { return _storeGetByIndex('taskPhotos','projectId',pid); }
+  function deleteTaskPhoto(id)        { return _storeDel('taskPhotos', id); }
+
   // ─── Bulk Operations ─────────────────────────────────────────────────────
 
   /**
@@ -624,7 +654,10 @@ const DB = (function () {
     addRfq: addRfq, getRfq: getRfq, getRfqsByProject: getRfqsByProject,
     updateRfq: updateRfq, deleteRfq: deleteRfq,
     addPO: addPO, getPO: getPO, getPOsByProject: getPOsByProject,
-    updatePO: updatePO, deletePO: deletePO
+    updatePO: updatePO, deletePO: deletePO,
+    addTaskPhoto: addTaskPhoto, getTaskPhoto: getTaskPhoto,
+    getPhotosByTask: getPhotosByTask, getPhotosByEstimate: getPhotosByEstimate, getPhotosByProject: getPhotosByProject,
+    deleteTaskPhoto: deleteTaskPhoto
   };
 })();
 // ── Auto-select backend ───────────────────────────────────────────────────

@@ -69,7 +69,8 @@ const Config = (function () {
     mortarJointThickness: 0.25, // inches (configurable)
     cementBagVolume: { cft: 1.25, cum: 0.035 },
     concreteDensity: 2400,
-    customCalculations: []
+    customCalculations: [],
+    photoSettings: { maxDimension: 1280, quality: 0.72 } // task photo compression
   };
 
   // ─── Private State ───────────────────────────────────────────────────────
@@ -149,6 +150,13 @@ const Config = (function () {
    */
   function getConcreteDensity() {
     return config.concreteDensity;
+  }
+
+  /**
+   * @returns {{maxDimension:number, quality:number}} Task photo compression settings
+   */
+  function getPhotoSettings() {
+    return config.photoSettings || { maxDimension: 1280, quality: 0.72 };
   }
 
   // ─── Mutators (all persist to IndexedDB) ─────────────────────────────────
@@ -416,7 +424,18 @@ const Config = (function () {
 
   // ─── Public API ──────────────────────────────────────────────────────────
 
-  return {
+    /**
+   * Update task photo compression settings.
+   * @param {number} maxDimension - longest side in px after resize
+   * @param {number} quality - JPEG quality 0-1
+   * @returns {Promise<void>}
+   */
+  function setPhotoSettings(maxDimension, quality) {
+    config.photoSettings = { maxDimension: maxDimension, quality: quality };
+    return DB.saveConfig(config);
+  }
+
+return {
     init: init,
     getBlockSizes: getBlockSizes,
     getLaborRates: getLaborRates,
@@ -425,6 +444,8 @@ const Config = (function () {
     getMortarJointThickness: getMortarJointThickness,
     getCementBagVolume: getCementBagVolume,
     getConcreteDensity: getConcreteDensity,
+    getPhotoSettings: getPhotoSettings,
+    setPhotoSettings: setPhotoSettings,
 
     // Block Size CRUD
     updateBlockSizes: updateBlockSizes,

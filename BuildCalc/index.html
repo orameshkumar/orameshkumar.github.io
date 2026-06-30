@@ -574,6 +574,35 @@
           <button id="btn-save-assumptions" class="btn-outlined btn-sm">Save All</button>
         </div>
 
+        <!-- Task Photo Settings -->
+        <div class="settings-card">
+          <h3>Task Photo Settings</h3>
+          <p class="setting-hint">Photos captured on tasks are automatically resized and compressed before saving to keep storage small.</p>
+          <div class="form-group" style="margin-top:12px;">
+            <label for="photo-resolution-select">Resolution (longest side)</label>
+            <select id="photo-resolution-select" autocomplete="off">
+              <option value="640">Low — 640px (smallest file, ~50-100 KB)</option>
+              <option value="960">Medium — 960px (~100-200 KB)</option>
+              <option value="1280" selected>Standard — 1280px (~150-350 KB) — recommended</option>
+              <option value="1600">High — 1600px (~250-500 KB)</option>
+              <option value="2048">Very High — 2048px (~400-800 KB, best for invoice text)</option>
+            </select>
+            <span class="setting-hint">Lower resolution = smaller files = more photos fit in storage. 1280px is sharp enough to read most invoices and bills.</span>
+          </div>
+          <div class="form-group">
+            <label for="photo-quality-select">Compression quality</label>
+            <select id="photo-quality-select" autocomplete="off">
+              <option value="0.5">Low (smaller file, visible compression)</option>
+              <option value="0.6">Medium-Low</option>
+              <option value="0.72" selected>Standard — recommended</option>
+              <option value="0.85">High (larger file, sharper detail)</option>
+              <option value="0.95">Very High (for documents needing fine text clarity)</option>
+            </select>
+            <span class="setting-hint">Higher quality preserves more detail — useful for invoice/bill photos with small text.</span>
+          </div>
+          <button id="btn-save-photo-settings" class="btn-outlined btn-sm">Save Photo Settings</button>
+        </div>
+
         <!-- Labor Rates Section -->
         <div class="settings-card">
           <div class="settings-card-header">
@@ -868,6 +897,13 @@
           <div class="assign-duration-row">
             <span class="assign-duration-label">Estimated duration:</span>
             <span id="assign-duration" class="assign-duration-val">—</span>
+          </div>
+          <div class="assign-photo-section">
+            <div class="panel-toolbar" style="margin-bottom:0">
+              <span class="assign-duration-label">Site photos for this assignment</span>
+              <button id="btn-assign-add-photo" class="btn-outlined btn-sm">📷 Add Photo</button>
+            </div>
+            <div id="assign-photo-strip" class="task-photo-strip"></div>
           </div>
           <div class="form-actions">
             <button id="btn-assign-close" class="btn-outlined">Cancel</button>
