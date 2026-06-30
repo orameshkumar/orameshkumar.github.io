@@ -14,6 +14,7 @@
     <nav>
       <a href="reception.html" class="active">Reception</a>
       <a href="patients.html">Patients</a>
+      <a href="billing.html">Billing</a>
       <a href="board.html">Queue Board</a>
       <a href="admin.html">Admin Setup</a>
     </nav>
@@ -32,7 +33,10 @@
         <h2>Find or register a patient</h2>
         <div class="field">
           <label for="search-input">Mobile number, Patient ID, or name</label>
-          <input id="search-input" placeholder="Start typing to search…" />
+          <div style="display:flex;gap:0.5rem;">
+            <input id="search-input" placeholder="Start typing to search…" style="flex:1;" />
+            <div id="scan-btn-container"></div>
+          </div>
         </div>
         <div id="search-results"></div>
 
@@ -56,6 +60,12 @@
             </div>
           </div>
           <div class="field"><label for="p-address">Address</label><input id="p-address" /></div>
+
+          <div class="flex-between" id="patient-edit-actions" style="display:none;margin-bottom:1rem;">
+            <button type="button" class="btn btn-sm btn-outline" id="print-card-btn-reception">Print patient card</button>
+            <button type="button" class="btn btn-sm btn-outline" id="save-patient-only-btn">Save details (no token)</button>
+            <button type="button" class="btn btn-sm btn-danger" id="delete-patient-only-btn">Delete patient</button>
+          </div>
 
           <hr class="section-divider" />
 
@@ -120,13 +130,16 @@
 <script type="module">
 import {
   auth, authReady, db, onAuthStateChanged, signOut,
-  collection, addDoc, doc, updateDoc, getDoc, getDocs, onSnapshot,
+  collection, addDoc, doc, updateDoc, deleteDoc, getDoc, getDocs, onSnapshot,
   query, where, orderBy
 } from "./js/firebase-config.js";
 import { computeACT, calculateETAs, formatETA, todayKey, STATUS_LABELS, NO_SHOW_GRACE_SECONDS, generatePatientId, applyClinicBranding } from "./js/queue-logic.js";
+import { attachScanButton } from "./js/barcode-scanner.js";
 
 applyClinicBranding();
 await authReady;
+
+document.getElementById("scan-btn-container").appendChild(attachScanButton(document.getElementById("search-input")));
 
 onAuthStateChanged(auth, (user) => {
   if (!user) { window.location.href = "index.html"; return; }
@@ -229,7 +242,8 @@ async function doSearch(term) {
   const results = [];
   snap.forEach((d) => {
     const p = { id: d.id, ...d.data() };
-    const hay = `${p.name} ${p.mobile} ${p.id}`.toLowerCase();
+    if (p.deletedAt) return; // hidden via soft-delete — don't surface in active search
+    const hay = `${p.name} ${p.mobile} ${p.id} ${p.patientCode || ""}`.toLowerCase();
     if (hay.includes(term.toLowerCase())) results.push(p);
   });
   const box = document.getElementById("search-results");
@@ -252,7 +266,61 @@ function fillPatientForm(p) {
   document.getElementById("p-gender").value = p.gender;
   document.getElementById("p-address").value = p.address || "";
   document.getElementById("form-mode-label").textContent = `Editing existing patient — ID: ${p.patientCode || "(legacy, no ID)"}`;
+  document.getElementById("patient-edit-actions").style.display = "flex";
 }
+
+function clearPatientForm() {
+  document.getElementById("patient-form").reset();
+  document.getElementById("patient-id").value = "";
+  document.getElementById("form-mode-label").textContent = "New patient details";
+  document.getElementById("patient-edit-actions").style.display = "none";
+  document.getElementById("search-results").innerHTML = "";
+}
+
+function currentPatientFormData() {
+  return {
+    name: document.getElementById("p-name").value.trim(),
+    mobile: document.getElementById("p-mobile").value.trim(),
+    age: Number(document.getElementById("p-age").value),
+    gender: document.getElementById("p-gender").value,
+    address: document.getElementById("p-address").value.trim(),
+  };
+}
+
+document.getElementById("print-card-btn-reception").addEventListener("click", () => {
+  const patientId = document.getElementById("patient-id").value;
+  if (!patientId) return;
+  window.open(`patient-card.html?id=${encodeURIComponent(patientId)}`, "_blank");
+});
+
+document.getElementById("save-patient-only-btn").addEventListener("click", async () => {
+  const patientId = document.getElementById("patient-id").value;
+  if (!patientId) return;
+  const data = currentPatientFormData();
+  if (!data.name || !data.mobile) { alert("Name and mobile number are required."); return; }
+  await updateDoc(doc(db, "patients", patientId), data);
+  alert("Patient details updated.");
+  clearPatientForm();
+});
+
+document.getElementById("delete-patient-only-btn").addEventListener("click", async () => {
+  const patientId = document.getElementById("patient-id").value;
+  const name = document.getElementById("p-name").value;
+  if (!patientId) return;
+  const choice = prompt(
+    `Delete ${name}?\n\nType "hide" to soft-delete — removes them from search/listings but keeps all visit and billing history intact.\n\nType "delete" to permanently remove this patient record. Their past visits/bills remain in reports but lose their live patient link. This cannot be undone.\n\nType anything else to cancel.`
+  );
+  if (choice === "hide") {
+    await updateDoc(doc(db, "patients", patientId), { deletedAt: new Date().toISOString() });
+    alert("Patient hidden. Visit history preserved.");
+    clearPatientForm();
+  } else if (choice === "delete") {
+    if (!confirm(`This permanently deletes ${name}'s patient record and cannot be undone. Continue?`)) return;
+    await deleteDoc(doc(db, "patients", patientId));
+    alert("Patient record permanently deleted.");
+    clearPatientForm();
+  }
+});
 
 // ----- Token issuance -----
 document.getElementById("patient-form").addEventListener("submit", async (e) => {
@@ -278,6 +346,9 @@ document.getElementById("patient-form").addEventListener("submit", async (e) => 
   } else {
     const existingSnap = await getDoc(doc(db, "patients", patientId));
     patientCode = existingSnap.exists() ? existingSnap.data().patientCode : null;
+    // Persist any edits made to this existing patient's details (name/mobile/age/gender/address)
+    // before issuing a token — previously these edits were silently discarded.
+    await updateDoc(doc(db, "patients", patientId), patientData);
   }
 
   const preferredDoctorIds = Array.from(selectedDoctorIds);
@@ -302,10 +373,7 @@ document.getElementById("patient-form").addEventListener("submit", async (e) => 
   });
 
   alert(`Token #${tokenNumber} issued for ${patientData.name}.\nPatient ID: ${patientCode || "(existing patient, no ID on record)"}`);
-  e.target.reset();
-  document.getElementById("patient-id").value = "";
-  document.getElementById("form-mode-label").textContent = "New patient details";
-  document.getElementById("search-results").innerHTML = "";
+  clearPatientForm();
   selectedDoctorIds.clear();
   renderDoctorCheckboxes();
 });

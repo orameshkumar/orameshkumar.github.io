@@ -25,8 +25,9 @@
         <h1>Patient directory</h1>
         <p>Browse every registered patient, their details, and visit history.</p>
       </div>
-      <div style="min-width:260px;">
-        <input id="search-box" placeholder="Search by name, mobile, or Patient ID…" />
+      <div style="min-width:260px;display:flex;gap:0.5rem;">
+        <input id="search-box" placeholder="Search by name, mobile, or Patient ID…" style="flex:1;" />
+        <div id="scan-btn-container"></div>
       </div>
     </div>
 
@@ -44,6 +45,32 @@
       <span class="token-tag" id="detail-code">—</span>
     </div>
     <p class="small muted" id="detail-meta">—</p>
+
+    <div id="edit-form" style="display:none;margin-top:0.75rem;">
+      <div class="field-row">
+        <div class="field"><label>Full name</label><input id="edit-name" /></div>
+        <div class="field"><label>Mobile</label><input id="edit-mobile" /></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Age</label><input id="edit-age" type="number" min="0" /></div>
+        <div class="field">
+          <label>Gender</label>
+          <select id="edit-gender"><option>Male</option><option>Female</option><option>Other</option></select>
+        </div>
+      </div>
+      <div class="field"><label>Address</label><input id="edit-address" /></div>
+      <div class="flex-between">
+        <button class="btn btn-sm btn-outline" id="edit-cancel-btn">Cancel</button>
+        <button class="btn btn-sm btn-primary" id="edit-save-btn">Save changes</button>
+      </div>
+    </div>
+
+    <div class="flex-between" style="margin-top:0.75rem;">
+      <button class="btn btn-sm btn-outline" id="print-card-btn">Print patient card</button>
+      <button class="btn btn-sm btn-outline" id="edit-toggle-btn">Edit details</button>
+      <button class="btn btn-sm btn-danger" id="delete-patient-btn">Delete patient</button>
+    </div>
+
     <hr class="section-divider" />
     <h3>Visit history</h3>
     <div id="detail-history"></div>
@@ -56,9 +83,12 @@
 <script type="module">
 import {
   auth, authReady, db, onAuthStateChanged, signOut,
-  collection, getDocs, getDoc, doc, query, where, orderBy
+  collection, getDocs, getDoc, doc, query, where, orderBy, updateDoc, deleteDoc
 } from "./js/firebase-config.js";
 import { applyClinicBranding } from "./js/queue-logic.js";
+import { attachScanButton } from "./js/barcode-scanner.js";
+
+document.getElementById("scan-btn-container").appendChild(attachScanButton(document.getElementById("search-box")));
 
 applyClinicBranding();
 await authReady;
@@ -79,9 +109,11 @@ document.getElementById("logout-btn").onclick = () => signOut(auth).then(() => w
 function adjustNavForRole() {
   const nav = document.getElementById("nav-links");
   if (currentRole === "doctor") {
-    nav.innerHTML = `<a href="doctor.html">My Queue</a><a href="patients.html" class="active">Patients</a><a href="board.html">Queue Board</a>`;
+    nav.innerHTML = `<a href="doctor.html">My Queue</a><a href="patients.html" class="active">Patients</a><a href="billing.html">Billing</a><a href="board.html">Queue Board</a>`;
   } else if (currentRole === "admin") {
-    nav.innerHTML = `<a href="admin.html">Admin Setup</a><a href="reception.html">Reception</a><a href="patients.html" class="active">Patients</a><a href="board.html">Queue Board</a>`;
+    nav.innerHTML = `<a href="admin.html">Admin Setup</a><a href="reception.html">Reception</a><a href="patients.html" class="active">Patients</a><a href="billing.html">Billing</a><a href="board.html">Queue Board</a>`;
+  } else if (currentRole === "reception") {
+    nav.innerHTML = `<a href="reception.html">Reception</a><a href="patients.html" class="active">Patients</a><a href="billing.html">Billing</a><a href="board.html">Queue Board</a><a href="admin.html">Admin Setup</a>`;
   }
 }
 
@@ -91,7 +123,13 @@ async function loadPatients() {
   snap.forEach((d) => allPatients.push({ id: d.id, ...d.data() }));
   // Newest first where we have a registration timestamp; legacy/no-timestamp records sort last.
   allPatients.sort((a, b) => new Date(b.registeredAt || 0) - new Date(a.registeredAt || 0));
-  renderTable(allPatients);
+  renderTable(visiblePatients());
+}
+
+function visiblePatients() {
+  // Soft-deleted patients are hidden from the directory by default, but their
+  // data and visit history are preserved — see openDetail's "Delete patient" flow.
+  return allPatients.filter((p) => !p.deletedAt);
 }
 
 function renderTable(list) {
@@ -125,20 +163,30 @@ function sourceLabel(s) {
 
 document.getElementById("search-box").addEventListener("input", (e) => {
   const term = e.target.value.trim().toLowerCase();
-  if (!term) { renderTable(allPatients); return; }
-  const filtered = allPatients.filter((p) => {
+  if (!term) { renderTable(visiblePatients()); return; }
+  const filtered = visiblePatients().filter((p) => {
     const hay = `${p.name || ""} ${p.mobile || ""} ${p.patientCode || ""}`.toLowerCase();
     return hay.includes(term);
   });
   renderTable(filtered);
 });
 
+let activeDetailPatientId = null;
+
 async function openDetail(patientId) {
   const p = allPatients.find((x) => x.id === patientId);
   if (!p) return;
+  activeDetailPatientId = patientId;
+  exitEditMode(); // always reopen in view mode, not mid-edit from a previous patient
   document.getElementById("detail-name").textContent = p.name;
   document.getElementById("detail-code").textContent = p.patientCode || "—";
   document.getElementById("detail-meta").textContent = `${p.age || "—"} years · ${p.gender || "—"} · ${p.mobile || "—"} · ${p.address || "No address on file"}`;
+
+  document.getElementById("edit-name").value = p.name || "";
+  document.getElementById("edit-mobile").value = p.mobile || "";
+  document.getElementById("edit-age").value = p.age || "";
+  document.getElementById("edit-gender").value = p.gender || "Male";
+  document.getElementById("edit-address").value = p.address || "";
 
   const histBox = document.getElementById("detail-history");
   histBox.innerHTML = "<p class='small muted'>Loading visit history…</p>";
@@ -165,6 +213,69 @@ async function openDetail(patientId) {
   document.getElementById("detail-modal").style.display = "flex";
 }
 document.getElementById("detail-close").onclick = () => document.getElementById("detail-modal").style.display = "none";
+
+function enterEditMode() {
+  document.getElementById("edit-form").style.display = "block";
+  document.getElementById("edit-toggle-btn").style.display = "none";
+}
+function exitEditMode() {
+  document.getElementById("edit-form").style.display = "none";
+  document.getElementById("edit-toggle-btn").style.display = "inline-flex";
+}
+
+document.getElementById("edit-toggle-btn").onclick = enterEditMode;
+document.getElementById("edit-cancel-btn").onclick = exitEditMode;
+document.getElementById("print-card-btn").onclick = () => {
+  window.open(`patient-card.html?id=${encodeURIComponent(activeDetailPatientId)}`, "_blank");
+};
+
+document.getElementById("edit-save-btn").onclick = async () => {
+  const updated = {
+    name: document.getElementById("edit-name").value.trim(),
+    mobile: document.getElementById("edit-mobile").value.trim(),
+    age: Number(document.getElementById("edit-age").value) || null,
+    gender: document.getElementById("edit-gender").value,
+    address: document.getElementById("edit-address").value.trim(),
+  };
+  if (!updated.name || !updated.mobile) {
+    alert("Name and mobile number are required.");
+    return;
+  }
+  await updateDoc(doc(db, "patients", activeDetailPatientId), updated);
+  // Reflect the edit in the local cache immediately so the table/modal update without a full reload.
+  const idx = allPatients.findIndex((p) => p.id === activeDetailPatientId);
+  if (idx !== -1) allPatients[idx] = { ...allPatients[idx], ...updated };
+  exitEditMode();
+  await openDetail(activeDetailPatientId);
+  renderTable(visiblePatients());
+  alert("Patient details updated.");
+};
+
+document.getElementById("delete-patient-btn").onclick = async () => {
+  const p = allPatients.find((x) => x.id === activeDetailPatientId);
+  if (!p) return;
+
+  const choice = prompt(
+    `Delete ${p.name}?\n\nType "hide" to soft-delete — this removes them from the directory but keeps all visit and billing history intact (recommended, reversible by an admin directly in Firestore).\n\nType "delete" to permanently remove this patient record. Their past visits and bills will remain in reports but will no longer be linked to a live patient profile. This cannot be undone.\n\nType anything else to cancel.`
+  );
+
+  if (choice === "hide") {
+    await updateDoc(doc(db, "patients", activeDetailPatientId), { deletedAt: new Date().toISOString() });
+    const idx = allPatients.findIndex((x) => x.id === activeDetailPatientId);
+    if (idx !== -1) allPatients[idx].deletedAt = new Date().toISOString();
+    document.getElementById("detail-modal").style.display = "none";
+    renderTable(visiblePatients());
+    alert("Patient hidden from the directory. Their visit history is preserved.");
+  } else if (choice === "delete") {
+    if (!confirm(`This permanently deletes ${p.name}'s patient record and cannot be undone. Continue?`)) return;
+    await deleteDoc(doc(db, "patients", activeDetailPatientId));
+    allPatients = allPatients.filter((x) => x.id !== activeDetailPatientId);
+    document.getElementById("detail-modal").style.display = "none";
+    renderTable(visiblePatients());
+    alert("Patient record permanently deleted.");
+  }
+  // Any other input (including empty/cancel) does nothing.
+};
 
 function escapeHtml(s) {
   return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));

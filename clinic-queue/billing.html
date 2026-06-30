@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Billing — Clinic Queue</title>
+<link rel="manifest" href="manifest.json" />
+<link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+<div class="app-shell">
+  <header class="topbar">
+    <div class="brand"><span class="dot"></span> <span data-clinic-name>Clinic Queue</span></div>
+    <nav id="nav-links">
+      <a href="reception.html">Reception</a>
+      <a href="patients.html">Patients</a>
+      <a href="billing.html" class="active">Billing</a>
+      <a href="board.html">Queue Board</a>
+    </nav>
+    <div class="user-pill"><span id="user-email">—</span><button id="logout-btn">Sign out</button></div>
+  </header>
+
+  <main class="page">
+    <div class="page-header">
+      <h1>Fee &amp; bill collection</h1>
+      <p>See what's been collected today, yesterday, or over any date range — filterable by doctor or patient.</p>
+    </div>
+
+    <div class="card" style="margin-bottom:1.5rem;">
+      <div class="flex-between" style="margin-bottom:1rem;flex-wrap:wrap;gap:0.75rem;">
+        <div class="tag-row">
+          <button class="btn btn-sm btn-outline" data-preset="today">Today</button>
+          <button class="btn btn-sm btn-outline" data-preset="yesterday">Yesterday</button>
+          <button class="btn btn-sm btn-outline" data-preset="last7">Last 7 days</button>
+          <button class="btn btn-sm btn-outline" data-preset="thismonth">This month</button>
+        </div>
+      </div>
+      <div class="field-row" style="align-items:flex-end;flex-wrap:wrap;gap:0.75rem;">
+        <div class="field" style="margin-bottom:0;min-width:160px;">
+          <label for="date-from">From</label>
+          <input type="date" id="date-from" />
+        </div>
+        <div class="field" style="margin-bottom:0;min-width:160px;">
+          <label for="date-to">To</label>
+          <input type="date" id="date-to" />
+        </div>
+        <div class="field" style="margin-bottom:0;min-width:180px;">
+          <label for="filter-doctor">Doctor</label>
+          <select id="filter-doctor"><option value="">All doctors</option></select>
+        </div>
+        <div class="field" style="margin-bottom:0;min-width:200px;flex:1;">
+          <label for="filter-patient">Patient (name, mobile, or ID)</label>
+          <input id="filter-patient" placeholder="Leave blank for all patients" />
+        </div>
+        <button class="btn btn-primary" id="apply-filters">Apply</button>
+      </div>
+    </div>
+
+    <div class="grid-3" style="margin-bottom:1.5rem;">
+      <div class="card">
+        <p class="small muted" style="margin:0 0 0.3rem;">Total collected</p>
+        <p style="font-size:1.8rem;font-weight:800;margin:0;" id="summary-total">₹0</p>
+      </div>
+      <div class="card">
+        <p class="small muted" style="margin:0 0 0.3rem;">Consultation fees</p>
+        <p style="font-size:1.8rem;font-weight:800;margin:0;" id="summary-consult">₹0</p>
+      </div>
+      <div class="card">
+        <p class="small muted" style="margin:0 0 0.3rem;">Medicine + other fees</p>
+        <p style="font-size:1.8rem;font-weight:800;margin:0;" id="summary-other">₹0</p>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:1.5rem;">
+      <h2>By doctor</h2>
+      <div id="by-doctor-table"><div class="empty-state">No data for this range.</div></div>
+    </div>
+
+    <div class="card" style="margin-bottom:1.5rem;">
+      <h2>By payment mode</h2>
+      <div id="by-mode-table"><div class="empty-state">No data for this range.</div></div>
+    </div>
+
+    <div class="card flush">
+      <div class="flex-between" style="padding:1rem 1.25rem 0;">
+        <h2 style="margin:0;">Itemized transactions</h2>
+      </div>
+      <div id="transactions-table" style="padding:0 0 0.5rem;"><div class="empty-state">No transactions for this range.</div></div>
+    </div>
+  </main>
+</div>
+
+<script type="module">
+import {
+  auth, authReady, db, onAuthStateChanged, signOut,
+  collection, getDocs, getDoc, doc, query, where, orderBy
+} from "./js/firebase-config.js";
+import { applyClinicBranding, todayKey } from "./js/queue-logic.js";
+
+applyClinicBranding();
+await authReady;
+
+let doctors = [];
+let currentRole = null;
+
+onAuthStateChanged(auth, async (user) => {
+  if (!user) { window.location.href = "index.html"; return; }
+  document.getElementById("user-email").textContent = user.email;
+
+  const userSnap = await getDoc(doc(db, "users", user.uid));
+  currentRole = userSnap.exists() ? userSnap.data().role : null;
+  if (!["reception", "doctor", "admin"].includes(currentRole)) {
+    alert("Your account doesn't have access to billing reports.");
+    return;
+  }
+  adjustNavForRole();
+
+  const doctorsSnap = await getDocs(collection(db, "doctors"));
+  doctors = [];
+  doctorsSnap.forEach((d) => doctors.push({ id: d.id, ...d.data() }));
+  const sel = document.getElementById("filter-doctor");
+  doctors.forEach((d) => {
+    const opt = document.createElement("option");
+    opt.value = d.id;
+    opt.textContent = d.name;
+    sel.appendChild(opt);
+  });
+
+  setPreset("today");
+  await runReport();
+});
+document.getElementById("logout-btn").onclick = () => signOut(auth).then(() => window.location.href = "index.html");
+
+function adjustNavForRole() {
+  const nav = document.getElementById("nav-links");
+  if (currentRole === "doctor") {
+    nav.innerHTML = `<a href="doctor.html">My Queue</a><a href="patients.html">Patients</a><a href="billing.html" class="active">Billing</a><a href="board.html">Queue Board</a>`;
+  } else if (currentRole === "admin") {
+    nav.innerHTML = `<a href="admin.html">Admin Setup</a><a href="reception.html">Reception</a><a href="patients.html">Patients</a><a href="billing.html" class="active">Billing</a><a href="board.html">Queue Board</a>`;
+  } else if (currentRole === "reception") {
+    nav.innerHTML = `<a href="reception.html">Reception</a><a href="patients.html">Patients</a><a href="billing.html" class="active">Billing</a><a href="board.html">Queue Board</a><a href="admin.html">Admin Setup</a>`;
+  }
+}
+
+function dateInputValue(d) {
+  return todayKey(d); // YYYY-MM-DD, matches visitDate format used throughout the app
+}
+
+document.querySelectorAll("[data-preset]").forEach((btn) => {
+  btn.addEventListener("click", () => { setPreset(btn.dataset.preset); runReport(); });
+});
+
+function setPreset(preset) {
+  const now = new Date();
+  let from, to;
+  if (preset === "today") {
+    from = to = now;
+  } else if (preset === "yesterday") {
+    const y = new Date(now); y.setDate(y.getDate() - 1);
+    from = to = y;
+  } else if (preset === "last7") {
+    const start = new Date(now); start.setDate(start.getDate() - 6);
+    from = start; to = now;
+  } else if (preset === "thismonth") {
+    from = new Date(now.getFullYear(), now.getMonth(), 1);
+    to = now;
+  }
+  document.getElementById("date-from").value = dateInputValue(from);
+  document.getElementById("date-to").value = dateInputValue(to);
+}
+
+document.getElementById("apply-filters").addEventListener("click", runReport);
+
+async function runReport() {
+  const from = document.getElementById("date-from").value;
+  const to = document.getElementById("date-to").value;
+  const doctorFilter = document.getElementById("filter-doctor").value;
+  const patientFilter = document.getElementById("filter-patient").value.trim().toLowerCase();
+
+  if (!from || !to) return;
+
+  // Firestore range query on visitDate (string YYYY-MM-DD sorts correctly lexicographically).
+  const q = query(collection(db, "visits"), where("visitDate", ">=", from), where("visitDate", "<=", to));
+  const snap = await getDocs(q);
+
+  let visits = [];
+  snap.forEach((d) => visits.push({ id: d.id, ...d.data() }));
+  visits = visits.filter((v) => v.fees); // only billed visits count toward collection totals
+
+  if (doctorFilter) {
+    visits = visits.filter((v) => v.doctorId === doctorFilter || (v.preferredDoctorIds || []).includes(doctorFilter));
+  }
+  if (patientFilter) {
+    visits = visits.filter((v) => {
+      const hay = `${v.patientName || ""} ${v.patientCode || ""}`.toLowerCase();
+      return hay.includes(patientFilter);
+    });
+  }
+
+  renderSummary(visits);
+  renderByDoctor(visits);
+  renderByMode(visits);
+  renderTransactions(visits);
+}
+
+function renderSummary(visits) {
+  let total = 0, consult = 0, other = 0;
+  visits.forEach((v) => {
+    total += v.fees.total || 0;
+    consult += v.fees.consultationFee || 0;
+    other += (v.fees.medicineFee || 0) + (v.fees.otherFee || 0);
+  });
+  document.getElementById("summary-total").textContent = `₹${total}`;
+  document.getElementById("summary-consult").textContent = `₹${consult}`;
+  document.getElementById("summary-other").textContent = `₹${other}`;
+}
+
+function renderByDoctor(visits) {
+  const box = document.getElementById("by-doctor-table");
+  const byDoctor = {};
+  visits.forEach((v) => {
+    const id = v.doctorId || (v.preferredDoctorIds || [])[0] || "unknown";
+    if (!byDoctor[id]) byDoctor[id] = { count: 0, total: 0 };
+    byDoctor[id].count++;
+    byDoctor[id].total += v.fees.total || 0;
+  });
+  const rows = Object.entries(byDoctor);
+  if (rows.length === 0) { box.innerHTML = '<div class="empty-state">No data for this range.</div>'; return; }
+  box.innerHTML = `<table><thead><tr><th>Doctor</th><th>Visits billed</th><th>Total collected</th></tr></thead><tbody>
+    ${rows.map(([id, d]) => `<tr><td>${escapeHtml(doctors.find((x) => x.id === id)?.name || "Unknown")}</td><td>${d.count}</td><td>₹${d.total}</td></tr>`).join("")}
+  </tbody></table>`;
+}
+
+function renderByMode(visits) {
+  const box = document.getElementById("by-mode-table");
+  const byMode = {};
+  visits.forEach((v) => {
+    const mode = v.fees.mode || "Unknown";
+    byMode[mode] = (byMode[mode] || 0) + (v.fees.total || 0);
+  });
+  const rows = Object.entries(byMode);
+  if (rows.length === 0) { box.innerHTML = '<div class="empty-state">No data for this range.</div>'; return; }
+  box.innerHTML = `<table><thead><tr><th>Payment mode</th><th>Total collected</th></tr></thead><tbody>
+    ${rows.map(([mode, total]) => `<tr><td>${escapeHtml(mode)}</td><td>₹${total}</td></tr>`).join("")}
+  </tbody></table>`;
+}
+
+function renderTransactions(visits) {
+  const box = document.getElementById("transactions-table");
+  if (visits.length === 0) { box.innerHTML = '<div class="empty-state">No transactions for this range.</div>'; return; }
+  const sorted = [...visits].sort((a, b) => new Date(b.fees.collectedAt || 0) - new Date(a.fees.collectedAt || 0));
+  box.innerHTML = `<table><thead><tr><th>Date</th><th>Token</th><th>Patient</th><th>Doctor</th><th>Consult</th><th>Medicine</th><th>Other</th><th>Total</th><th>Mode</th><th>Receipt</th></tr></thead><tbody>
+    ${sorted.map((v) => {
+      const docName = doctors.find((d) => d.id === (v.doctorId || (v.preferredDoctorIds || [])[0]))?.name || "—";
+      return `<tr>
+        <td class="small">${v.visitDate}</td>
+        <td><span class="token-tag" style="font-size:0.8rem;padding:0.2rem 0.5rem;">#${v.tokenNumber}</span></td>
+        <td class="small">${escapeHtml(v.patientName)}${v.patientCode ? ` <span class="muted">(${v.patientCode})</span>` : ""}</td>
+        <td class="small">${escapeHtml(docName)}</td>
+        <td class="small">₹${v.fees.consultationFee || 0}</td>
+        <td class="small">₹${v.fees.medicineFee || 0}</td>
+        <td class="small">₹${v.fees.otherFee || 0}</td>
+        <td class="small"><strong>₹${v.fees.total}</strong></td>
+        <td class="small">${escapeHtml(v.fees.mode || "—")}</td>
+        <td class="small muted">${v.fees.receiptNumber || "—"}</td>
+      </tr>`;
+    }).join("")}
+  </tbody></table>`;
+}
+
+function escapeHtml(s) {
+  return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+}
+</script>
+<script>if("serviceWorker" in navigator){navigator.serviceWorker.register("sw.js").catch(()=>{});}</script>
+</body>
+</html>

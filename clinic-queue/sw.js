@@ -1,9 +1,10 @@
-const CACHE_NAME = "clinic-queue-v3";
+const CACHE_NAME = "clinic-queue-v5";
 const SHELL_FILES = [
   "./index.html", "./reception.html", "./doctor.html", "./board.html",
-  "./self-service.html", "./admin.html", "./patients.html",
+  "./self-service.html", "./admin.html", "./patients.html", "./billing.html",
+  "./patient-card.html",
   "./css/styles.css", "./css/board.css", "./manifest.json",
-  "./assets/self-service-qr.svg"
+  "./assets/self-service-qr.svg", "./js/qrcode-lib.js", "./js/barcode-scanner.js"
 ];
 
 self.addEventListener("install", (event) => {

@@ -14,6 +14,7 @@
     <nav>
       <a href="doctor.html" class="active">My Queue</a>
       <a href="patients.html">Patients</a>
+      <a href="billing.html">Billing</a>
       <a href="board.html">Queue Board</a>
     </nav>
     <div class="user-pill"><span id="user-email">—</span><button id="logout-btn">Sign out</button></div>
@@ -47,7 +48,10 @@
       <div class="card">
         <h2>Patient lookup</h2>
         <p class="helper">Search by Patient ID or simulate a barcode scan to pull up history.</p>
-        <div class="field"><input id="lookup-input" placeholder="Enter Patient ID or scan barcode…" /></div>
+        <div class="field" style="display:flex;gap:0.5rem;">
+          <input id="lookup-input" placeholder="Enter Patient ID or scan barcode…" style="flex:1;" />
+          <div id="scan-btn-container"></div>
+        </div>
         <button class="btn btn-outline btn-block" id="lookup-btn">Look up patient</button>
         <div id="lookup-result"></div>
       </div>
@@ -77,6 +81,11 @@ import {
   query, where, orderBy
 } from "./js/firebase-config.js";
 import { computeACT, calculateETAs, formatETA, todayKey, STATUS_LABELS, NO_SHOW_GRACE_SECONDS, applyClinicBranding } from "./js/queue-logic.js";
+import { attachScanButton } from "./js/barcode-scanner.js";
+
+document.getElementById("scan-btn-container").appendChild(
+  attachScanButton(document.getElementById("lookup-input"), { onScan: () => document.getElementById("lookup-btn").click() })
+);
 
 applyClinicBranding();
 await authReady;

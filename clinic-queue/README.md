@@ -14,7 +14,11 @@ This is a **functional proof-of-concept**, not a production-hardened system. See
 | `doctor.html` | Doctor's live queue, call/start/complete consultation, patient history lookup by Patient ID, break control |
 | `board.html` | Public, no-login, animated visual queue board for a waiting-room TV |
 | `self-service.html` | Patient-facing booking form opened by scanning the QR shown on the board |
-| `patients.html` | Browsable, searchable directory of every registered patient with full details and visit history |
+| `patients.html` | Browsable, searchable directory of every registered patient with full details and visit history; supports editing and deleting patient records |
+| `billing.html` | Fee/collection report with date-range, doctor, and patient filters — accessible to Reception, Doctor, and Admin |
+| `patient-card.html` | Printable patient card with QR code, opened from Reception or Patients |
+| `js/qrcode-lib.js` | Self-contained, verified-correct QR code encoder (no CDN dependency) |
+| `js/barcode-scanner.js` | Camera barcode/QR scanning via the browser's native BarcodeDetector API |
 | `js/firebase-config.js` | Firebase connection (already configured with your project keys) |
 | `js/queue-logic.js` | ACT (average consultation time), ETA calculation, and Patient ID generation — shared by all pages |
 
@@ -67,6 +71,32 @@ python3 -m http.server 8080
 2. Repo → Settings → Pages → Source: deploy from the branch containing this folder (root, or `/docs` if you move it there).
 3. Your app will be live at `https://<username>.github.io/<repo>/`.
 4. Bookmark `board.html` on the waiting-room TV, `reception.html` on the front-desk device, and have each doctor bookmark `doctor.html` on their tablet/phone.
+
+## Printable patient card with QR code
+
+From the Patients directory ("View" → "Print patient card") or Reception (after loading an existing patient, "Print patient card"), staff can open a printable card showing the patient's name, age/gender, mobile, and a QR code encoding their Patient ID. It opens in a new tab/window with a Print button; use your browser/OS print dialog to print to a label printer or regular paper.
+
+The QR encoding is handled by a vendored, locally-written encoder (`js/qrcode-lib.js`) rather than a CDN-hosted library — this was deliberate after repeated problems with third-party QR libraries failing in ways that were hard to diagnose (see git history / chat log if curious). It has been verified by actually rendering and decoding test output with a real barcode scanner, across multiple QR versions and edge cases (short strings, long URLs, special characters) — not just visually inspected.
+
+**Important**: patients registered before the Patient ID feature was added won't have a `patientCode`, so their printed card will show "No ID on record" instead of a QR code until/unless they're re-saved with a generated ID (not currently automated).
+
+## Camera barcode scanning
+
+A small camera icon next to the search boxes on Reception, Patients, and the Doctor lookup field opens a live camera scanner (using the browser's native `BarcodeDetector` API — no external decoding library). Point the camera at a printed patient card's QR code and the search box fills automatically.
+
+**Browser support**: works on Chrome/Edge on Android and desktop. **Does not currently work on Safari/iOS**, which hasn't implemented `BarcodeDetector` as of this writing — those users will see a clear message and can still type the Patient ID manually. Worth checking current Safari support before relying on this for an iPhone-heavy reception desk.
+
+## Editing and deleting patients
+
+Reception (in the registration form, after searching for an existing patient) and the Patients directory (`patients.html`, via "View" → "Edit details") both support editing a patient's name, mobile, age, gender, and address — these now correctly save (a prior version silently discarded edits made through Reception when a token was issued in the same action; that's fixed).
+
+Deleting a patient asks which kind every time:
+- **Soft delete ("hide")**: removes them from search/listings but keeps all visit and billing history fully intact. Reversible by an admin directly in Firestore (clear the `deletedAt` field on that patient document) — there's no UI for restoring yet.
+- **Hard delete ("delete")**: permanently removes the patient record. Their past visits and bills remain in reports (so financial history isn't lost) but are no longer linked to a live patient profile. This cannot be undone from the UI.
+
+## Billing report (`billing.html`)
+
+Reception, Doctor, and Admin roles can all see what's been collected — today, yesterday, the last 7 days, this month, or any custom date range — with optional filters by doctor and by patient (name, mobile, or Patient ID). Shows total/consultation/other-fee summaries, a by-doctor breakdown, a by-payment-mode breakdown, and an itemized transaction table with receipt numbers.
 
 ## Self-service QR code
 
