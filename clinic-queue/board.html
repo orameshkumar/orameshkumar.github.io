@@ -122,24 +122,33 @@ function render() {
         </div>
 
         ${serving ? `
-          <div class="now-serving ${isNewServing ? "board-token-anim" : ""}">
-            <div>
-              <div class="label">Now serving</div>
-              <div class="tok">#${serving.tokenNumber}</div>
-            </div>
-            <div class="small" style="text-align:right;opacity:0.75;">${STATUS_LABELS[serving.status]}</div>
+          <div class="now-serving-box ${isNewServing ? "board-token-anim" : ""}">
+            <div class="label">Now serving</div>
+            <div class="tok-big">#${serving.tokenNumber}</div>
+            <div class="patient-name">${escapeHtml(firstNameOnly(serving.patientName))}</div>
           </div>
-        ` : `<div class="now-serving empty">${onBreak ? "On a short break" : "No patient called yet"}</div>`}
+        ` : `<div class="now-serving-box empty">${onBreak ? "☕ On a short break" : "No patient called yet"}</div>`}
 
-        ${waiting.slice(0, 5).map((v, idx) => `
-          <div class="up-next-row ${idx === 0 ? "next-up" : ""}">
-            <span class="tok">#${v.tokenNumber}</span>
-            <span class="eta">${idx === 0 ? "Next up · " : ""}ETA ${formatETA(etas[v.id])}</span>
-          </div>`).join("") || '<div class="queue-empty">Queue is empty.</div>'}
+        <div class="token-grid-label">${waiting.length > 0 ? "Waiting" : ""}</div>
+        <div class="token-grid">
+          ${waiting.slice(0, 8).map((v, idx) => `
+            <div class="token-box ${idx === 0 ? "next-up" : ""}">
+              <div class="token-box-num">#${v.tokenNumber}</div>
+              <div class="token-box-eta">${idx === 0 ? "NEXT · " : ""}${formatETA(etas[v.id])}</div>
+            </div>`).join("") || '<div class="queue-empty">Queue is empty.</div>'}
+        </div>
 
-        ${waiting.length > 5 ? `<div class="queue-empty">+ ${waiting.length - 5} more waiting</div>` : ""}
+        ${waiting.length > 8 ? `<div class="queue-empty">+ ${waiting.length - 8} more waiting</div>` : ""}
       </div>`;
   }).join("");
+}
+
+function firstNameOnly(fullName) {
+  // Privacy: the public board shows only a first name + initial, not the full name.
+  if (!fullName) return "";
+  const parts = fullName.trim().split(/\s+/);
+  if (parts.length === 1) return parts[0];
+  return `${parts[0]} ${parts[1][0]}.`;
 }
 
 function escapeHtml(s) {
