@@ -68,6 +68,12 @@ python3 -m http.server 8080
 3. Your app will be live at `https://<username>.github.io/<repo>/`.
 4. Bookmark `board.html` on the waiting-room TV, `reception.html` on the front-desk device, and have each doctor bookmark `doctor.html` on their tablet/phone.
 
+## Self-service QR code
+
+The QR code on the Queue Board (`board.html`) is a pre-generated static SVG file (`assets/self-service-qr.svg`), not something rendered by a JavaScript library at runtime. This was a deliberate fix after repeated issues with third-party QR libraries loaded from CDNs (export-shape mismatches, script-load-order races, network/CORS failures) — a static image has none of those failure modes.
+
+**Important**: this QR code is baked to point at one specific URL: `https://orameshkumar.github.io/clinic-queue/self-service.html`. If you ever change your GitHub Pages URL — different repository name, a custom domain, moving to a different host — this image will silently point at the wrong (old) address and **will not update itself**. You'll need to regenerate it (any QR generator tool works; encode your new self-service.html URL) and replace `assets/self-service-qr.svg`.
+
 ## Clinic branding
 
 The clinic's name shown in the banner across every page (and in the browser tab title) is configurable from Admin Setup → "Clinic branding" — no need to edit any code. It's stored in a `clinicSettings/main` Firestore document and falls back to the placeholder "Clinic Queue" until an admin sets a real name. The Queue Board and self-service booking page (both public, no login) read it too, so update it once and it shows everywhere on next page load.

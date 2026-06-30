@@ -1,8 +1,9 @@
-const CACHE_NAME = "clinic-queue-v2";
+const CACHE_NAME = "clinic-queue-v3";
 const SHELL_FILES = [
   "./index.html", "./reception.html", "./doctor.html", "./board.html",
   "./self-service.html", "./admin.html", "./patients.html",
-  "./css/styles.css", "./css/board.css", "./manifest.json"
+  "./css/styles.css", "./css/board.css", "./manifest.json",
+  "./assets/self-service-qr.svg"
 ];
 
 self.addEventListener("install", (event) => {
