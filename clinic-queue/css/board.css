@@ -30,6 +30,15 @@
 .board-self-service .copy strong { display: block; font-size: 1rem; margin-bottom: 0.15rem; }
 .board-self-service .copy span { font-size: 0.85rem; color: rgba(255,255,255,0.7); }
 
+.board-legend {
+  font-size: 0.78rem;
+  color: rgba(255,255,255,0.55);
+  margin-bottom: 0.85rem;
+}
+.board-legend .vitals-dot {
+  margin-right: 0.3rem;
+}
+
 .room-grid {
   display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 1.25rem;
 }
@@ -100,6 +109,21 @@
   background: rgba(232,162,61,0.16);
   border-color: var(--amber-500);
   box-shadow: 0 0 0 1px rgba(232,162,61,0.3);
+}
+.token-box.vitals-done {
+  border-color: var(--sage-500);
+  background: rgba(127,166,140,0.14);
+}
+/* If a token is both next-up AND vitals-done, next-up's amber takes visual priority
+   (it's the more time-critical signal), and the vitals dot still shows alongside it. */
+.token-box.next-up.vitals-done {
+  background: rgba(232,162,61,0.16);
+  border-color: var(--amber-500);
+}
+.vitals-dot {
+  color: var(--sage-500);
+  font-size: 0.6rem;
+  vertical-align: middle;
 }
 .token-box-num {
   font-family: var(--mono);

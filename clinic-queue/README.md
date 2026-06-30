@@ -86,6 +86,12 @@ A small camera icon next to the search boxes on Reception, Patients, and the Doc
 
 **Browser support**: works on Chrome/Edge on Android and desktop. **Does not currently work on Safari/iOS**, which hasn't implemented `BarcodeDetector` as of this writing — those users will see a clear message and can still type the Patient ID manually. Worth checking current Safari support before relying on this for an iPhone-heavy reception desk.
 
+## Reordering the queue (move to end)
+
+On Reception's "Today's tokens" table, each Waiting token now has a "Move to end" button alongside Cancel. This moves the patient behind everyone currently waiting for that same doctor — useful if a patient steps away or needs to be deprioritized — without changing their token number (the one printed on their slip and shown everywhere else stays exactly the same; only their position in line changes).
+
+Under the hood this uses a separate `queueSequence` field (distinct from the permanent `tokenNumber`) that the Doctor view and Queue Board now sort by instead of `tokenNumber` directly. New tokens get `queueSequence` set equal to their `tokenNumber` at issuance, so normal queue order is unaffected unless someone is explicitly moved.
+
 ## Editing and deleting patients
 
 Reception (in the registration form, after searching for an existing patient) and the Patients directory (`patients.html`, via "View" → "Edit details") both support editing a patient's name, mobile, age, gender, and address — these now correctly save (a prior version silently discarded edits made through Reception when a token was issued in the same action; that's fixed).

@@ -175,7 +175,9 @@ function watchQueue() {
 
 function renderQueue(visits) {
   const active = visits.filter((v) => ["waiting", "called", "in_consultation"].includes(v.status));
-  const eligible = active.filter((v) => v.doctorId === doctorId || v.status === "waiting");
+  const eligible = active
+    .filter((v) => v.doctorId === doctorId || v.status === "waiting")
+    .sort((a, b) => (a.queueSequence ?? a.tokenNumber) - (b.queueSequence ?? b.tokenNumber));
   const etas = calculateETAs(eligible.map(v => ({...v, consultStartAt: v.consultStartAt ? new Date(v.consultStartAt) : null})), act, doctorOnBreakUntil);
 
   const serving = active.find((v) => v.doctorId === doctorId && (v.status === "called" || v.status === "in_consultation"));
@@ -197,7 +199,7 @@ function renderQueue(visits) {
     servingBox.innerHTML = '<div class="empty-state">No patient currently called. Tap a waiting token to call them.</div>';
   }
 
-  const waiting = active.filter((v) => v.status === "waiting").sort((a,b) => a.tokenNumber - b.tokenNumber);
+  const waiting = active.filter((v) => v.status === "waiting").sort((a,b) => (a.queueSequence ?? a.tokenNumber) - (b.queueSequence ?? b.tokenNumber));
   const list = document.getElementById("waiting-list");
   if (waiting.length === 0) { list.innerHTML = '<div class="empty-state">No patients waiting.</div>'; return; }
   list.innerHTML = waiting.map((v, idx) => {

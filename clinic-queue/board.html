@@ -26,6 +26,10 @@
     </div>
   </div>
 
+  <div class="board-legend">
+    <span class="vitals-dot">●</span> Vitals recorded
+  </div>
+
   <div class="room-grid" id="room-grid"></div>
 
 <script type="module">
@@ -115,7 +119,7 @@ function render() {
     const mine = visitsToday.filter((v) => v.doctorId === d.id || (v.preferredDoctorIds || []).includes(d.id));
     const active = mine.filter((v) => ["waiting","called","in_consultation"].includes(v.status));
     const serving = active.find((v) => v.doctorId === d.id && (v.status === "called" || v.status === "in_consultation"));
-    const waiting = active.filter((v) => v.status === "waiting").sort((a,b) => a.tokenNumber - b.tokenNumber);
+    const waiting = active.filter((v) => v.status === "waiting").sort((a,b) => (a.queueSequence ?? a.tokenNumber) - (b.queueSequence ?? b.tokenNumber));
 
     const act = actCache[d.id] || (d.seedActMinutes || 8) * 60;
     const etas = calculateETAs(
@@ -151,8 +155,8 @@ function render() {
         <div class="token-grid-label">${waiting.length > 0 ? "Waiting" : ""}</div>
         <div class="token-grid">
           ${waiting.slice(0, 8).map((v, idx) => `
-            <div class="token-box ${idx === 0 ? "next-up" : ""}">
-              <div class="token-box-num">#${v.tokenNumber}</div>
+            <div class="token-box ${idx === 0 ? "next-up" : ""} ${v.vitals ? "vitals-done" : ""}">
+              <div class="token-box-num">#${v.tokenNumber}${v.vitals ? ' <span class="vitals-dot" title="Vitals recorded">●</span>' : ""}</div>
               <div class="token-box-eta">${idx === 0 ? "NEXT · " : ""}${formatETA(etas[v.id])}</div>
             </div>`).join("") || '<div class="queue-empty">Queue is empty.</div>'}
         </div>

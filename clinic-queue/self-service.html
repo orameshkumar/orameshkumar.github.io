@@ -158,6 +158,7 @@ document.getElementById("booking-form").addEventListener("submit", async (e) => 
     preferredDoctorIds,
     doctorId: null,
     tokenNumber,
+    queueSequence: tokenNumber, // see reception.html for why this is separate from tokenNumber
     status: "waiting",
     source: "kiosk_qr_self_service",
     visitDate: todayKey(),

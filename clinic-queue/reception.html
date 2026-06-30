@@ -364,6 +364,7 @@ document.getElementById("patient-form").addEventListener("submit", async (e) => 
     preferredDoctorIds,
     doctorId: null, // set once a doctor actually calls it
     tokenNumber,
+    queueSequence: tokenNumber, // separate from tokenNumber so a patient can be reordered ("send to end of queue") without changing their printed/displayed token number — see moveToEndOfQueue()
     status: "waiting",
     source: "reception",
     visitDate: todayKey(),
@@ -412,7 +413,7 @@ onSnapshot(query(visitsRef, where("visitDate", "==", todayKey()), orderBy("token
       <td class="small">${docNames}</td>
       <td><span class="badge badge-${v.status}">${STATUS_LABELS[v.status] || v.status}</span></td>
       <td>
-        ${v.status === "waiting" ? `<button class="btn btn-sm btn-outline" data-visit='${escapeHtmlAttr(JSON.stringify(v))}'>Vitals</button> <button class="btn btn-sm btn-danger" data-cancel="${v.id}">Cancel</button>` : ""}
+        ${v.status === "waiting" ? `<button class="btn btn-sm ${v.vitals ? "btn-vitals-done" : "btn-vitals-pending"}" data-visit='${escapeHtmlAttr(JSON.stringify(v))}'>${v.vitals ? "✓ Vitals" : "Add vitals"}</button> <button class="btn btn-sm btn-outline" data-move-end='${escapeHtmlAttr(JSON.stringify(v))}'>Move to end</button> <button class="btn btn-sm btn-danger" data-cancel="${v.id}">Cancel</button>` : ""}
         ${v.status === "completed" && !v.fees ? `<button class="btn btn-sm btn-amber" data-bill="${v.id}" data-fee="${docFeeFor(v)}">Collect fee</button>` : ""}
         ${v.fees ? `<span class="small muted">Paid ₹${v.fees.total}</span>` : ""}
       </td>
@@ -422,6 +423,7 @@ onSnapshot(query(visitsRef, where("visitDate", "==", todayKey()), orderBy("token
   list.innerHTML = html;
 
   list.querySelectorAll("[data-visit]").forEach((b) => b.addEventListener("click", () => openVitals(JSON.parse(b.getAttribute("data-visit")))));
+  list.querySelectorAll("[data-move-end]").forEach((b) => b.addEventListener("click", () => moveToEndOfQueue(JSON.parse(b.getAttribute("data-move-end")))));
   list.querySelectorAll("[data-cancel]").forEach((b) => b.addEventListener("click", () => cancelToken(b.dataset.cancel)));
   list.querySelectorAll("[data-bill]").forEach((b) => b.addEventListener("click", () => openBilling(b.dataset.bill, Number(b.dataset.fee))));
 });
@@ -434,6 +436,30 @@ function docFeeFor(v) {
 async function cancelToken(visitId) {
   if (!confirm("Cancel this token?")) return;
   await updateDoc(doc(db, "visits", visitId), { status: "cancelled", cancelledAt: new Date().toISOString() });
+}
+
+async function moveToEndOfQueue(visit) {
+  if (!confirm(`Move token #${visit.tokenNumber} (${visit.patientName}) to the end of the queue? Their token number stays the same — only their position in line changes.`)) return;
+
+  // Find the current highest queueSequence among Waiting tokens for the same doctor(s)
+  // this token is eligible for, and place this token just behind it.
+  const relevantDoctorIds = visit.preferredDoctorIds && visit.preferredDoctorIds.length > 0
+    ? visit.preferredDoctorIds
+    : [visit.doctorId];
+
+  const todaySnap = await getDocs(query(visitsRef, where("visitDate", "==", todayKey()), where("status", "==", "waiting")));
+  let maxSeq = visit.queueSequence || visit.tokenNumber;
+  todaySnap.forEach((d) => {
+    const other = d.data();
+    if (d.id === visit.id) return;
+    const sharesADoctor = (other.preferredDoctorIds || []).some((id) => relevantDoctorIds.includes(id)) || relevantDoctorIds.includes(other.doctorId);
+    if (sharesADoctor) {
+      const seq = other.queueSequence ?? other.tokenNumber;
+      if (seq > maxSeq) maxSeq = seq;
+    }
+  });
+
+  await updateDoc(doc(db, "visits", visit.id), { queueSequence: maxSeq + 1 });
 }
 
 function openVitals(visit) {
