@@ -168,21 +168,29 @@ const repeatTimers = {};
 
   if (announceSettings.enabled) {
     const enabledLangs = announceSettings.languages.filter(l => l.enabled);
-    const langNames = enabledLangs.map(l => {
-      const names = { "en-IN":"English","en-US":"English","ta-IN":"Tamil","hi-IN":"Hindi",
-        "ml-IN":"Malayalam","te-IN":"Telugu","kn-IN":"Kannada","mr-IN":"Marathi",
-        "bn-IN":"Bengali","gu-IN":"Gujarati","pa-IN":"Punjabi","or-IN":"Odia","ur-PK":"Urdu" };
-      return names[l.lang] || l.lang;
-    });
+    const langNames = { "en-IN":"English","en-US":"English (US)","ta-IN":"Tamil","hi-IN":"Hindi",
+      "ml-IN":"Malayalam","te-IN":"Telugu","kn-IN":"Kannada","mr-IN":"Marathi",
+      "bn-IN":"Bengali","gu-IN":"Gujarati","pa-IN":"Punjabi","or-IN":"Odia","ur-PK":"Urdu" };
     const repeatInfo = announceSettings.repeatInterval > 0
-      ? `, repeats every ${announceSettings.repeatInterval}s if not answered`
+      ? `, repeats every ${announceSettings.repeatInterval}s if unanswered`
       : "";
     icon.textContent = "🔊";
-    label.innerHTML = `<strong style="color:rgba(255,255,255,0.9);">Voice ON</strong> <span style="color:rgba(255,255,255,0.55);">— ${langNames.join(" + ")} · ${announceSettings.repeat}× per call${repeatInfo}</span>`;
-    label.style.color = "rgba(255,255,255,0.85)";
+    label.innerHTML = `<strong style="color:rgba(255,255,255,0.9);">Voice ON</strong> <span style="color:rgba(255,255,255,0.55);">· ${announceSettings.repeat}× per call${repeatInfo} · checking voices…</span>`;
     testBtn.style.display = "inline-block";
-    testBtn.addEventListener("click", () => {
-      announceToken("1", "Room 1", "the Doctor");
+    testBtn.addEventListener("click", () => announceToken("1", "Room 1", "the Doctor"));
+
+    // Check which languages have real installed voices — update the bar after loading
+    checkVoiceAvailability(enabledLangs).then((availability) => {
+      const parts = enabledLangs.map(l => {
+        const name = langNames[l.lang] || l.lang;
+        const voice = availability[l.lang];
+        if (voice) {
+          return `<span style="color:rgba(255,255,255,0.85);" title="Voice: ${voice.name}">✓ ${name}</span>`;
+        } else {
+          return `<span style="color:#FBBF24;" title="No ${name} voice found on this device — will use device default (English). Install a ${name} TTS voice in device settings to fix this.">⚠ ${name}</span>`;
+        }
+      });
+      label.innerHTML = `<strong style="color:rgba(255,255,255,0.9);">Voice ON</strong> <span style="color:rgba(255,255,255,0.45);">·</span> ${parts.join(' <span style="color:rgba(255,255,255,0.3);">+</span> ')} <span style="color:rgba(255,255,255,0.45);">· ${announceSettings.repeat}× per call${repeatInfo}</span>`;
     });
   } else {
     icon.textContent = "🔇";
@@ -198,10 +206,54 @@ function buildAnnouncement(token, room, doctorName, template) {
     .replace(/\{doctor\}/g, doctorName || "the doctor");
 }
 
-// Speak a sequence of utterances (one per enabled language) in order, with a gap between each
-function speakSequence(phrases, times = 1) {
+// ---- Voice engine: load available voices and match explicitly ----
+// getVoices() returns [] on first call in Chrome — must wait for voiceschanged event.
+// We cache the list once loaded and use it for all subsequent announcements.
+let _voicesLoaded = false;
+let _voices = [];
+
+function loadVoices() {
+  return new Promise((resolve) => {
+    const vv = window.speechSynthesis.getVoices();
+    if (vv.length > 0) { _voices = vv; _voicesLoaded = true; resolve(vv); return; }
+    window.speechSynthesis.addEventListener("voiceschanged", () => {
+      _voices = window.speechSynthesis.getVoices();
+      _voicesLoaded = true;
+      resolve(_voices);
+    }, { once: true });
+    // Fallback: some browsers never fire voiceschanged — resolve after 2s
+    setTimeout(() => {
+      if (!_voicesLoaded) { _voices = window.speechSynthesis.getVoices(); _voicesLoaded = true; resolve(_voices); }
+    }, 2000);
+  });
+}
+
+// Find the best voice for a BCP-47 lang tag.
+// Priority: exact match (e.g. "ta-IN") → language-only match (e.g. "ta") → null (browser default).
+function findVoice(lang, voices) {
+  if (!voices || voices.length === 0) return null;
+  const exact = voices.find(v => v.lang === lang);
+  if (exact) return exact;
+  const prefix = lang.split("-")[0].toLowerCase();
+  const partial = voices.find(v => v.lang.toLowerCase().startsWith(prefix));
+  return partial || null;
+}
+
+// Check which configured languages have real voices installed — returns a map of lang → voice|null
+async function checkVoiceAvailability(languages) {
+  const voices = await loadVoices();
+  const result = {};
+  for (const l of languages) {
+    result[l.lang] = findVoice(l.lang, voices);
+  }
+  return result;
+}
+
+// Speak a sequence of utterances (one per enabled language) in order
+async function speakSequence(phrases, times = 1) {
   if (!window.speechSynthesis || phrases.length === 0) return;
   window.speechSynthesis.cancel();
+  const voices = _voicesLoaded ? _voices : await loadVoices();
 
   let phraseIdx = 0;
   let repeatCount = 0;
@@ -210,16 +262,19 @@ function speakSequence(phrases, times = 1) {
     if (phraseIdx >= phrases.length) {
       phraseIdx = 0;
       repeatCount++;
-      if (repeatCount < times) {
-        setTimeout(sayNext, 1200);  // gap between full cycles
-      }
+      if (repeatCount < times) setTimeout(sayNext, 1200);
       return;
     }
     const { text, lang } = phrases[phraseIdx];
     const u = new SpeechSynthesisUtterance(text);
     u.lang = lang;
     u.rate = 0.88;
+    // Explicitly assign the best matching voice — without this the browser
+    // silently falls back to English when a Tamil/Hindi/etc voice isn't found
+    const voice = findVoice(lang, voices);
+    if (voice) u.voice = voice;
     u.onend = () => { phraseIdx++; setTimeout(sayNext, 600); };
+    u.onerror = () => { phraseIdx++; setTimeout(sayNext, 300); }; // skip on error, don't stall
     window.speechSynthesis.speak(u);
   }
   sayNext();

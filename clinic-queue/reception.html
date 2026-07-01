@@ -50,10 +50,21 @@
       <p>Register patients, issue tokens, capture intake vitals, and collect fees.</p>
     </div>
 
-    <div class="grid-2">
-      <!-- LEFT: Patient lookup / registration / token issuance -->
-      <div class="card">
-        <h2>Find or register a patient</h2>
+    <div class="card">
+      <!-- Tab bar -->
+      <div style="display:flex;gap:0;border-bottom:2px solid var(--line);margin-bottom:1rem;">
+        <button id="tab-today" class="tab-btn tab-active">Today's tokens</button>
+        <button id="tab-register" class="tab-btn">Find / Register</button>
+        <button id="tab-history" class="tab-btn">History</button>
+      </div>
+
+      <!-- TODAY tab -->
+      <div id="pane-today">
+        <div id="today-tokens"><div class="empty-state">No tokens issued yet today.</div></div>
+      </div>
+
+      <!-- FIND / REGISTER tab -->
+      <div id="pane-register" style="display:none;max-width:600px;">
         <div class="field">
           <label for="search-input">Mobile number, Patient ID, or name</label>
           <div style="display:flex;gap:0.5rem;">
@@ -123,46 +134,32 @@
         </form>
       </div>
 
-      <!-- RIGHT: Today's tokens + History tab -->
-      <div class="card">
-        <!-- Tab bar -->
-        <div style="display:flex;gap:0;border-bottom:2px solid var(--line);margin-bottom:1rem;">
-          <button id="tab-today" class="tab-btn tab-active">Today's tokens</button>
-          <button id="tab-history" class="tab-btn">History</button>
-        </div>
-
-        <!-- TODAY tab -->
-        <div id="pane-today">
-          <div id="today-tokens"><div class="empty-state">No tokens issued yet today.</div></div>
-        </div>
-
-        <!-- HISTORY tab -->
-        <div id="pane-history" style="display:none;">
-          <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;margin-bottom:0.75rem;">
-            <!-- Date picker: hidden native input for value, visible styled button showing dd-mmm-yyyy -->
-            <div style="position:relative;display:inline-block;">
-              <button id="token-date-display" style="font-size:0.85rem;padding:0.3rem 0.6rem;border:1px solid var(--line);border-radius:6px;background:var(--paper);color:var(--ink);cursor:pointer;min-width:136px;text-align:left;display:flex;align-items:center;gap:0.4rem;">
-                <span>📅</span><span id="token-date-text">Select date</span>
-              </button>
-              <input type="date" id="token-date-picker"
-                style="position:absolute;top:0;right:0;bottom:0;left:0;opacity:0;cursor:pointer;width:100%;" />
-            </div>
-            <select id="token-status-filter" style="font-size:0.85rem;padding:0.3rem 0.5rem;border:1px solid var(--line);border-radius:6px;background:var(--paper);color:var(--ink);">
-              <option value="all">All statuses</option>
-              <option value="waiting">Waiting</option>
-              <option value="called">Called</option>
-              <option value="in_consultation">In Consultation</option>
-              <option value="completed">Completed</option>
-              <option value="fee_pending">Fee pending</option>
-              <option value="fee_collected">Fee collected</option>
-              <option value="cancelled">Cancelled</option>
-              <option value="no_show">No-Show</option>
-            </select>
-            <button class="btn btn-sm btn-outline" id="token-refresh-btn" title="Refresh">↻ Fetch</button>
+      <!-- HISTORY tab -->
+      <div id="pane-history" style="display:none;">
+        <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;margin-bottom:0.75rem;">
+          <!-- Date picker: hidden native input for value, visible styled button showing dd-mmm-yyyy -->
+          <div style="position:relative;display:inline-block;">
+            <button id="token-date-display" style="font-size:0.85rem;padding:0.3rem 0.6rem;border:1px solid var(--line);border-radius:6px;background:var(--paper);color:var(--ink);cursor:pointer;min-width:136px;text-align:left;display:flex;align-items:center;gap:0.4rem;">
+              <span>📅</span><span id="token-date-text">Select date</span>
+            </button>
+            <input type="date" id="token-date-picker"
+              style="position:absolute;top:0;right:0;bottom:0;left:0;opacity:0;cursor:pointer;width:100%;" />
           </div>
-          <p class="small muted" id="token-date-label" style="margin-bottom:0.5rem;"></p>
-          <div id="history-tokens"><div class="empty-state">Choose a date and click ↻ Fetch.</div></div>
+          <select id="token-status-filter" style="font-size:0.85rem;padding:0.3rem 0.5rem;border:1px solid var(--line);border-radius:6px;background:var(--paper);color:var(--ink);">
+            <option value="all">All statuses</option>
+            <option value="waiting">Waiting</option>
+            <option value="called">Called</option>
+            <option value="in_consultation">In Consultation</option>
+            <option value="completed">Completed</option>
+            <option value="fee_pending">Fee pending</option>
+            <option value="fee_collected">Fee collected</option>
+            <option value="cancelled">Cancelled</option>
+            <option value="no_show">No-Show</option>
+          </select>
+          <button class="btn btn-sm btn-outline" id="token-refresh-btn" title="Refresh">↻ Fetch</button>
         </div>
+        <p class="small muted" id="token-date-label" style="margin-bottom:0.5rem;"></p>
+        <div id="history-tokens"><div class="empty-state">Choose a date and click ↻ Fetch.</div></div>
       </div>
     </div>
   </main>
@@ -502,6 +499,7 @@ async function countWaiting(doctorId) {
 
 // ----- Patient search -----
 let searchTimeout;
+document.getElementById("search-input").addEventListener("focus", () => switchTab("register"));
 document.getElementById("search-input").addEventListener("input", (e) => {
   clearTimeout(searchTimeout);
   const term = e.target.value.trim();
@@ -692,6 +690,7 @@ document.getElementById("patient-form").addEventListener("submit", async (e) => 
   document.getElementById("slot-time-row").style.display = "none";
   document.getElementById("slot-validation-msg").textContent = "";
   renderDoctorCheckboxes();
+  switchTab("today"); // jump to Today tab so the issued token is immediately visible
 });
 
 async function nextTokenNumber(doctorId) {
@@ -711,13 +710,16 @@ async function nextTokenNumber(doctorId) {
 
 // ----- Tab switching -----
 function switchTab(name) {
-  document.getElementById("pane-today").style.display = name === "today" ? "" : "none";
-  document.getElementById("pane-history").style.display = name === "history" ? "" : "none";
-  document.getElementById("tab-today").classList.toggle("tab-active", name === "today");
-  document.getElementById("tab-history").classList.toggle("tab-active", name === "history");
+  document.getElementById("pane-today").style.display    = name === "today"    ? "" : "none";
+  document.getElementById("pane-register").style.display = name === "register" ? "" : "none";
+  document.getElementById("pane-history").style.display  = name === "history"  ? "" : "none";
+  document.getElementById("tab-today").classList.toggle("tab-active",    name === "today");
+  document.getElementById("tab-register").classList.toggle("tab-active", name === "register");
+  document.getElementById("tab-history").classList.toggle("tab-active",  name === "history");
 }
-document.getElementById("tab-today").addEventListener("click", () => switchTab("today"));
-document.getElementById("tab-history").addEventListener("click", () => switchTab("history"));
+document.getElementById("tab-today").addEventListener("click",    () => switchTab("today"));
+document.getElementById("tab-register").addEventListener("click", () => switchTab("register"));
+document.getElementById("tab-history").addEventListener("click",  () => switchTab("history"));
 
 // ----- Shared state -----
 let activeVitalsVisitId = null;
