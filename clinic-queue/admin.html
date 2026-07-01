@@ -115,48 +115,51 @@
             </select>
           </div>
         </div>
-        <hr class="section-divider" />
-        <p class="small" style="font-weight:600;margin-bottom:0.25rem;">Queue board voice announcements</p>
-        <p class="small muted" style="margin-bottom:0.75rem;">Spoken aloud when a token is called. Uses the device's built-in text-to-speech. Multiple languages play in sequence.</p>
-
-        <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.9rem;">
-          <label class="toggle-wrap" for="announce-enabled-input">
-            <input type="checkbox" id="announce-enabled-input" />
-            <span class="toggle-track"></span>
-            <span class="toggle-label">Enable voice announcements</span>
-            <span class="toggle-state" id="announce-enabled-state">Off</span>
-          </label>
-        </div>
-
-        <div id="announce-config" style="display:none;">
-          <div class="field-row" style="margin-bottom:0.75rem;">
-            <div class="field">
-              <label for="announce-repeat-input">Repeat count per call</label>
-              <select id="announce-repeat-input">
-                <option value="1">Once</option>
-                <option value="2">Twice</option>
-                <option value="3">Three times</option>
-              </select>
-            </div>
-            <div class="field">
-              <label for="announce-interval-input">Auto-repeat if still called</label>
-              <select id="announce-interval-input">
-                <option value="0">Disabled — announce once only</option>
-                <option value="30">Every 30 seconds</option>
-                <option value="60">Every 60 seconds</option>
-                <option value="90">Every 90 seconds</option>
-                <option value="120">Every 2 minutes</option>
-                <option value="180">Every 3 minutes</option>
-              </select>
-            </div>
-          </div>
-
-          <label style="margin-bottom:0.4rem;display:block;">Languages &amp; templates — drag or use ↑↓ to reorder, check to enable</label>
-          <p class="helper" style="margin-bottom:0.6rem;">Variables: <code>{token}</code> = token number &nbsp; <code>{room}</code> = room &nbsp; <code>{doctor}</code> = doctor name</p>
-          <div id="lang-list" style="display:flex;flex-direction:column;gap:0.4rem;"></div>
-          <button type="button" class="btn btn-sm btn-outline" id="add-lang-btn" style="margin-top:0.5rem;">+ Add language</button>
         </div>
       </form>
+    </div>
+
+    <div class="card" style="margin-bottom:1.5rem;">
+      <h2>🔊 Voice announcements</h2>
+      <p class="helper" style="margin-bottom:1rem;">Spoken aloud on the Queue Board screen when a token is called. Uses the device's built-in text-to-speech engine — no internet required. Configure languages and templates below, then open the Board screen to verify the speaker is working.</p>
+
+      <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.9rem;">
+        <label class="toggle-wrap" for="announce-enabled-input">
+          <input type="checkbox" id="announce-enabled-input" />
+          <span class="toggle-track"></span>
+          <span class="toggle-label">Enable voice announcements</span>
+          <span class="toggle-state" id="announce-enabled-state">Off</span>
+        </label>
+      </div>
+
+      <div id="announce-config" style="display:none;">
+        <div class="field-row" style="margin-bottom:0.75rem;">
+          <div class="field">
+            <label for="announce-repeat-input">Repeat count per call</label>
+            <select id="announce-repeat-input">
+              <option value="1">Once</option>
+              <option value="2">Twice</option>
+              <option value="3">Three times</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="announce-interval-input">Auto-repeat if still called</label>
+            <select id="announce-interval-input">
+              <option value="0">Disabled — announce once only</option>
+              <option value="30">Every 30 seconds</option>
+              <option value="60">Every 60 seconds</option>
+              <option value="90">Every 90 seconds</option>
+              <option value="120">Every 2 minutes</option>
+              <option value="180">Every 3 minutes</option>
+            </select>
+          </div>
+        </div>
+
+        <label style="margin-bottom:0.4rem;display:block;">Languages &amp; templates — use ↑↓ to reorder, check to enable</label>
+        <p class="helper" style="margin-bottom:0.6rem;">Variables: <code>{token}</code> = token number &nbsp; <code>{room}</code> = room &nbsp; <code>{doctor}</code> = doctor name. Languages play in order when a token is called.</p>
+        <div id="lang-list" style="display:flex;flex-direction:column;gap:0.4rem;"></div>
+        <button type="button" class="btn btn-sm btn-outline" id="add-lang-btn" style="margin-top:0.5rem;">+ Add language</button>
+      </div>
     </div>
 
     <div class="grid-2">

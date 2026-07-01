@@ -42,6 +42,14 @@
     <span class="vitals-dot">●</span> Vitals recorded
   </div>
 
+  <div id="voice-bar" style="display:none;margin:0 1.5rem 0.75rem;padding:0.5rem 0.9rem;border-radius:8px;display:flex;align-items:center;gap:0.75rem;font-size:0.82rem;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);">
+    <span id="voice-bar-icon" style="font-size:1.1rem;">🔇</span>
+    <span id="voice-bar-label" style="color:rgba(255,255,255,0.65);flex:1;">Voice announcements: loading…</span>
+    <button id="voice-test-btn" style="display:none;background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.25);color:white;border-radius:6px;padding:0.25rem 0.6rem;font-size:0.78rem;cursor:pointer;" title="Play a test announcement to verify the speaker is working">
+      ▶ Test
+    </button>
+  </div>
+
   <div class="room-grid" id="room-grid"></div>
 
 <script type="module">
@@ -139,12 +147,48 @@ const repeatTimers = {};
       const d = snap.data();
       if (d.announceEnabled !== undefined) announceSettings.enabled = !!d.announceEnabled;
       if (d.announceLanguages && Array.isArray(d.announceLanguages)) announceSettings.languages = d.announceLanguages;
-      // Migrate legacy single-language
       else if (d.announceLang) announceSettings.languages = [{ lang: d.announceLang, template: d.announceTemplate || "Token number {token}, please proceed to {room}, Doctor {doctor}", enabled: true }];
       if (d.announceRepeat) announceSettings.repeat = Number(d.announceRepeat);
       if (d.announceRepeatInterval !== undefined) announceSettings.repeatInterval = Number(d.announceRepeatInterval);
     }
   } catch (e) { /* use defaults */ }
+
+  // Update the voice status bar
+  const bar = document.getElementById("voice-bar");
+  const icon = document.getElementById("voice-bar-icon");
+  const label = document.getElementById("voice-bar-label");
+  const testBtn = document.getElementById("voice-test-btn");
+  bar.style.display = "flex";
+
+  if (!window.speechSynthesis) {
+    icon.textContent = "🚫";
+    label.textContent = "Voice announcements: not supported in this browser";
+    return;
+  }
+
+  if (announceSettings.enabled) {
+    const enabledLangs = announceSettings.languages.filter(l => l.enabled);
+    const langNames = enabledLangs.map(l => {
+      const names = { "en-IN":"English","en-US":"English","ta-IN":"Tamil","hi-IN":"Hindi",
+        "ml-IN":"Malayalam","te-IN":"Telugu","kn-IN":"Kannada","mr-IN":"Marathi",
+        "bn-IN":"Bengali","gu-IN":"Gujarati","pa-IN":"Punjabi","or-IN":"Odia","ur-PK":"Urdu" };
+      return names[l.lang] || l.lang;
+    });
+    const repeatInfo = announceSettings.repeatInterval > 0
+      ? `, repeats every ${announceSettings.repeatInterval}s if not answered`
+      : "";
+    icon.textContent = "🔊";
+    label.innerHTML = `<strong style="color:rgba(255,255,255,0.9);">Voice ON</strong> <span style="color:rgba(255,255,255,0.55);">— ${langNames.join(" + ")} · ${announceSettings.repeat}× per call${repeatInfo}</span>`;
+    label.style.color = "rgba(255,255,255,0.85)";
+    testBtn.style.display = "inline-block";
+    testBtn.addEventListener("click", () => {
+      announceToken("1", "Room 1", "the Doctor");
+    });
+  } else {
+    icon.textContent = "🔇";
+    label.innerHTML = `<span style="color:rgba(255,255,255,0.45);">Voice announcements: <strong>Off</strong> — enable in Admin Setup → Voice announcements</span>`;
+    testBtn.style.display = "none";
+  }
 })();
 
 function buildAnnouncement(token, room, doctorName, template) {
