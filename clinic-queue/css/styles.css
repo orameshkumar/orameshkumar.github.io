@@ -251,8 +251,7 @@ input:focus, select:focus, textarea:focus {
 .field-row .field { flex: 1; min-width: 140px; } /* min-width prevents fields collapsing too narrow before wrapping */
 
 /* Tables scroll horizontally on small screens instead of overflowing the page */
-.card table, .page table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; min-width: max-content; }
+table { width: 100%; border-collapse: collapse; font-size: 0.9rem; min-width: max-content; display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
 .checkbox-group { display: flex; flex-wrap: wrap; gap: 0.5rem; }
 .checkbox-chip {
   display: flex; align-items: center; gap: 0.4rem;
@@ -428,3 +427,38 @@ tr.row-flash { animation: flash-row 1.2s ease; }
   color: var(--ink-soft);
 }
 .toggle-wrap input:checked ~ .toggle-state { color: var(--teal-700); }
+
+/* ---- Visit list (Today's tokens / History) ---- */
+.visit-list { display: flex; flex-direction: column; gap: 0; }
+
+.visit-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.6rem 0;
+  border-bottom: 1px solid var(--line);
+  flex-wrap: wrap;
+}
+.visit-row:last-child { border-bottom: none; }
+
+.visit-token { flex-shrink: 0; }
+
+.visit-main { flex: 1; min-width: 0; }
+.visit-name { font-weight: 600; font-size: 0.92rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.visit-meta { font-size: 0.78rem; color: var(--ink-soft); line-height: 1.4; }
+
+.visit-status { flex-shrink: 0; }
+
+.visit-actions {
+  display: flex;
+  gap: 0.25rem;
+  align-items: center;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+
+/* On very small screens, let the actions wrap below the main info */
+@media (max-width: 480px) {
+  .visit-main { min-width: 120px; }
+  .visit-actions { width: 100%; padding-top: 0.25rem; }
+}

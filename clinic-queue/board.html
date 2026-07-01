@@ -206,59 +206,57 @@ function buildAnnouncement(token, room, doctorName, template) {
     .replace(/\{doctor\}/g, doctorName || "the doctor");
 }
 
-// ---- Voice engine: load available voices and match explicitly ----
-// getVoices() returns [] on first call in Chrome — must wait for voiceschanged event.
-// We cache the list once loaded and use it for all subsequent announcements.
-let _voicesLoaded = false;
+// ---- Voice engine ----
+// Voices are loaded EAGERLY at page load, not lazily inside speakSequence.
+// This is critical: browsers require speechSynthesis.speak() to be called
+// synchronously within the same call stack as a user gesture. Any await —
+// even a resolved one — breaks that chain and silently blocks speech.
 let _voices = [];
 
-function loadVoices() {
-  return new Promise((resolve) => {
-    const vv = window.speechSynthesis.getVoices();
-    if (vv.length > 0) { _voices = vv; _voicesLoaded = true; resolve(vv); return; }
-    window.speechSynthesis.addEventListener("voiceschanged", () => {
-      _voices = window.speechSynthesis.getVoices();
-      _voicesLoaded = true;
-      resolve(_voices);
-    }, { once: true });
-    // Fallback: some browsers never fire voiceschanged — resolve after 2s
-    setTimeout(() => {
-      if (!_voicesLoaded) { _voices = window.speechSynthesis.getVoices(); _voicesLoaded = true; resolve(_voices); }
-    }, 2000);
+function loadVoicesEager() {
+  if (!window.speechSynthesis) return;
+  const vv = window.speechSynthesis.getVoices();
+  if (vv.length > 0) { _voices = vv; return; }
+  // Chrome fires voiceschanged asynchronously on first load
+  window.speechSynthesis.addEventListener("voiceschanged", () => {
+    _voices = window.speechSynthesis.getVoices();
   });
+  // Safety fallback
+  setTimeout(() => { if (!_voices.length) _voices = window.speechSynthesis.getVoices(); }, 3000);
 }
+loadVoicesEager();
 
-// Find the best voice for a BCP-47 lang tag.
-// Priority: exact match (e.g. "ta-IN") → language-only match (e.g. "ta") → null (browser default).
 function findVoice(lang, voices) {
   if (!voices || voices.length === 0) return null;
   const exact = voices.find(v => v.lang === lang);
   if (exact) return exact;
   const prefix = lang.split("-")[0].toLowerCase();
-  const partial = voices.find(v => v.lang.toLowerCase().startsWith(prefix));
-  return partial || null;
+  return voices.find(v => v.lang.toLowerCase().startsWith(prefix)) || null;
 }
 
-// Check which configured languages have real voices installed — returns a map of lang → voice|null
 async function checkVoiceAvailability(languages) {
-  const voices = await loadVoices();
-  const result = {};
-  for (const l of languages) {
-    result[l.lang] = findVoice(l.lang, voices);
+  // Give voices up to 1s to load if they haven't yet
+  if (!_voices.length) {
+    await new Promise(r => setTimeout(r, 1000));
+    _voices = window.speechSynthesis.getVoices();
   }
+  const result = {};
+  for (const l of languages) result[l.lang] = findVoice(l.lang, _voices);
   return result;
 }
 
-// Speak a sequence of utterances (one per enabled language) in order
-async function speakSequence(phrases, times = 1) {
+// Speak a sequence — fully synchronous after voices are pre-loaded.
+// Never awaits anything, preserving the user gesture call chain.
+function speakSequence(phrases, times = 1) {
   if (!window.speechSynthesis || phrases.length === 0) return;
   window.speechSynthesis.cancel();
-  const voices = _voicesLoaded ? _voices : await loadVoices();
 
   let phraseIdx = 0;
   let repeatCount = 0;
+  let advanceTimer = null;
 
   function sayNext() {
+    clearTimeout(advanceTimer);
     if (phraseIdx >= phrases.length) {
       phraseIdx = 0;
       repeatCount++;
@@ -269,12 +267,26 @@ async function speakSequence(phrases, times = 1) {
     const u = new SpeechSynthesisUtterance(text);
     u.lang = lang;
     u.rate = 0.88;
-    // Explicitly assign the best matching voice — without this the browser
-    // silently falls back to English when a Tamil/Hindi/etc voice isn't found
-    const voice = findVoice(lang, voices);
+    const voice = findVoice(lang, _voices);
     if (voice) u.voice = voice;
-    u.onend = () => { phraseIdx++; setTimeout(sayNext, 600); };
-    u.onerror = () => { phraseIdx++; setTimeout(sayNext, 300); }; // skip on error, don't stall
+
+    // Advance to next phrase — called by onend OR by timeout fallback.
+    // onend is unreliable on iOS Safari and some Android browsers; without
+    // the timeout the second language never plays.
+    function advance() {
+      clearTimeout(advanceTimer);
+      phraseIdx++;
+      setTimeout(sayNext, 600);
+    }
+
+    u.onend = advance;
+    u.onerror = advance; // also advance on error so the sequence doesn't stall
+
+    // Fallback timeout: estimate duration from text length at ~140 words/min
+    // rate 0.88 → ~123 words/min → ~500ms per word → use characters/5 as word estimate
+    const estimatedMs = Math.max(2000, (text.length / 5) * (60000 / 123));
+    advanceTimer = setTimeout(advance, estimatedMs + 1500); // +1.5s buffer
+
     window.speechSynthesis.speak(u);
   }
   sayNext();
@@ -283,8 +295,8 @@ async function speakSequence(phrases, times = 1) {
 function announceToken(token, room, doctorName) {
   if (!announceSettings.enabled) return;
   const phrases = announceSettings.languages
-    .filter((l) => l.enabled)
-    .map((l) => ({ text: buildAnnouncement(token, room, doctorName, l.template), lang: l.lang }));
+    .filter(l => l.enabled)
+    .map(l => ({ text: buildAnnouncement(token, room, doctorName, l.template), lang: l.lang }));
   speakSequence(phrases, announceSettings.repeat);
 }
 

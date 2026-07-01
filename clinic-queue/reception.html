@@ -736,53 +736,56 @@ function renderVisitRows(visits, containerId, isHistory = false) {
     return;
   }
   const sorted = [...visits].sort((a, b) => (a.queueSequence ?? a.tokenNumber) - (b.queueSequence ?? b.tokenNumber));
-  const histCols = isHistory
-    ? `<th>Token</th><th>Patient</th><th>Patient ID</th><th>Doctor(s)</th><th>Status</th><th>Actions</th>`
-    : `<th>Token</th><th>Patient</th><th>Patient ID</th><th>Doctor(s)</th><th>Status</th><th>Rx</th><th>Actions</th>`;
-  let html = `<table><thead><tr>${histCols}</tr></thead><tbody>`;
+
+  let html = '<div class="visit-list">';
   sorted.forEach((v) => {
     const docNames = (v.preferredDoctorIds || []).map((id) => doctors.find((x) => x.id === id)?.name || "—").join(", ");
     const isSlot = !!v.slotTime;
     const slotMs = isSlot ? new Date(v.slotTime).getTime() : null;
     const slotBadge = isSlot
-      ? `<span class="badge" style="background:var(--amber-100);color:var(--amber-700);margin-left:0.3rem;" title="Fixed appointment slot">🕐 ${formatETA(slotMs)}</span>`
+      ? `<span class="badge" style="background:var(--amber-100);color:var(--amber-700);" title="Fixed slot">🕐 ${formatETA(slotMs)}</span>`
       : "";
     const hasRx = !!(v.prescriptions?.length || v.prescription?.dataUrl);
-    const rxBtn = `<button class="btn btn-sm ${hasRx ? "btn-vitals-done" : "btn-outline"}" data-rx="${v.id}" title="${hasRx ? "View / replace prescription" : "Add prescription photo"}">${hasRx ? "📋 View Rx" : "📷 Add Rx"}</button>`;
     const allReceipts = getAllReceipts(v);
     const totalCollected = allReceipts.reduce((s, r) => s + (r.total || 0), 0);
-
-    // Icon button shared style — compact square
-    const iconBtn = `style="padding:0.25rem 0.4rem;font-size:1rem;min-width:0;line-height:1;"`;
+    const ib = `style="padding:0.25rem 0.45rem;font-size:1rem;min-width:0;line-height:1;"`;
 
     const actions = isHistory
-      ? `<div style="display:flex;gap:0.25rem;align-items:center;flex-wrap:nowrap;">
-           <button class="btn btn-sm ${hasRx ? "btn-vitals-done" : "btn-outline"}" data-rx="${v.id}"
-             title="${hasRx ? "View / add prescription" : "Add prescription"}" ${iconBtn}>${hasRx ? "📋" : "📷"}</button>
-           ${v.status === "completed" ? `<button class="btn btn-sm btn-amber" data-addfee="${v.id}" data-fee="${docFeeFor(v)}"
-             title="Add / collect fee" ${iconBtn}>💳</button>` : ""}
-           ${allReceipts.length > 0 ? `<button class="btn btn-sm btn-outline" data-viewreceipts="${v.id}"
-             title="View receipts — ₹${totalCollected} collected" ${iconBtn}>🧾<span style="font-size:0.72rem;margin-left:0.2rem;">₹${totalCollected}</span></button>` : ""}
-           <button class="btn btn-sm btn-danger" data-deletevisit="${v.id}"
-             title="Delete visit" ${iconBtn}>🗑</button>
+      ? `<div class="visit-actions">
+           <button class="btn btn-sm ${hasRx ? "btn-vitals-done" : "btn-outline"}" data-rx="${v.id}" title="${hasRx ? "View / add Rx" : "Add Rx"}" ${ib}>${hasRx ? "📋" : "📷"}</button>
+           ${v.status === "completed" ? `<button class="btn btn-sm btn-amber" data-addfee="${v.id}" data-fee="${docFeeFor(v)}" title="Add fee" ${ib}>💳</button>` : ""}
+           ${allReceipts.length > 0 ? `<button class="btn btn-sm btn-outline" data-viewreceipts="${v.id}" title="Receipts ₹${totalCollected}" ${ib}>🧾 ₹${totalCollected}</button>` : ""}
+           <button class="btn btn-sm btn-danger" data-deletevisit="${v.id}" title="Delete" ${ib}>🗑</button>
          </div>`
-      : `${v.status === "waiting" ? `<button class="btn btn-sm ${v.vitals ? "btn-vitals-done" : "btn-vitals-pending"}" data-visit='${escapeHtmlAttr(JSON.stringify(v))}'>${v.vitals ? "✓ Vitals" : "Add vitals"}</button> <button class="btn btn-sm btn-outline" data-move-end='${escapeHtmlAttr(JSON.stringify(v))}'>Move to end</button> <button class="btn btn-sm btn-danger" data-cancel="${v.id}">Cancel</button>` : ""}
-         ${v.status === "completed" && !v.fees ? `<button class="btn btn-sm btn-amber" data-bill="${v.id}" data-fee="${docFeeFor(v)}">Collect fee</button>` : ""}
-         ${v.fees ? `<span class="small muted">Paid ₹${v.fees.total}</span>` : ""}`;
+      : `<div class="visit-actions">
+           <button class="btn btn-sm ${hasRx ? "btn-vitals-done" : "btn-outline"}" data-rx="${v.id}" title="${hasRx ? "View Rx" : "Add Rx"}" ${ib}>${hasRx ? "📋" : "📷 Rx"}</button>
+           ${v.status === "waiting" ? `
+             <button class="btn btn-sm ${v.vitals ? "btn-vitals-done" : "btn-vitals-pending"}" data-visit='${escapeHtmlAttr(JSON.stringify(v))}'>${v.vitals ? "✓ Vitals" : "Vitals"}</button>
+             <button class="btn btn-sm btn-outline" data-move-end='${escapeHtmlAttr(JSON.stringify(v))}'>End</button>
+             <button class="btn btn-sm btn-danger" data-cancel="${v.id}">✕</button>` : ""}
+           ${v.status === "completed" && !v.fees ? `<button class="btn btn-sm btn-amber" data-bill="${v.id}" data-fee="${docFeeFor(v)}">Collect fee</button>` : ""}
+           ${v.fees ? `<span class="small muted">₹${v.fees.total}</span>` : ""}
+         </div>`;
 
-    const rxCol = isHistory ? "" : `<td>${rxBtn}</td>`;
-    html += `<tr>
-      <td><span class="token-tag">#${v.tokenNumber}</span></td>
-      <td>${escapeHtml(v.patientName)}${slotBadge}<br/><span class="small muted">${v.patientAge}/${v.patientGender}</span></td>
-      <td class="small">${v.patientCode || "—"}</td>
-      <td class="small">${docNames}</td>
-      <td><span class="badge badge-${v.status}">${STATUS_LABELS[v.status] || v.status}</span></td>
-      ${rxCol}
-      <td>${actions}</td>
-    </tr>`;
+    html += `
+      <div class="visit-row">
+        <div class="visit-token">
+          <span class="token-tag">#${v.tokenNumber}</span>
+        </div>
+        <div class="visit-main">
+          <div class="visit-name">${escapeHtml(v.patientName)} ${slotBadge}</div>
+          <div class="visit-meta">${v.patientAge ? `${v.patientAge}/${v.patientGender} · ` : ""}${v.patientCode || ""}</div>
+          <div class="visit-meta">${docNames}</div>
+        </div>
+        <div class="visit-status">
+          <span class="badge badge-${v.status}">${STATUS_LABELS[v.status] || v.status}</span>
+        </div>
+        ${actions}
+      </div>`;
   });
-  html += "</tbody></table>";
+  html += '</div>';
   list.innerHTML = html;
+
   list.querySelectorAll("[data-visit]").forEach((b) => b.addEventListener("click", () => openVitals(JSON.parse(b.getAttribute("data-visit")))));
   list.querySelectorAll("[data-move-end]").forEach((b) => b.addEventListener("click", () => moveToEndOfQueue(JSON.parse(b.getAttribute("data-move-end")))));
   list.querySelectorAll("[data-cancel]").forEach((b) => b.addEventListener("click", () => cancelToken(b.dataset.cancel)));
