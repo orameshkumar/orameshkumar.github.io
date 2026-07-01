@@ -462,3 +462,29 @@ tr.row-flash { animation: flash-row 1.2s ease; }
   .visit-main { min-width: 120px; }
   .visit-actions { width: 100%; padding-top: 0.25rem; }
 }
+
+/* ---- Patient directory list ---- */
+.patient-list { display: flex; flex-direction: column; }
+.patient-row {
+  display: flex; align-items: center; gap: 0.75rem;
+  padding: 0.7rem 1rem; border-bottom: 1px solid var(--line);
+}
+.patient-row:last-child { border-bottom: none; }
+.patient-main { flex: 1; min-width: 0; }
+.patient-name { font-weight: 600; font-size: 0.92rem; }
+.patient-meta { font-size: 0.78rem; color: var(--ink-soft); line-height: 1.5; }
+.mono-tag { font-family: var(--mono); font-weight: 700; font-size: 0.78rem; margin-right: 0.35rem; }
+
+/* ---- Billing transactions list ---- */
+.txn-list { display: flex; flex-direction: column; gap: 0; }
+.txn-row {
+  display: flex; align-items: flex-start; gap: 0.75rem;
+  padding: 0.65rem 0; border-bottom: 1px solid var(--line);
+}
+.txn-row:last-child { border-bottom: none; }
+.txn-left { display: flex; gap: 0.5rem; flex: 1; min-width: 0; align-items: flex-start; }
+.txn-token { flex-shrink: 0; }
+.txn-body { flex: 1; min-width: 0; }
+.txn-name { font-weight: 600; font-size: 0.88rem; }
+.txn-meta { font-size: 0.76rem; color: var(--ink-soft); line-height: 1.5; }
+.txn-total { flex-shrink: 0; font-weight: 700; font-size: 0.95rem; text-align: right; }

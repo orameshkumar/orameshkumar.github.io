@@ -310,24 +310,28 @@ function renderTransactions(receipts) {
   const box = document.getElementById("transactions-table");
   if (receipts.length === 0) { box.innerHTML = '<div class="empty-state">No transactions for this range.</div>'; return; }
   const sorted = [...receipts].sort((a, b) => new Date(b.collectedAt || 0) - new Date(a.collectedAt || 0));
-  box.innerHTML = `<table><thead><tr><th>Date</th><th>Token</th><th>Patient</th><th>Doctor</th><th>Consult</th><th>Medicine</th><th>Other</th><th>Total</th><th>Mode</th><th>Receipt</th></tr></thead><tbody>
-    ${sorted.map((r) => {
-      const v = r._visit;
-      const docName = doctors.find((d) => d.id === (v.doctorId || (v.preferredDoctorIds || [])[0]))?.name || "—";
-      return `<tr>
-        <td class="small">${fmtDate(r.collectedAt || v.visitDate)}</td>
-        <td><span class="token-tag" style="font-size:0.8rem;padding:0.2rem 0.5rem;">#${v.tokenNumber}</span></td>
-        <td class="small">${escapeHtml(v.patientName)}${v.patientCode ? ` <span class="muted">(${v.patientCode})</span>` : ""}</td>
-        <td class="small">${escapeHtml(docName)}</td>
-        <td class="small">₹${r.consultationFee || 0}</td>
-        <td class="small">₹${r.medicineFee || 0}</td>
-        <td class="small">₹${r.otherFee || 0}</td>
-        <td class="small"><strong>₹${r.total || 0}</strong></td>
-        <td class="small">${escapeHtml(r.mode || "—")}</td>
-        <td class="small muted">${r.receiptNumber || "—"}</td>
-      </tr>`;
-    }).join("")}
-  </tbody></table>`;
+  box.innerHTML = '<div class="txn-list">' + sorted.map((r) => {
+    const v = r._visit;
+    const docName = doctors.find((d) => d.id === (v.doctorId || (v.preferredDoctorIds || [])[0]))?.name || "—";
+    const breakdown = [
+      r.consultationFee ? `Consult ₹${r.consultationFee}` : "",
+      r.medicineFee     ? `Medicine ₹${r.medicineFee}` : "",
+      r.otherFee        ? `Other ₹${r.otherFee}` : "",
+    ].filter(Boolean).join(" · ") || "—";
+    return `
+      <div class="txn-row">
+        <div class="txn-left">
+          <div class="txn-token"><span class="token-tag" style="font-size:0.8rem;padding:0.2rem 0.5rem;">#${v.tokenNumber}</span></div>
+          <div class="txn-body">
+            <div class="txn-name">${escapeHtml(v.patientName)}${v.patientCode ? ` <span class="muted" style="font-size:0.75rem;">(${v.patientCode})</span>` : ""}</div>
+            <div class="txn-meta">${fmtDate(r.collectedAt || v.visitDate)} · ${escapeHtml(docName)} · ${escapeHtml(r.mode || "—")}</div>
+            <div class="txn-meta">${breakdown}</div>
+            ${r.receiptNumber ? `<div class="txn-meta muted" style="font-family:var(--mono);font-size:0.72rem;">${r.receiptNumber}</div>` : ""}
+          </div>
+        </div>
+        <div class="txn-total">₹${r.total || 0}</div>
+      </div>`;
+  }).join("") + '</div>';
 }
 
 function escapeHtml(s) {

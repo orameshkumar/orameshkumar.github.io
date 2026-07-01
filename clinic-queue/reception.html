@@ -1228,19 +1228,21 @@ function openReceiptsView(visitId) {
     el("receipts-list").innerHTML = '<p class="small muted">No receipts on record.</p>';
   } else {
     const totalAll = receipts.reduce((s, r) => s + (r.total || 0), 0);
-    el("receipts-list").innerHTML = `
-      <table><thead><tr><th>Receipt</th><th>Date</th><th>Consult</th><th>Medicine</th><th>Other</th><th>Total</th><th>Mode</th></tr></thead><tbody>
-        ${receipts.map((r) => `<tr>
-          <td class="small" style="font-family:var(--mono);">${r.receiptNumber || "—"}</td>
-          <td class="small">${fmtDate(r.collectedAt)}</td>
-          <td class="small">₹${r.consultationFee || 0}</td>
-          <td class="small">₹${r.medicineFee || 0}</td>
-          <td class="small">₹${r.otherFee || 0}</td>
-          <td class="small"><strong>₹${r.total || 0}</strong></td>
-          <td class="small">${escapeHtml(r.mode || "—")}</td>
-        </tr>`).join("")}
-      </tbody></table>
-      <p class="flex-between" style="margin-top:0.75rem;"><strong>Grand total</strong><strong>₹${totalAll}</strong></p>`;
+    el("receipts-list").innerHTML =
+      receipts.map((r) => `
+        <div style="padding:0.5rem 0;border-bottom:1px solid var(--line);">
+          <div class="flex-between" style="margin-bottom:0.2rem;">
+            <strong style="font-size:0.9rem;">₹${r.total || 0}</strong>
+            <span class="badge badge-waiting" style="font-size:0.7rem;">${escapeHtml(r.mode || "—")}</span>
+          </div>
+          <div class="small muted">${fmtDate(r.collectedAt)} · ${r.receiptNumber || "—"}</div>
+          ${(r.consultationFee || r.medicineFee || r.otherFee)
+            ? `<div class="small muted">Consult ₹${r.consultationFee||0} · Medicine ₹${r.medicineFee||0} · Other ₹${r.otherFee||0}</div>`
+            : ""}
+        </div>`).join("")
+      + `<div class="flex-between" style="margin-top:0.75rem;padding-top:0.5rem;border-top:2px solid var(--line);">
+           <strong>Grand total</strong><strong>₹${totalAll}</strong>
+         </div>`;
   }
   el("receipts-modal").style.display = "flex";
 }

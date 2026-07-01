@@ -162,23 +162,24 @@ function renderTable(list) {
     wrap.innerHTML = '<div class="empty-state">No patients registered yet.</div>';
     return;
   }
-  wrap.innerHTML = `
-    <table>
-      <thead><tr><th>Patient ID</th><th>Name</th><th>Age/Gender</th><th>Mobile</th><th>Address</th><th>Registered</th><th>Source</th><th></th></tr></thead>
-      <tbody>
-        ${list.map((p) => `
-          <tr>
-            <td><span class="small" style="font-family:var(--mono);font-weight:700;">${p.patientCode || "—"}</span></td>
-            <td><strong>${escapeHtml(p.name)}</strong></td>
-            <td class="small">${p.age || "—"}/${p.gender || "—"}</td>
-            <td class="small">${escapeHtml(p.mobile || "—")}</td>
-            <td class="small">${escapeHtml(p.address || "—")}</td>
-            <td class="small">${fmtDate(p.registeredAt)}</td>
-            <td class="small">${sourceLabel(p.registrationSource)}</td>
-            <td><button class="btn btn-sm btn-outline" data-view="${p.id}">View</button></td>
-          </tr>`).join("")}
-      </tbody>
-    </table>`;
+  // Card-per-patient layout — works on all screen sizes without horizontal scroll
+  wrap.innerHTML = '<div class="patient-list">' + list.map((p) => `
+    <div class="patient-row">
+      <div class="patient-main">
+        <div class="patient-name">${escapeHtml(p.name)}</div>
+        <div class="patient-meta">
+          ${p.patientCode ? `<span class="mono-tag">${p.patientCode}</span>` : ""}
+          ${p.age ? `${p.age}/${p.gender || "—"}` : ""}
+          ${p.mobile ? ` · ${escapeHtml(p.mobile)}` : ""}
+        </div>
+        <div class="patient-meta">
+          ${p.address ? escapeHtml(p.address) + " · " : ""}
+          ${fmtDate(p.registeredAt)}
+          ${p.registrationSource === "self-service" ? " · Self-service" : ""}
+        </div>
+      </div>
+      <button class="btn btn-sm btn-outline" data-view="${p.id}" style="flex-shrink:0;">View</button>
+    </div>`).join("") + '</div>';
   wrap.querySelectorAll("[data-view]").forEach((b) => b.addEventListener("click", () => openDetail(b.dataset.view)));
 }
 
