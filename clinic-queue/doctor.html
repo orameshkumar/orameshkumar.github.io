@@ -296,10 +296,31 @@ async function getLastVisits(patientId, excludeVisitId) {
 function renderHistory(visits) {
   if (visits.length === 0) return "<p class='small muted'>No prior visits on record.</p>";
   return `<strong class="small">Last ${visits.length} visit(s)</strong>` + visits.map((v) => {
-    const rxSection = v.prescription
+    const savedImages = v.prescriptions && Array.isArray(v.prescriptions) ? v.prescriptions
+      : (v.prescription && v.prescription.dataUrl ? [{ id: "legacy", pageNumber: 1, ...v.prescription }] : []);
+    const rxSection = savedImages.length > 0
       ? `<details style="margin-top:0.4rem;">
-           <summary class="small" style="cursor:pointer;color:var(--teal-900);font-weight:600;">📋 Prescription image (${v.prescription.compressedSizeKb || "?"}KB)</summary>
-           <img src="${v.prescription.dataUrl}" alt="Prescription" style="max-width:100%;border-radius:6px;border:1px solid var(--line);margin-top:0.4rem;display:block;" loading="lazy" />
+           <summary class="small" style="cursor:pointer;color:var(--teal-900);font-weight:600;">
+             📋 ${savedImages.length} prescription page(s) — ${savedImages.reduce((s, i) => s + (i.compressedSizeKb || 0), 0)} KB total
+           </summary>
+           <div style="display:flex;flex-wrap:wrap;gap:0.5rem;margin-top:0.5rem;">
+             ${savedImages.map((img, i) => `
+               <div style="position:relative;width:100px;">
+                 <img src="${img.dataUrl}" alt="p.${img.pageNumber || i + 1}"
+                   style="width:100px;height:75px;object-fit:cover;border-radius:5px;border:1px solid var(--line);display:block;cursor:pointer;"
+                   onclick="this.parentElement.querySelector('.rx-lb').style.display='flex'" loading="lazy" />
+                 <span style="position:absolute;top:3px;left:4px;background:rgba(0,0,0,0.55);color:white;font-size:0.6rem;padding:1px 4px;border-radius:2px;">
+                   p.${img.pageNumber || i + 1}
+                 </span>
+                 <div class="rx-lb" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:400;align-items:center;justify-content:center;flex-direction:column;gap:1rem;"
+                   onclick="this.style.display='none'">
+                   <img src="${img.dataUrl}" style="max-width:90vw;max-height:80vh;border-radius:8px;" onclick="event.stopPropagation()" />
+                   <p style="color:rgba(255,255,255,0.6);font-size:0.8rem;">Tap anywhere to close</p>
+                 </div>
+                 <button class="btn btn-sm btn-danger" data-delete-rx="${v.id}:${img.id}"
+                   style="width:100%;margin-top:0.2rem;font-size:0.7rem;padding:0.15rem 0;">Delete p.${img.pageNumber || i + 1}</button>
+               </div>`).join("")}
+           </div>
          </details>`
       : `<p class="small muted" style="margin-top:0.3rem;">No prescription image on record.</p>`;
     return `
@@ -337,6 +358,40 @@ document.getElementById("lookup-btn").onclick = async () => {
       ${renderHistory(history)}
     </div>`;
 };
+
+async function deleteRx(dataValue, btn) {
+  if (!confirm("Delete this prescription page? This cannot be undone.")) return;
+  const [visitId, imageId] = dataValue.split(":");
+  btn.textContent = "Deleting…"; btn.disabled = true;
+  try {
+    // Fetch current prescriptions array, remove the target page, renumber, write back
+    const visitSnap = await getDoc(doc(db, "visits", visitId));
+    if (!visitSnap.exists()) throw new Error("Visit not found");
+    const visitData = visitSnap.data();
+    const existing = visitData.prescriptions && Array.isArray(visitData.prescriptions)
+      ? visitData.prescriptions
+      : (visitData.prescription ? [{ id: "legacy", pageNumber: 1, ...visitData.prescription }] : []);
+    const updated = existing
+      .filter((x) => x.id !== imageId)
+      .map((x, i) => ({ ...x, pageNumber: i + 1 }));
+    await updateDoc(doc(db, "visits", visitId), { prescriptions: updated, prescription: null });
+    // Replace the deleted thumbnail with a "deleted" note in-place
+    btn.closest("div[style*='position:relative']").outerHTML =
+      `<p class='small muted' style='font-size:0.72rem;'>Page deleted</p>`;
+  } catch (err) {
+    btn.textContent = "Delete";
+    btn.disabled = false;
+    alert(`Delete failed: ${err.message}`);
+  }
+}
+
+// Delegated handler for delete-rx buttons injected into history sections
+["consult-history", "lookup-result"].forEach((containerId) => {
+  document.getElementById(containerId).addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-delete-rx]");
+    if (btn) deleteRx(btn.dataset.deleteRx, btn);
+  });
+});
 
 function escapeHtml(s) {
   return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
