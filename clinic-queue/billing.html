@@ -3,6 +3,10 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Clinic Queue" />
+<link rel="apple-touch-icon" href="assets/icon-192.png" />
 <title>Billing — Clinic Queue</title>
 <link rel="manifest" href="manifest.json" />
 <link rel="icon" type="image/svg+xml" href="assets/icon.svg" />
@@ -59,7 +63,7 @@
             <button id="date-from-display" style="width:100%;font-size:0.85rem;padding:0.3rem 0.6rem;border:1px solid var(--line);border-radius:6px;background:var(--paper);color:var(--ink);cursor:pointer;text-align:left;display:flex;align-items:center;gap:0.4rem;">
               <span>📅</span><span id="date-from-text">—</span>
             </button>
-            <input type="date" id="date-from" style="position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;" />
+            <input type="date" id="date-from" style="position:absolute;top:0;right:0;bottom:0;left:0;opacity:0;cursor:pointer;width:100%;" />
           </div>
         </div>
         <div class="field" style="margin-bottom:0;min-width:160px;">
@@ -68,7 +72,7 @@
             <button id="date-to-display" style="width:100%;font-size:0.85rem;padding:0.3rem 0.6rem;border:1px solid var(--line);border-radius:6px;background:var(--paper);color:var(--ink);cursor:pointer;text-align:left;display:flex;align-items:center;gap:0.4rem;">
               <span>📅</span><span id="date-to-text">—</span>
             </button>
-            <input type="date" id="date-to" style="position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;" />
+            <input type="date" id="date-to" style="position:absolute;top:0;right:0;bottom:0;left:0;opacity:0;cursor:pointer;width:100%;" />
           </div>
         </div>
         <div class="field" style="margin-bottom:0;min-width:180px;">

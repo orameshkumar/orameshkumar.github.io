@@ -25,7 +25,7 @@ export async function openBarcodeScanner() {
   return new Promise((resolve) => {
     const overlay = document.createElement("div");
     overlay.style.cssText = `
-      position: fixed; inset: 0; background: rgba(0,0,0,0.92); z-index: 1000;
+      position: fixed; top:0;right:0;bottom:0;left:0; background: rgba(0,0,0,0.92); z-index: 1000;
       display: flex; flex-direction: column; align-items: center; justify-content: center;
     `;
     overlay.innerHTML = `

@@ -3,6 +3,10 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Clinic Queue" />
+<link rel="apple-touch-icon" href="assets/icon-192.png" />
 <title>Doctor — Clinic Queue</title>
 <link rel="manifest" href="manifest.json" />
 <link rel="icon" type="image/svg+xml" href="assets/icon.svg" />
@@ -77,7 +81,7 @@
 </div>
 
 <!-- Consultation modal -->
-<div id="consult-modal" style="display:none;position:fixed;inset:0;background:rgba(28,36,34,0.55);z-index:100;align-items:center;justify-content:center;overflow:auto;padding:1.5rem;">
+<div id="consult-modal" style="display:none;position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(28,36,34,0.55);z-index:100;align-items:center;justify-content:center;overflow:auto;padding:1.5rem;">
   <div class="card" style="max-width:560px;width:100%;">
     <h2>Consultation — <span id="consult-token-label"></span></h2>
     <div id="consult-patient-info" class="small muted" style="margin-bottom:0.75rem;"></div>
@@ -281,7 +285,7 @@ async function openConsultModal(visit) {
             <span style="position:absolute;top:3px;left:4px;background:rgba(0,0,0,0.55);color:white;font-size:0.6rem;padding:1px 4px;border-radius:2px;">
               p.${img.pageNumber || i + 1}
             </span>
-            <div class="rx-lb" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:400;flex-direction:column;">
+            <div class="rx-lb" style="display:none;position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(0,0,0,0.92);z-index:400;flex-direction:column;">
               <div style="display:flex;justify-content:flex-end;padding:0.6rem 0.75rem;flex-shrink:0;">
                 <button onclick="this.closest('.rx-lb').style.display='none'"
                   style="background:rgba(255,255,255,0.15);border:none;color:white;font-size:1.4rem;line-height:1;width:2.2rem;height:2.2rem;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;"
@@ -289,7 +293,7 @@ async function openConsultModal(visit) {
               </div>
               <div style="flex:1;overflow:auto;display:flex;align-items:center;justify-content:center;padding:0 1rem 1rem;">
                 <img src="${img.dataUrl}" alt="Prescription page ${img.pageNumber || i + 1}"
-                  style="max-width:100%;border-radius:8px;touch-action:pinch-zoom;display:block;" />
+                  style="max-width:100%;border-radius:8px;touch-action:pan-x pan-y;display:block;" />
               </div>
             </div>
           </div>`).join("")}
@@ -368,7 +372,7 @@ function renderHistory(visits) {
                  <span style="position:absolute;top:3px;left:4px;background:rgba(0,0,0,0.55);color:white;font-size:0.6rem;padding:1px 4px;border-radius:2px;">
                    p.${img.pageNumber || i + 1}
                  </span>
-                 <div class="rx-lb" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:400;flex-direction:column;">
+                 <div class="rx-lb" style="display:none;position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(0,0,0,0.92);z-index:400;flex-direction:column;">
                    <div style="display:flex;justify-content:flex-end;padding:0.6rem 0.75rem;flex-shrink:0;">
                      <button onclick="this.closest('.rx-lb').style.display='none'"
                        style="background:rgba(255,255,255,0.15);border:none;color:white;font-size:1.4rem;line-height:1;width:2.2rem;height:2.2rem;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;"
@@ -376,7 +380,7 @@ function renderHistory(visits) {
                    </div>
                    <div style="flex:1;overflow:auto;display:flex;align-items:center;justify-content:center;padding:0 1rem 1rem;">
                      <img src="${img.dataUrl}" alt="Prescription page ${img.pageNumber || i + 1}"
-                       style="max-width:100%;border-radius:8px;touch-action:pinch-zoom;display:block;" />
+                       style="max-width:100%;border-radius:8px;touch-action:pan-x pan-y;display:block;" />
                    </div>
                  </div>
                  <button class="btn btn-sm btn-danger" data-delete-rx="${v.id}:${img.id}"

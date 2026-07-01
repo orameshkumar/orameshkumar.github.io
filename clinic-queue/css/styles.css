@@ -16,6 +16,8 @@
   --ink: #1C2422;
   --ink-soft: #5B6562;
   --line: #DDD8CC;
+  --topbar-bg: #0F4C4F;
+  --topbar-text: #FFFFFF;
   --radius: 10px;
   --mono: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
   --sans: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -40,6 +42,8 @@ body.theme-dark {
   --ink: #E8F0EF;
   --ink-soft: #8AABAA;
   --line: #2C3E3D;
+  --topbar-bg: #0A2426;
+  --topbar-text: #E8F0EF;
 }
 
 /* ---- Midnight theme (deep dark, higher contrast) ---- */
@@ -61,6 +65,8 @@ body.theme-midnight {
   --ink: #F0F8F7;
   --ink-soft: #9ABFBE;
   --line: #1E3230;
+  --topbar-bg: #040C0B;
+  --topbar-text: #F0F8F7;
 }
 
 /* ---- Forest theme ---- */
@@ -82,6 +88,8 @@ body.theme-forest {
   --ink: #1A2B18;
   --ink-soft: #4D6848;
   --line: #CCDDC8;
+  --topbar-bg: #1A3A16;
+  --topbar-text: #FFFFFF;
 }
 
 /* ---- Sunset theme ---- */
@@ -103,10 +111,17 @@ body.theme-sunset {
   --ink: #2A1A14;
   --ink-soft: #6B4A3A;
   --line: #E8D4C4;
+  --topbar-bg: #4A1F42;
+  --topbar-text: #FFFFFF;
 }
 
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; }
+html {
+  /* Prevent iOS Safari from auto-adjusting font sizes in landscape */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
 
 body {
   font-family: var(--sans);
@@ -118,15 +133,15 @@ body {
 a { color: inherit; }
 
 .app-shell {
-  min-height: 100vh;
+  min-height: 100vh; min-height: 100dvh;
   display: flex;
   flex-direction: column;
 }
 
 /* ---------- Top bar ---------- */
 .topbar {
-  background: var(--teal-900);
-  color: white;
+  background: var(--topbar-bg);
+  color: var(--topbar-text);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -138,6 +153,7 @@ a { color: inherit; }
   font-weight: 700;
   font-size: 1.05rem;
   letter-spacing: 0.01em;
+  color: var(--topbar-text);
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -156,16 +172,17 @@ a { color: inherit; }
   padding: 0.3rem 0;
   border-bottom: 2px solid transparent;
 }
-.topbar nav a.active, .topbar nav a:hover { color: white; border-bottom-color: var(--amber-500); }
+.topbar nav a.active, .topbar nav a:hover { color: var(--topbar-text); border-bottom-color: var(--amber-500); }
 .topbar .user-pill {
   background: rgba(255,255,255,0.12);
   border-radius: 999px;
   padding: 0.35rem 0.8rem;
   font-size: 0.85rem;
   display: flex; align-items: center; gap: 0.5rem;
+  color: var(--topbar-text);
 }
 .topbar .user-pill button {
-  background: none; border: none; color: white; cursor: pointer;
+  background: none; border: none; color: var(--topbar-text); cursor: pointer;
   font-size: 0.8rem; text-decoration: underline; opacity: 0.85; padding: 0;
 }
 
@@ -186,6 +203,12 @@ a { color: inherit; }
 @media (max-width: 900px) {
   .grid-2, .grid-3 { grid-template-columns: 1fr; }
 }
+@media (max-width: 480px) {
+  .topbar { padding: 0.6rem 0.9rem; }
+  .topbar nav { gap: 0.75rem; }
+  .page { padding: 1rem 0.75rem 2rem; }
+  .card { padding: 1rem; }
+}
 
 .card {
   background: var(--paper);
@@ -201,12 +224,22 @@ label { display: block; font-size: 0.82rem; font-weight: 600; margin-bottom: 0.3
 input, select, textarea {
   width: 100%;
   font-family: var(--sans);
-  font-size: 0.95rem;
+  font-size: 1rem;          /* 16px — prevents iOS Safari zooming the page on focus */
   padding: 0.55rem 0.7rem;
   border: 1px solid var(--line);
   border-radius: 7px;
   background: var(--paper);
   color: var(--ink);
+  /* Prevent iOS from adding inner shadow on inputs */
+  -webkit-appearance: none;
+  appearance: none;
+}
+select {
+  /* Restore dropdown arrow removed by appearance:none */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%235B6562' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.6rem center;
+  padding-right: 2rem;
 }
 input:focus, select:focus, textarea:focus {
   outline: 2px solid var(--teal-700);
@@ -214,8 +247,12 @@ input:focus, select:focus, textarea:focus {
   border-color: var(--teal-700);
 }
 .field { margin-bottom: 0.9rem; }
-.field-row { display: flex; gap: 0.75rem; }
-.field-row .field { flex: 1; }
+.field-row { display: flex; gap: 0.75rem; flex-wrap: wrap; }
+.field-row .field { flex: 1; min-width: 140px; } /* min-width prevents fields collapsing too narrow before wrapping */
+
+/* Tables scroll horizontally on small screens instead of overflowing the page */
+.card table, .page table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+table { width: 100%; border-collapse: collapse; font-size: 0.9rem; min-width: max-content; }
 .checkbox-group { display: flex; flex-wrap: wrap; gap: 0.5rem; }
 .checkbox-chip {
   display: flex; align-items: center; gap: 0.4rem;
@@ -288,7 +325,7 @@ tr.row-flash { animation: flash-row 1.2s ease; }
 
 /* ---------- Login ---------- */
 .login-wrap {
-  min-height: 100vh; display: flex; align-items: center; justify-content: center;
+  min-height: 100vh; min-height: 100dvh; display: flex; align-items: center; justify-content: center;
   background: var(--teal-900);
   padding: 1.5rem;
 }
