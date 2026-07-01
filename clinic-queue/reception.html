@@ -778,9 +778,14 @@ document.getElementById("rx-save").addEventListener("click", async () => {
   const saveBtn = document.getElementById("rx-save");
   saveBtn.textContent = "Saving…"; saveBtn.disabled = true;
   try {
-    const list = rxFromHistory ? historyVisits : todayVisits;
-    const visit = list.find((v) => v.id === activeRxVisitId);
-    const existingSaved = getSavedImages(visit).filter((x) => x.id !== "legacy");
+    // Always re-fetch the visit from Firestore to get the definitive current prescriptions array —
+    // avoids any staleness in the cached todayVisits/historyVisits arrays (e.g. if onSnapshot
+    // replaced the array between when the modal opened and when Save is clicked).
+    const visitSnap = await getDoc(doc(db, "visits", activeRxVisitId));
+    if (!visitSnap.exists()) throw new Error("Visit not found");
+    const freshVisit = { id: visitSnap.id, ...visitSnap.data() };
+
+    const existingSaved = getSavedImages(freshVisit).filter((x) => x.id !== "legacy");
     const nextPage = existingSaved.length + 1;
     const newImages = rxPendingImages.map((img, i) => ({
       id: `rx-${Date.now()}-${i}`,
@@ -793,10 +798,16 @@ document.getElementById("rx-save").addEventListener("click", async () => {
     }));
     const updatedPrescriptions = [...existingSaved, ...newImages];
     await updateDoc(doc(db, "visits", activeRxVisitId), { prescriptions: updatedPrescriptions, prescription: null });
-    if (visit) { visit.prescriptions = updatedPrescriptions; visit.prescription = null; }
+
+    // Update the correct cached list so the Rx button badge reflects the new count immediately
+    const list = rxFromHistory ? historyVisits : todayVisits;
+    const cached = list.find((v) => v.id === activeRxVisitId);
+    if (cached) { cached.prescriptions = updatedPrescriptions; cached.prescription = null; }
+
     rxPendingImages = [];
-    renderRxModal(list.find((v) => v.id === activeRxVisitId));
+    renderRxModal({ ...freshVisit, prescriptions: updatedPrescriptions, prescription: null });
     if (rxFromHistory) renderHistory();
+
   } catch (err) {
     document.getElementById("rx-settings-note").textContent = `Save failed: ${err.message}`;
   } finally {
@@ -809,15 +820,18 @@ document.getElementById("rx-save").addEventListener("click", async () => {
 async function deleteSavedRxImage(imageId) {
   if (!confirm("Delete this prescription page? This cannot be undone.")) return;
   try {
-    const list = rxFromHistory ? historyVisits : todayVisits;
-    const visit = list.find((v) => v.id === activeRxVisitId);
-    const updated = getSavedImages(visit)
+    const visitSnap = await getDoc(doc(db, "visits", activeRxVisitId));
+    if (!visitSnap.exists()) throw new Error("Visit not found");
+    const freshVisit = { id: visitSnap.id, ...visitSnap.data() };
+    const updated = getSavedImages(freshVisit)
       .filter((x) => x.id !== imageId && x.id !== "legacy")
       .map((x, i) => ({ ...x, pageNumber: i + 1 }));
     await updateDoc(doc(db, "visits", activeRxVisitId), { prescriptions: updated, prescription: null });
-    if (visit) { visit.prescriptions = updated; visit.prescription = null; }
+    const list = rxFromHistory ? historyVisits : todayVisits;
+    const cached = list.find((v) => v.id === activeRxVisitId);
+    if (cached) { cached.prescriptions = updated; cached.prescription = null; }
     if (rxFromHistory) renderHistory();
-    renderRxModal(list.find((v) => v.id === activeRxVisitId));
+    renderRxModal({ ...freshVisit, prescriptions: updated, prescription: null });
   } catch (err) { alert(`Delete failed: ${err.message}`); }
 }
 

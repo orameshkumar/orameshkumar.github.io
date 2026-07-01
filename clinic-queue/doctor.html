@@ -245,6 +245,33 @@ async function openConsultModal(visit) {
 
   const histBox = document.getElementById("consult-history");
   histBox.innerHTML = "<p class='small muted'>Loading vitals & history…</p>";
+
+  // Current visit's own prescription (captured at reception during intake)
+  const currentRx = (() => {
+    const imgs = visit.prescriptions && Array.isArray(visit.prescriptions) ? visit.prescriptions
+      : (visit.prescription?.dataUrl ? [{ id: "legacy", pageNumber: 1, ...visit.prescription }] : []);
+    if (imgs.length === 0) return "";
+    return `<div class="card" style="background:var(--paper-dim);margin-bottom:0.75rem;">
+      <strong class="small">Prescription for this visit (${imgs.length} page(s))</strong>
+      <div style="display:flex;flex-wrap:wrap;gap:0.5rem;margin-top:0.4rem;">
+        ${imgs.map((img, i) => `
+          <div style="position:relative;width:100px;">
+            <img src="${img.dataUrl}" alt="p.${img.pageNumber || i + 1}"
+              style="width:100px;height:75px;object-fit:cover;border-radius:5px;border:1px solid var(--line);display:block;cursor:pointer;"
+              onclick="this.parentElement.querySelector('.rx-lb').style.display='flex'" loading="lazy" />
+            <span style="position:absolute;top:3px;left:4px;background:rgba(0,0,0,0.55);color:white;font-size:0.6rem;padding:1px 4px;border-radius:2px;">
+              p.${img.pageNumber || i + 1}
+            </span>
+            <div class="rx-lb" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:400;align-items:center;justify-content:center;flex-direction:column;gap:1rem;"
+              onclick="this.style.display='none'">
+              <img src="${img.dataUrl}" style="max-width:90vw;max-height:80vh;border-radius:8px;" onclick="event.stopPropagation()" />
+              <p style="color:rgba(255,255,255,0.6);font-size:0.8rem;">Tap anywhere to close</p>
+            </div>
+          </div>`).join("")}
+      </div>
+    </div>`;
+  })();
+
   const vitalsHtml = visit.vitals ? `
     <div class="card" style="background:var(--paper-dim);margin-bottom:0.75rem;">
       <strong class="small">Intake vitals</strong>
@@ -254,7 +281,7 @@ async function openConsultModal(visit) {
     </div>` : "<p class='small muted'>No intake vitals recorded.</p>";
 
   const history = await getLastVisits(visit.patientId, visit.id);
-  histBox.innerHTML = vitalsHtml + renderHistory(history);
+  histBox.innerHTML = currentRx + vitalsHtml + renderHistory(history);
   document.getElementById("consult-modal").style.display = "flex";
 }
 
@@ -272,9 +299,6 @@ document.getElementById("consult-complete").onclick = async () => {
 };
 
 async function getLastVisits(patientId, excludeVisitId) {
-  // Read the configured visit history count from clinicSettings.
-  // Falls back to 3 if not configured yet (keeps behaviour identical to before for existing deployments).
-  // A value of 0 means "show all visits".
   let limit = 3;
   try {
     const snap = await getDoc(doc(db, "clinicSettings", "main"));
@@ -282,14 +306,21 @@ async function getLastVisits(patientId, excludeVisitId) {
       limit = Number(snap.data().visitHistoryCount);
     }
   } catch (err) {
-    console.warn("Could not read visitHistoryCount from clinicSettings, using default of 3:", err);
+    console.warn("Could not read visitHistoryCount, using default of 3:", err);
   }
 
-  const q = query(collection(db, "visits"), where("patientId", "==", patientId), where("status", "==", "completed"));
-  const snap = await getDocs(q);
+  // Fetch all visits for this patient in one query.
+  // Include a visit in the history if: it's completed (has notes/vitals/fees to review)
+  // OR it has a prescription captured (can happen before completion or even on a cancelled visit).
+  const snap = await getDocs(query(collection(db, "visits"), where("patientId", "==", patientId)));
   const visits = [];
-  snap.forEach((d) => { if (d.id !== excludeVisitId) visits.push({ id: d.id, ...d.data() }); });
-  visits.sort((a, b) => new Date(b.consultEndAt || 0) - new Date(a.consultEndAt || 0));
+  snap.forEach((d) => {
+    if (d.id === excludeVisitId) return;
+    const v = { id: d.id, ...d.data() };
+    const hasPrescription = v.prescriptions?.length > 0 || !!v.prescription?.dataUrl;
+    if (v.status === "completed" || hasPrescription) visits.push(v);
+  });
+  visits.sort((a, b) => new Date(b.consultEndAt || b.issuedAt || 0) - new Date(a.consultEndAt || a.issuedAt || 0));
   return limit === 0 ? visits : visits.slice(0, limit);
 }
 
