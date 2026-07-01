@@ -1,6 +1,7 @@
 :root {
   --teal-900: #0F4C4F;
   --teal-700: #166468;
+  --teal-500: #1F8289;
   --teal-100: #DCEAEA;
   --amber-500: #E8A23D;
   --amber-100: #FBEBD4;
@@ -16,6 +17,63 @@
   --radius: 10px;
   --mono: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
   --sans: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+/* ---- Dark theme ---- */
+body.theme-dark {
+  --teal-900: #4FC3C8;
+  --teal-700: #38A8AD;
+  --teal-500: #26888E;
+  --teal-100: #0D2E30;
+  --amber-500: #F0B84A;
+  --amber-100: #3A2D10;
+  --sage-500: #82B090;
+  --sage-100: #1A2D20;
+  --clay-500: #E06B68;
+  --clay-100: #3A1A1A;
+  --paper: #141C1B;
+  --paper-dim: #1C2726;
+  --ink: #E8F0EF;
+  --ink-soft: #8AABAA;
+  --line: #2C3E3D;
+}
+
+/* ---- Forest theme ---- */
+body.theme-forest {
+  --teal-900: #2D5A27;
+  --teal-700: #3A7332;
+  --teal-500: #4A8C3F;
+  --teal-100: #D6EAD3;
+  --amber-500: #C8832A;
+  --amber-100: #F5E6CE;
+  --sage-500: #6B9E5E;
+  --sage-100: #DFF0DA;
+  --clay-500: #B85450;
+  --clay-100: #F3DCDB;
+  --paper: #F5F8F2;
+  --paper-dim: #E8F0E4;
+  --ink: #1A2B18;
+  --ink-soft: #4D6848;
+  --line: #CCDDC8;
+}
+
+/* ---- Sunset theme ---- */
+body.theme-sunset {
+  --teal-900: #7B3F6E;
+  --teal-700: #9B5088;
+  --teal-500: #B5649E;
+  --teal-100: #EDD8E8;
+  --amber-500: #E87832;
+  --amber-100: #FCEBD8;
+  --sage-500: #C47850;
+  --sage-100: #F5E3D6;
+  --clay-500: #C03535;
+  --clay-100: #F5D8D8;
+  --paper: #FDF8F2;
+  --paper-dim: #F6EDE2;
+  --ink: #2A1A14;
+  --ink-soft: #6B4A3A;
+  --line: #E8D4C4;
 }
 
 * { box-sizing: border-box; }

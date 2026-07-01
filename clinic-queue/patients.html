@@ -6,6 +6,14 @@
 <title>Patients — Clinic Queue</title>
 <link rel="manifest" href="manifest.json" />
 <link rel="stylesheet" href="css/styles.css" />
+<script>
+  const t = localStorage.getItem("clinic-queue-theme") || "light";
+  document.addEventListener("DOMContentLoaded", () => {
+    if (t === "dark")   document.body.classList.add("theme-dark");
+    if (t === "forest") document.body.classList.add("theme-forest");
+    if (t === "sunset") document.body.classList.add("theme-sunset");
+  });
+</script>
 </head>
 <body>
 <div class="app-shell">
@@ -17,6 +25,7 @@
       <a href="board.html">Queue Board</a>
     </nav>
     <div class="user-pill"><span id="user-email">—</span><button id="logout-btn">Sign out</button></div>
+    <button id="theme-toggle-btn" title="Switch theme" style="background:none;border:none;cursor:pointer;font-size:1.1rem;padding:0.2rem 0.4rem;opacity:0.8;" aria-label="Switch theme">🎨</button>
   </header>
 
   <main class="page">
@@ -86,6 +95,8 @@ import {
   collection, getDocs, getDoc, doc, query, where, orderBy, updateDoc, deleteDoc
 } from "./js/firebase-config.js";
 import { applyClinicBranding } from "./js/queue-logic.js";
+import { attachThemeToggle } from "./js/theme.js";
+attachThemeToggle();
 import { attachScanButton } from "./js/barcode-scanner.js";
 
 document.getElementById("scan-btn-container").appendChild(attachScanButton(document.getElementById("search-box")));

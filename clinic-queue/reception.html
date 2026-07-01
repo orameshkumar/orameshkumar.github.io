@@ -6,6 +6,17 @@
 <title>Reception — Clinic Queue</title>
 <link rel="manifest" href="manifest.json" />
 <link rel="stylesheet" href="css/styles.css" />
+<script>
+  // Apply stored theme immediately before first paint to avoid flash
+  const t = localStorage.getItem("clinic-queue-theme") || "light";
+  if (t !== "light") document.documentElement.dataset.earlyTheme = t;
+  // We set the class once body is available via DOMContentLoaded
+  document.addEventListener("DOMContentLoaded", () => {
+    if (t === "dark")   document.body.classList.add("theme-dark");
+    if (t === "forest") document.body.classList.add("theme-forest");
+    if (t === "sunset") document.body.classList.add("theme-sunset");
+  });
+</script>
 </head>
 <body>
 <div class="app-shell">
@@ -19,6 +30,7 @@
       <a href="admin.html">Admin Setup</a>
     </nav>
     <div class="user-pill"><span id="user-email">—</span><button id="logout-btn">Sign out</button></div>
+    <button id="theme-toggle-btn" title="Switch theme" style="background:none;border:none;cursor:pointer;font-size:1.1rem;padding:0.2rem 0.4rem;opacity:0.8;" aria-label="Switch theme">🎨</button>
   </header>
 
   <main class="page">
@@ -96,8 +108,8 @@
           <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;margin-bottom:0.75rem;">
             <!-- Date picker: hidden native input for value, visible styled button showing dd-mmm-yyyy -->
             <div style="position:relative;display:inline-block;">
-              <button id="token-date-display" style="font-size:0.85rem;padding:0.3rem 0.6rem;border:1px solid var(--line);border-radius:6px;background:white;cursor:pointer;min-width:120px;text-align:left;">
-                Select date
+              <button id="token-date-display" style="font-size:0.85rem;padding:0.3rem 0.6rem;border:1px solid var(--line);border-radius:6px;background:var(--paper);color:var(--ink);cursor:pointer;min-width:136px;text-align:left;display:flex;align-items:center;gap:0.4rem;">
+                <span>📅</span><span id="token-date-text">Select date</span>
               </button>
               <input type="date" id="token-date-picker"
                 style="position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;" />
@@ -231,6 +243,9 @@ import {
 import { computeACT, calculateETAs, formatETA, todayKey, STATUS_LABELS, NO_SHOW_GRACE_SECONDS, generatePatientId, applyClinicBranding } from "./js/queue-logic.js";
 import { attachScanButton } from "./js/barcode-scanner.js";
 import { generateQR } from "./js/qrcode-lib.js";
+import { attachThemeToggle } from "./js/theme.js";
+
+attachThemeToggle();
 
 applyClinicBranding();
 await authReady;
@@ -571,8 +586,8 @@ function syncDateDisplay(iso) {
   if (!iso) return;
   const d = new Date(iso + "T00:00:00");
   const formatted = d.toLocaleDateString([], { day: "2-digit", month: "short", year: "numeric" })
-    .replace(/ /g, "-"); // produces "15-Jun-2026" on most locales; the replace normalises separators
-  document.getElementById("token-date-display").textContent = formatted;
+    .replace(/ /g, "-");
+  document.getElementById("token-date-text").textContent = formatted;
 }
 
 function updateDateLabel(iso) {
@@ -637,10 +652,24 @@ async function openRx(visitId, fromHistory = false) {
   document.getElementById("rx-file-input").value = "";
   document.getElementById("rx-camera-input").value = "";
 
-  const list = fromHistory ? historyVisits : todayVisits;
-  const visit = list.find((v) => v.id === visitId);
+  // Always fetch the visit fresh from Firestore when opening the modal.
+  // The onSnapshot listener that populates todayVisits may not carry prescription
+  // image data reliably — large base64 arrays in query snapshots can be dropped
+  // or stale. A direct getDoc on the single document is always authoritative.
+  let visit;
+  try {
+    const snap = await getDoc(doc(db, "visits", visitId));
+    visit = snap.exists() ? { id: snap.id, ...snap.data() } : null;
+  } catch (err) {
+    // Fall back to the cached version if the fetch fails (e.g. offline)
+    const list = fromHistory ? historyVisits : todayVisits;
+    visit = list.find((v) => v.id === visitId) || null;
+    console.warn("openRx: getDoc failed, using cached visit:", err);
+  }
+  if (!visit) return;
+
   document.getElementById("rx-token-label").textContent =
-    `#${visit?.tokenNumber || "—"} ${escapeHtml(visit?.patientName || "")}`;
+    `#${visit.tokenNumber || "—"} ${escapeHtml(visit.patientName || "")}`;
 
   const { quality, maxPx } = await getRxSettings();
   document.getElementById("rx-settings-note").textContent =
