@@ -12,8 +12,10 @@ var App = (function () {
         if (storedKey) {
           // Validate format — must be base64 JSON with { n, h } where h is 64 chars
           var valid = false;
-          try { var d = JSON.parse(atob(storedKey.trim())); valid = !!(d && d.n && d.h && d.h.length === 64); } catch(e) {}
+          var cleanKey = storedKey.replace(/[\s\r\n]+/g, '');
+          try { var d = JSON.parse(atob(cleanKey)); valid = !!(d && d.n && d.h && d.h.length === 64); } catch(e) {}
           if (!valid) { localStorage.removeItem('pys_license_key'); console.log('Cleared invalid license key'); }
+          else if (cleanKey !== storedKey) { localStorage.setItem('pys_license_key', cleanKey); console.log('Cleaned whitespace from license key'); }
         }
       } catch(e) {}
       await DB.init();
