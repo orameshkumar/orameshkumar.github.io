@@ -88,6 +88,19 @@
 .now-serving-box.empty {
   color: rgba(255,255,255,0.4); font-size: 0.95rem; padding: 1.4rem 1rem;
 }
+.repeat-announce-btn {
+  background: rgba(255,255,255,0.1);
+  border: 1px solid rgba(255,255,255,0.25);
+  border-radius: 50%;
+  color: rgba(255,255,255,0.7);
+  cursor: pointer;
+  font-size: 0.9rem;
+  width: 2rem; height: 2rem;
+  display: inline-flex; align-items: center; justify-content: center;
+  margin-top: 0.5rem;
+  transition: background 0.15s;
+}
+.repeat-announce-btn:hover { background: rgba(255,255,255,0.2); color: white; }
 
 .token-grid-label {
   font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em;
@@ -141,6 +154,37 @@
   letter-spacing: 0.02em;
 }
 .token-box.next-up .token-box-eta { color: var(--amber-500); }
+
+/* Fixed-slot token states on the board */
+.token-box.slot-booked {
+  background: rgba(232,162,61,0.1);
+  border-color: rgba(232,162,61,0.5);
+}
+.token-box.slot-booked .token-box-num { color: var(--amber-500); }
+.token-box.slot-booked .token-box-eta { color: var(--amber-500); }
+
+.token-box.slot-urgent {
+  background: rgba(232,162,61,0.22);
+  border-color: var(--amber-500);
+  box-shadow: 0 0 0 2px rgba(232,162,61,0.4);
+  animation: slot-pulse 1.5s ease-in-out infinite;
+}
+.token-box.slot-urgent .token-box-num { color: var(--amber-500); }
+.token-box.slot-urgent .token-box-eta { color: var(--amber-500); }
+
+.token-box.slot-due {
+  background: rgba(192,53,53,0.22);
+  border-color: #E06B68;
+  box-shadow: 0 0 0 2px rgba(192,53,53,0.4);
+  animation: slot-pulse 0.8s ease-in-out infinite;
+}
+.token-box.slot-due .token-box-num { color: #E06B68; }
+.token-box.slot-due .token-box-eta { color: #E06B68; }
+
+@keyframes slot-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.65; }
+}
 
 .board-token-anim {
   animation: board-pop 0.5s ease;

@@ -94,8 +94,30 @@
           <label>Preferred doctor(s) — patient will be served by whichever is free first</label>
           <div class="checkbox-group" id="doctor-checkboxes"></div>
           <p class="helper" id="availability-helper"></p>
-          <div id="overcapacity-warning"></div>
 
+          <!-- Fixed slot booking — only meaningful when exactly one doctor is chosen -->
+          <div id="fixed-slot-section" style="display:none;margin-bottom:0.75rem;">
+            <div style="display:flex;align-items:center;gap:0.6rem;margin-bottom:0.5rem;">
+              <input type="checkbox" id="slot-toggle" style="width:auto;margin:0;" />
+              <label for="slot-toggle" style="margin:0;font-weight:600;color:var(--teal-900);">
+                🕐 Book a fixed time slot
+              </label>
+            </div>
+            <div id="slot-time-row" style="display:none;">
+              <div class="field-row">
+                <div class="field">
+                  <label for="slot-time-input">Appointment time</label>
+                  <input type="time" id="slot-time-input" step="300" />
+                </div>
+                <div class="field" style="align-self:flex-end;">
+                  <button type="button" class="btn btn-sm btn-outline" id="slot-suggest-btn">Suggest earliest</button>
+                </div>
+              </div>
+              <p class="small" id="slot-validation-msg" style="margin:0;"></p>
+            </div>
+          </div>
+
+          <div id="overcapacity-warning"></div>
           <button class="btn btn-primary btn-block" type="submit" style="margin-top:1rem;">Issue token</button>
         </form>
       </div>
@@ -269,7 +291,7 @@ import {
   collection, addDoc, doc, updateDoc, deleteDoc, getDoc, getDocs, onSnapshot,
   query, where, orderBy
 } from "./js/firebase-config.js";
-import { computeACT, calculateETAs, formatETA, todayKey, STATUS_LABELS, NO_SHOW_GRACE_SECONDS, generatePatientId, applyClinicBranding, fmtDate } from "./js/queue-logic.js";
+import { computeACT, calculateETAs, formatETA, todayKey, STATUS_LABELS, NO_SHOW_GRACE_SECONDS, generatePatientId, applyClinicBranding, fmtDate, earliestAvailableSlot } from "./js/queue-logic.js";
 import { attachScanButton } from "./js/barcode-scanner.js";
 import { generateQR } from "./js/qrcode-lib.js";
 import { attachThemeToggle } from "./js/theme.js";
@@ -337,6 +359,7 @@ function renderDoctorCheckboxes() {
   const activeDoctors = doctors.filter((d) => d.status !== "inactive");
   if (activeDoctors.length === 0) {
     box.innerHTML = '<p class="helper">No active doctors — mark a doctor as active in Admin Setup.</p>';
+    updateSlotSection();
     return;
   }
   box.innerHTML = activeDoctors.map((d) => `
@@ -354,6 +377,91 @@ function renderDoctorCheckboxes() {
     });
   });
   updateAvailabilityHelper();
+  updateSlotSection();
+}
+
+// Show fixed-slot section only when exactly one doctor is selected
+function updateSlotSection() {
+  const section = document.getElementById("fixed-slot-section");
+  if (selectedDoctorIds.size === 1) {
+    section.style.display = "block";
+  } else {
+    section.style.display = "none";
+    document.getElementById("slot-toggle").checked = false;
+    document.getElementById("slot-time-row").style.display = "none";
+    document.getElementById("slot-validation-msg").textContent = "";
+  }
+}
+
+document.getElementById("slot-toggle").addEventListener("change", (e) => {
+  document.getElementById("slot-time-row").style.display = e.target.checked ? "block" : "none";
+  if (e.target.checked) suggestSlotTime();
+  else document.getElementById("slot-validation-msg").textContent = "";
+});
+document.getElementById("slot-suggest-btn").addEventListener("click", suggestSlotTime);
+document.getElementById("slot-time-input").addEventListener("change", validateSlotTime);
+
+async function getDocQueue(doctorId) {
+  const snap = await getDocs(query(visitsRef,
+    where("visitDate", "==", todayKey()),
+    where("status", "in", ["waiting", "called", "in_consultation"])
+  ));
+  const all = [];
+  snap.forEach((d) => all.push({ id: d.id, ...d.data() }));
+  return all
+    .filter((v) => v.doctorId === doctorId || (v.preferredDoctorIds || []).includes(doctorId))
+    .sort((a, b) => (a.queueSequence ?? a.tokenNumber) - (b.queueSequence ?? b.tokenNumber));
+}
+
+async function suggestSlotTime() {
+  const doctorId = [...selectedDoctorIds][0];
+  if (!doctorId) return;
+  const msg = document.getElementById("slot-validation-msg");
+  msg.textContent = "Checking queue…"; msg.style.color = "var(--ink-soft)";
+  try {
+    const doctor = doctors.find((d) => d.id === doctorId);
+    const actSec = await computeACT(doctorId);
+    const queue = await getDocQueue(doctorId);
+    const earliest = earliestAvailableSlot(queue, actSec, doctor?.onBreakUntil || null);
+    const d = new Date(earliest);
+    const hhmm = `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
+    document.getElementById("slot-time-input").value = hhmm;
+    msg.textContent = `✓ Earliest available: ${formatETA(d.getTime())}`;
+    msg.style.color = "var(--sage-700)";
+  } catch (err) {
+    msg.textContent = "Could not check queue."; msg.style.color = "var(--clay-500)";
+  }
+}
+
+async function validateSlotTime() {
+  const timeVal = document.getElementById("slot-time-input").value;
+  if (!timeVal) return;
+  const msg = document.getElementById("slot-validation-msg");
+  const doctorId = [...selectedDoctorIds][0];
+  if (!doctorId) return;
+  const [hh, mm] = timeVal.split(":").map(Number);
+  const slotDate = new Date(); slotDate.setHours(hh, mm, 0, 0);
+  const slotMs = slotDate.getTime();
+  if (slotMs <= Date.now()) {
+    msg.textContent = "⚠ Slot time is in the past."; msg.style.color = "var(--clay-500)"; return;
+  }
+  msg.textContent = "Checking…"; msg.style.color = "var(--ink-soft)";
+  try {
+    const doctor = doctors.find((d) => d.id === doctorId);
+    const actSec = await computeACT(doctorId);
+    const queue = await getDocQueue(doctorId);
+    const earliest = earliestAvailableSlot(queue, actSec, doctor?.onBreakUntil || null);
+    const earliestMs = new Date(earliest).getTime();
+    if (slotMs < earliestMs) {
+      msg.textContent = `⚠ Too early — earliest slot is ${formatETA(earliestMs)}. Doctor has patients until then.`;
+      msg.style.color = "var(--clay-500)";
+    } else {
+      msg.textContent = `✓ Slot ${formatETA(slotMs)} is available.`;
+      msg.style.color = "var(--sage-700)";
+    }
+  } catch (err) {
+    msg.textContent = "Could not validate slot."; msg.style.color = "var(--clay-500)";
+  }
 }
 
 async function updateAvailabilityHelper() {
@@ -518,6 +626,42 @@ document.getElementById("patient-form").addEventListener("submit", async (e) => 
   const preferredDoctorIds = Array.from(selectedDoctorIds);
   const tokenNumber = await nextTokenNumber(preferredDoctorIds[0]);
 
+  // Fixed slot: read the chosen time if slot toggle is on
+  let slotTime = null;
+  const slotToggle = document.getElementById("slot-toggle");
+  if (slotToggle.checked && selectedDoctorIds.size === 1) {
+    const timeVal = document.getElementById("slot-time-input").value;
+    if (timeVal) {
+      const [hh, mm] = timeVal.split(":").map(Number);
+      const slotDate = new Date(); slotDate.setHours(hh, mm, 0, 0);
+      // Block if the validation message shows an error
+      const msg = document.getElementById("slot-validation-msg").textContent;
+      if (msg.startsWith("⚠")) {
+        alert("Please fix the slot time issue before issuing the token.\n\n" + msg);
+        return;
+      }
+      if (slotDate.getTime() <= Date.now()) {
+        alert("Slot time is in the past. Please choose a future time.");
+        return;
+      }
+      slotTime = slotDate.toISOString();
+    }
+  }
+
+  // queueSequence for fixed-slot tokens: use slotTime as the sort key
+  // (stored as ms from epoch so it sorts correctly relative to walk-in sequence numbers).
+  // Walk-in tokens use tokenNumber (small integers); slot tokens use a large ms value
+  // that sorts after all current walk-ins but in slotTime order relative to each other.
+  // To keep them in the right relative order on the board we encode slotTime as
+  // 1_000_000 + minutesSinceMidnight so it's always larger than any walk-in token number
+  // but still sortable against other slot tokens today.
+  let queueSequence = tokenNumber;
+  if (slotTime) {
+    const st = new Date(slotTime);
+    const minutesSinceMidnight = st.getHours() * 60 + st.getMinutes();
+    queueSequence = 1_000_000 + minutesSinceMidnight;
+  }
+
   await addDoc(visitsRef, {
     patientId,
     patientCode: patientCode || null,
@@ -525,9 +669,11 @@ document.getElementById("patient-form").addEventListener("submit", async (e) => 
     patientAge: patientData.age,
     patientGender: patientData.gender,
     preferredDoctorIds,
-    doctorId: null, // set once a doctor actually calls it
+    doctorId: null,
     tokenNumber,
-    queueSequence: tokenNumber, // separate from tokenNumber so a patient can be reordered ("send to end of queue") without changing their printed/displayed token number — see moveToEndOfQueue()
+    queueSequence,
+    slotTime,
+    slotType: slotTime ? "fixed" : "walkin",
     status: "waiting",
     source: "reception",
     visitDate: todayKey(),
@@ -537,9 +683,13 @@ document.getElementById("patient-form").addEventListener("submit", async (e) => 
     fees: null,
   });
 
-  alert(`Token #${tokenNumber} issued for ${patientData.name}.\nPatient ID: ${patientCode || "(existing patient, no ID on record)"}`);
+  const slotLabel = slotTime ? ` · Fixed slot at ${formatETA(new Date(slotTime).getTime())}` : "";
+  alert(`Token #${tokenNumber} issued for ${patientData.name}.\nPatient ID: ${patientCode || "(existing patient, no ID on record)"}${slotLabel}`);
   clearPatientForm();
   selectedDoctorIds.clear();
+  document.getElementById("slot-toggle").checked = false;
+  document.getElementById("slot-time-row").style.display = "none";
+  document.getElementById("slot-validation-msg").textContent = "";
   renderDoctorCheckboxes();
 });
 
@@ -589,6 +739,11 @@ function renderVisitRows(visits, containerId, isHistory = false) {
   let html = `<table><thead><tr>${histCols}</tr></thead><tbody>`;
   sorted.forEach((v) => {
     const docNames = (v.preferredDoctorIds || []).map((id) => doctors.find((x) => x.id === id)?.name || "—").join(", ");
+    const isSlot = !!v.slotTime;
+    const slotMs = isSlot ? new Date(v.slotTime).getTime() : null;
+    const slotBadge = isSlot
+      ? `<span class="badge" style="background:var(--amber-100);color:var(--amber-700);margin-left:0.3rem;" title="Fixed appointment slot">🕐 ${formatETA(slotMs)}</span>`
+      : "";
     const hasRx = !!(v.prescriptions?.length || v.prescription?.dataUrl);
     const rxBtn = `<button class="btn btn-sm ${hasRx ? "btn-vitals-done" : "btn-outline"}" data-rx="${v.id}" title="${hasRx ? "View / replace prescription" : "Add prescription photo"}">${hasRx ? "📋 View Rx" : "📷 Add Rx"}</button>`;
     const allReceipts = getAllReceipts(v);
@@ -615,7 +770,7 @@ function renderVisitRows(visits, containerId, isHistory = false) {
     const rxCol = isHistory ? "" : `<td>${rxBtn}</td>`;
     html += `<tr>
       <td><span class="token-tag">#${v.tokenNumber}</span></td>
-      <td>${escapeHtml(v.patientName)}<br/><span class="small muted">${v.patientAge}/${v.patientGender}</span></td>
+      <td>${escapeHtml(v.patientName)}${slotBadge}<br/><span class="small muted">${v.patientAge}/${v.patientGender}</span></td>
       <td class="small">${v.patientCode || "—"}</td>
       <td class="small">${docNames}</td>
       <td><span class="badge badge-${v.status}">${STATUS_LABELS[v.status] || v.status}</span></td>

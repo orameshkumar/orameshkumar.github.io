@@ -114,6 +114,43 @@
             </select>
           </div>
         </div>
+        <hr class="section-divider" />
+        <p class="small" style="font-weight:600;margin-bottom:0.25rem;">Queue board voice announcements</p>
+        <p class="small muted" style="margin-bottom:0.75rem;">Spoken aloud when a token is called. Uses the device's built-in text-to-speech. Multiple languages play in sequence.</p>
+
+        <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.9rem;">
+          <input type="checkbox" id="announce-enabled-input" style="width:auto;margin:0;" />
+          <label for="announce-enabled-input" style="margin:0;font-weight:600;">Enable voice announcements</label>
+        </div>
+
+        <div id="announce-config" style="display:none;">
+          <div class="field-row" style="margin-bottom:0.75rem;">
+            <div class="field">
+              <label for="announce-repeat-input">Repeat count per call</label>
+              <select id="announce-repeat-input">
+                <option value="1">Once</option>
+                <option value="2">Twice</option>
+                <option value="3">Three times</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="announce-interval-input">Auto-repeat if still called</label>
+              <select id="announce-interval-input">
+                <option value="0">Disabled — announce once only</option>
+                <option value="30">Every 30 seconds</option>
+                <option value="60">Every 60 seconds</option>
+                <option value="90">Every 90 seconds</option>
+                <option value="120">Every 2 minutes</option>
+                <option value="180">Every 3 minutes</option>
+              </select>
+            </div>
+          </div>
+
+          <label style="margin-bottom:0.4rem;display:block;">Languages &amp; templates — drag or use ↑↓ to reorder, check to enable</label>
+          <p class="helper" style="margin-bottom:0.6rem;">Variables: <code>{token}</code> = token number &nbsp; <code>{room}</code> = room &nbsp; <code>{doctor}</code> = doctor name</p>
+          <div id="lang-list" style="display:flex;flex-direction:column;gap:0.4rem;"></div>
+          <button type="button" class="btn btn-sm btn-outline" id="add-lang-btn" style="margin-top:0.5rem;">+ Add language</button>
+        </div>
       </form>
     </div>
 
@@ -199,11 +236,130 @@ import {
   auth, authReady, db, onAuthStateChanged, signOut,
   collection, addDoc, doc, setDoc, updateDoc, getDocs, onSnapshot, query, orderBy, getDoc
 } from "./js/firebase-config.js";
-import { applyClinicBranding } from "./js/queue-logic.js";
+import { applyClinicBranding, computeACT, formatDuration } from "./js/queue-logic.js";
 import { attachThemeToggle } from "./js/theme.js";
 attachThemeToggle();
 
 applyClinicBranding();
+
+// ---- Voice announcement language management ----
+const ALL_LANGUAGES = [
+  { lang: "en-IN", label: "English (India)" },
+  { lang: "en-US", label: "English (US)" },
+  { lang: "ta-IN", label: "Tamil (தமிழ்)" },
+  { lang: "hi-IN", label: "Hindi (हिंदी)" },
+  { lang: "ml-IN", label: "Malayalam (മലയാളം)" },
+  { lang: "te-IN", label: "Telugu (తెలుగు)" },
+  { lang: "kn-IN", label: "Kannada (ಕನ್ನಡ)" },
+  { lang: "mr-IN", label: "Marathi (मराठी)" },
+  { lang: "bn-IN", label: "Bengali (বাংলা)" },
+  { lang: "gu-IN", label: "Gujarati (ગુજરાતી)" },
+  { lang: "pa-IN", label: "Punjabi (ਪੰਜਾਬੀ)" },
+  { lang: "or-IN", label: "Odia (ଓଡ଼ିଆ)" },
+  { lang: "ur-PK", label: "Urdu (اردو)" },
+];
+
+const DEFAULT_TEMPLATES = {
+  "en-IN": "Token number {token}, please proceed to {room}, Doctor {doctor}",
+  "en-US": "Token number {token}, please proceed to {room}, Doctor {doctor}",
+  "ta-IN": "டோக்கன் எண் {token}, {room} க்கு செல்லவும், மருத்துவர் {doctor}",
+  "hi-IN": "टोकन नंबर {token}, कृपया {room} में जाएं, डॉक्टर {doctor}",
+  "ml-IN": "ടോക്കൺ നമ്പർ {token}, {room} ലേക്ക് വരൂ, ഡോക്ടർ {doctor}",
+  "te-IN": "టోకెన్ నంబర్ {token}, {room} కి రండి, డాక్టర్ {doctor}",
+  "kn-IN": "ಟೋಕನ್ ಸಂಖ್ಯೆ {token}, {room} ಗೆ ಬನ್ನಿ, ಡಾಕ್ಟರ್ {doctor}",
+  "mr-IN": "टोकन क्रमांक {token}, कृपया {room} मध्ये या, डॉक्टर {doctor}",
+  "bn-IN": "টোকেন নম্বর {token}, {room} এ যান, ডাক্তার {doctor}",
+  "gu-IN": "ટોકન નંબર {token}, {room} માં જાઓ, ડૉક્ટર {doctor}",
+  "pa-IN": "ਟੋਕਨ ਨੰਬਰ {token}, {room} ਵਿੱਚ ਜਾਓ, ਡਾਕਟਰ {doctor}",
+  "or-IN": "ଟୋକେନ୍ ନମ୍ବର {token}, {room} ଯାଆ, ଡାକ୍ତର {doctor}",
+  "ur-PK": "ٹوکن نمبر {token}, {room} میں جائیں، ڈاکٹر {doctor}",
+};
+
+function defaultLangList() {
+  return [
+    { lang: "en-IN", template: DEFAULT_TEMPLATES["en-IN"], enabled: true },
+  ];
+}
+
+// Toggle show/hide of voice config section
+document.getElementById("announce-enabled-input").addEventListener("change", (e) => {
+  document.getElementById("announce-config").style.display = e.target.checked ? "block" : "none";
+});
+
+function renderLangList(entries) {
+  const container = document.getElementById("lang-list");
+  container.innerHTML = "";
+  entries.forEach((entry, idx) => {
+    const langInfo = ALL_LANGUAGES.find((l) => l.lang === entry.lang) || { label: entry.lang };
+    const row = document.createElement("div");
+    row.dataset.lang = entry.lang;
+    row.style.cssText = "display:flex;align-items:flex-start;gap:0.5rem;background:var(--paper-dim);border:1px solid var(--line);border-radius:8px;padding:0.6rem 0.75rem;";
+    row.innerHTML = `
+      <input type="checkbox" class="lang-enabled" ${entry.enabled ? "checked" : ""}
+        style="width:auto;margin:0;margin-top:0.3rem;flex-shrink:0;" />
+      <div style="flex:1;min-width:0;">
+        <div style="font-weight:600;font-size:0.88rem;margin-bottom:0.35rem;">${escapeHtml(langInfo.label)}</div>
+        <input class="lang-template" value="${escapeHtml(entry.template || DEFAULT_TEMPLATES[entry.lang] || DEFAULT_TEMPLATES["en-IN"])}"
+          style="font-size:0.85rem;padding:0.3rem 0.5rem;" />
+      </div>
+      <div style="display:flex;flex-direction:column;gap:0.25rem;flex-shrink:0;">
+        <button class="btn btn-sm btn-outline lang-up" title="Move up" ${idx === 0 ? "disabled" : ""}>↑</button>
+        <button class="btn btn-sm btn-outline lang-down" title="Move down" ${idx === entries.length - 1 ? "disabled" : ""}>↓</button>
+        <button class="btn btn-sm btn-danger lang-remove" title="Remove">✕</button>
+      </div>`;
+    row.querySelector(".lang-up").addEventListener("click", () => {
+      const prev = row.previousElementSibling;
+      if (prev) container.insertBefore(row, prev);
+      // Refresh disabled states on all up/down buttons
+      refreshLangListButtons();
+    });
+    row.querySelector(".lang-down").addEventListener("click", () => {
+      const next = row.nextElementSibling;
+      if (next) container.insertBefore(next, row);
+      refreshLangListButtons();
+    });
+    row.querySelector(".lang-remove").addEventListener("click", () => {
+      row.remove();
+      refreshLangListButtons();
+    });
+    container.appendChild(row);
+  });
+}
+
+function readLangList() {
+  return Array.from(document.getElementById("lang-list").children).map((row) => ({
+    lang: row.dataset.lang,
+    template: row.querySelector(".lang-template").value.trim() || DEFAULT_TEMPLATES[row.dataset.lang] || DEFAULT_TEMPLATES["en-IN"],
+    enabled: row.querySelector(".lang-enabled").checked,
+  }));
+}
+
+function refreshLangListButtons() {
+  const rows = Array.from(document.getElementById("lang-list").children);
+  rows.forEach((row, i) => {
+    row.querySelector(".lang-up").disabled = (i === 0);
+    row.querySelector(".lang-down").disabled = (i === rows.length - 1);
+  });
+}
+
+// Add language button
+document.getElementById("add-lang-btn").addEventListener("click", () => {
+  const existing = new Set(readLangList().map((e) => e.lang));
+  const available = ALL_LANGUAGES.filter((l) => !existing.has(l.lang));
+  if (available.length === 0) { alert("All available languages are already added."); return; }
+  const options = available.map((l, i) => `${i + 1}. ${l.label}`).join("\n");
+  const choice = prompt(`Choose a language to add:\n${options}\n\nType the number:`);
+  if (!choice) return;
+  const idx = parseInt(choice) - 1;
+  if (isNaN(idx) || idx < 0 || idx >= available.length) return;
+  const picked = available[idx];
+  const current = readLangList();
+  current.push({ lang: picked.lang, template: DEFAULT_TEMPLATES[picked.lang] || DEFAULT_TEMPLATES["en-IN"], enabled: true });
+  renderLangList(current);
+});
+
+// Seed the list with a default on first load if nothing exists yet
+renderLangList(defaultLangList());
 await authReady;
 
 // Pre-fill the branding form with the currently configured values, if any.
@@ -219,6 +375,19 @@ await authReady;
     if (d.prescriptionQuality) document.getElementById("rx-quality-input").value = d.prescriptionQuality;
     if (d.prescriptionMaxPx) document.getElementById("rx-maxpx-input").value = d.prescriptionMaxPx;
     if (d.visitHistoryCount !== undefined) document.getElementById("visit-history-count-input").value = d.visitHistoryCount;
+    // Voice settings
+    document.getElementById("announce-enabled-input").checked = !!d.announceEnabled;
+    document.getElementById("announce-config").style.display = d.announceEnabled ? "block" : "none";
+    if (d.announceRepeat) document.getElementById("announce-repeat-input").value = d.announceRepeat;
+    if (d.announceRepeatInterval !== undefined) document.getElementById("announce-interval-input").value = d.announceRepeatInterval;
+    if (d.announceLanguages && Array.isArray(d.announceLanguages)) {
+      renderLangList(d.announceLanguages);
+    } else if (d.announceLang) {
+      // Migrate legacy single-language setting
+      renderLangList([{ lang: d.announceLang, template: d.announceTemplate || DEFAULT_TEMPLATES[d.announceLang] || DEFAULT_TEMPLATES["en-IN"], enabled: true }]);
+    } else {
+      renderLangList(defaultLangList());
+    }
   }
 })();
 
@@ -232,6 +401,10 @@ document.getElementById("branding-form").addEventListener("submit", async (e) =>
   const prescriptionQuality = Number(document.getElementById("rx-quality-input").value);
   const prescriptionMaxPx = Number(document.getElementById("rx-maxpx-input").value);
   const visitHistoryCount = Number(document.getElementById("visit-history-count-input").value);
+  const announceEnabled = document.getElementById("announce-enabled-input").checked;
+  const announceRepeat = Number(document.getElementById("announce-repeat-input").value) || 2;
+  const announceRepeatInterval = Number(document.getElementById("announce-interval-input").value) || 0;
+  const announceLanguages = readLangList();
   if (!name) return;
   await setDoc(doc(db, "clinicSettings", "main"), {
     name,
@@ -242,6 +415,10 @@ document.getElementById("branding-form").addEventListener("submit", async (e) =>
     prescriptionQuality,
     prescriptionMaxPx,
     visitHistoryCount,
+    announceEnabled,
+    announceRepeat,
+    announceRepeatInterval,
+    announceLanguages,
     updatedAt: new Date().toISOString()
   });
   await applyClinicBranding(); // refresh this page's own banner immediately
@@ -275,11 +452,22 @@ onSnapshot(query(doctorsRef, orderBy("name")), (snap) => {
     doctorsCache.push(doc_);
     const isActive = doc_.status !== "inactive";
     html += `
-      <div class="flex-between" style="padding:0.6rem 0;border-bottom:1px solid var(--paper-dim);${isActive ? "" : "opacity:0.55;"}">
-        <div>
-          <strong>${escapeHtml(doc_.name)}</strong>
-          <span class="badge ${isActive ? "badge-waiting" : "badge-cancelled"}" style="margin-left:0.5rem;font-size:0.7rem;">${isActive ? "Active" : "Inactive"}</span><br/>
-          <span class="small muted">${escapeHtml(doc_.specialization || "")} · ${doc_.room || "no room"} · ₹${doc_.consultationFee} · seed ACT ${doc_.seedActMinutes}m</span>
+      <div class="flex-between" style="padding:0.75rem 0;border-bottom:1px solid var(--paper-dim);gap:0.5rem;flex-wrap:wrap;${isActive ? "" : "opacity:0.55;"}">
+        <div style="flex:1;min-width:0;">
+          <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;">
+            <strong>${escapeHtml(doc_.name)}</strong>
+            <span class="badge ${isActive ? "badge-waiting" : "badge-cancelled"}" style="font-size:0.7rem;">${isActive ? "Active" : "Inactive"}</span>
+          </div>
+          <div class="small muted" style="margin-top:0.2rem;">${escapeHtml(doc_.specialization || "")} · ${doc_.room || "no room"} · ₹${doc_.consultationFee}</div>
+          <div class="small" style="margin-top:0.35rem;display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;">
+            <span>Configured: <strong>${doc_.seedActMinutes}m</strong></span>
+            <span class="muted">|</span>
+            <span>System avg: <strong id="act-val-${doc_.id}" style="color:var(--ink-soft);">…</strong></span>
+            <button class="btn btn-sm btn-outline" id="act-use-${doc_.id}"
+              style="display:none;padding:0.15rem 0.45rem;font-size:0.72rem;"
+              data-docid="${doc_.id}" data-docname="${escapeHtml(doc_.name)}"
+              title="Pre-fill the seed ACT input with the system-calculated value">Use this ↓</button>
+          </div>
         </div>
         <button class="btn btn-sm btn-outline" data-toggle-doctor="${doc_.id}" data-current-status="${doc_.status || "active"}">
           ${isActive ? "Set inactive" : "Set active"}
@@ -299,8 +487,57 @@ onSnapshot(query(doctorsRef, orderBy("name")), (snap) => {
       const next = current === "active" ? "inactive" : "active";
       btn.textContent = "Saving…"; btn.disabled = true;
       await updateDoc(doc(db, "doctors", docId), { status: next });
-      // The onSnapshot listener will re-render the list automatically
     });
+  });
+
+  // Wire "Use this ↓" buttons — pre-fill the Add Doctor form's seed ACT input
+  // so the admin can easily apply the system-calculated value
+  list.querySelectorAll("[data-docid]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const calcMins = Number(btn.dataset.calcMins);
+      if (!calcMins) return;
+      document.getElementById("doc-act").value = calcMins;
+      // Scroll the Add Doctor form into view so admin sees what was filled
+      document.getElementById("doc-act").scrollIntoView({ behavior: "smooth", block: "center" });
+      document.getElementById("doc-act").focus();
+      // Show a hint
+      document.getElementById("doc-act").title = `Pre-filled from system average for ${btn.dataset.docname}. Edit as needed then save.`;
+    });
+  });
+
+  // Async: compute ACT for each doctor and fill in the placeholder values
+  doctorsCache.forEach(async (doc_) => {
+    const valEl = document.getElementById(`act-val-${doc_.id}`);
+    const useBtn = document.getElementById(`act-use-${doc_.id}`);
+    if (!valEl) return;
+    try {
+      const actSecs = await computeACT(doc_.id);
+      const actMins = Math.round(actSecs / 60);
+      const seedSecs = doc_.seedActMinutes * 60;
+      const deviation = Math.abs(actSecs - seedSecs) / seedSecs;
+      const usingCalculated = deviation > 0.30;
+
+      if (usingCalculated) {
+        // System is using the calculated value — show it prominently with deviation
+        valEl.textContent = `${actMins}m`;
+        valEl.style.color = "var(--teal-900)";
+        valEl.title = `System is using this calculated average (${(deviation*100).toFixed(0)}% different from configured ${doc_.seedActMinutes}m)`;
+        // Show "Use this" button so admin can update the configuration
+        if (useBtn) {
+          useBtn.style.display = "inline-flex";
+          useBtn.dataset.calcMins = actMins;
+          useBtn.textContent = `Use ${actMins}m ↓`;
+        }
+      } else {
+        // System is using seed — show calculated for reference but dimmed
+        valEl.textContent = `${actMins}m`;
+        valEl.style.color = "var(--ink-soft)";
+        valEl.title = `Within ±30% of configured ${doc_.seedActMinutes}m — system is using configured value`;
+      }
+    } catch (err) {
+      valEl.textContent = "—";
+      valEl.title = "Could not compute";
+    }
   });
 });
 

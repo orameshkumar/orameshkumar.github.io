@@ -57,6 +57,8 @@ function tickClock() {
 }
 tickClock();
 setInterval(tickClock, 1000 * 15);
+// Re-render every 30s so slot alert colours (urgent/due) update as time passes
+setInterval(render, 1000 * 30);
 
 // The QR code is generated live in the browser using our own verified QR encoder
 // (js/qrcode-lib.js), pointed at a configurable URL rather than a baked static
@@ -118,6 +120,91 @@ onSnapshot(query(collection(db, "visits"), where("visitDate", "==", todayKey()),
 
 let lastServingByDoctor = {};
 
+// ---- Voice announcement engine ----
+let announceSettings = {
+  enabled: false,
+  languages: [{ lang: "en-IN", template: "Token number {token}, please proceed to {room}, Doctor {doctor}", enabled: true }],
+  repeat: 2,
+  repeatInterval: 0,   // seconds; 0 = no auto-repeat
+};
+
+// Timers tracking auto-repeat for each doctor (keyed by doctorId)
+const repeatTimers = {};
+
+(async () => {
+  try {
+    const snap = await getDoc(doc(db, "clinicSettings", "main"));
+    if (snap.exists()) {
+      const d = snap.data();
+      if (d.announceEnabled !== undefined) announceSettings.enabled = !!d.announceEnabled;
+      if (d.announceLanguages && Array.isArray(d.announceLanguages)) announceSettings.languages = d.announceLanguages;
+      // Migrate legacy single-language
+      else if (d.announceLang) announceSettings.languages = [{ lang: d.announceLang, template: d.announceTemplate || "Token number {token}, please proceed to {room}, Doctor {doctor}", enabled: true }];
+      if (d.announceRepeat) announceSettings.repeat = Number(d.announceRepeat);
+      if (d.announceRepeatInterval !== undefined) announceSettings.repeatInterval = Number(d.announceRepeatInterval);
+    }
+  } catch (e) { /* use defaults */ }
+})();
+
+function buildAnnouncement(token, room, doctorName, template) {
+  return template
+    .replace(/\{token\}/g, token)
+    .replace(/\{room\}/g, room || "the consultation room")
+    .replace(/\{doctor\}/g, doctorName || "the doctor");
+}
+
+// Speak a sequence of utterances (one per enabled language) in order, with a gap between each
+function speakSequence(phrases, times = 1) {
+  if (!window.speechSynthesis || phrases.length === 0) return;
+  window.speechSynthesis.cancel();
+
+  let phraseIdx = 0;
+  let repeatCount = 0;
+
+  function sayNext() {
+    if (phraseIdx >= phrases.length) {
+      phraseIdx = 0;
+      repeatCount++;
+      if (repeatCount < times) {
+        setTimeout(sayNext, 1200);  // gap between full cycles
+      }
+      return;
+    }
+    const { text, lang } = phrases[phraseIdx];
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = lang;
+    u.rate = 0.88;
+    u.onend = () => { phraseIdx++; setTimeout(sayNext, 600); };
+    window.speechSynthesis.speak(u);
+  }
+  sayNext();
+}
+
+function announceToken(token, room, doctorName) {
+  if (!announceSettings.enabled) return;
+  const phrases = announceSettings.languages
+    .filter((l) => l.enabled)
+    .map((l) => ({ text: buildAnnouncement(token, room, doctorName, l.template), lang: l.lang }));
+  speakSequence(phrases, announceSettings.repeat);
+}
+
+function startRepeatTimer(doctorId, token, room, doctorName) {
+  clearRepeatTimer(doctorId);
+  if (!announceSettings.enabled || announceSettings.repeatInterval <= 0) return;
+  repeatTimers[doctorId] = setInterval(() => {
+    // Only repeat if the token is still in "called" status — check lastServingByDoctor
+    // The token id hasn't changed (still the same serving token) so we re-announce
+    announceToken(token, room, doctorName);
+  }, announceSettings.repeatInterval * 1000);
+}
+
+function clearRepeatTimer(doctorId) {
+  if (repeatTimers[doctorId]) {
+    clearInterval(repeatTimers[doctorId]);
+    delete repeatTimers[doctorId];
+  }
+}
+
 function render() {
   const grid = document.getElementById("room-grid");
   if (doctors.length === 0) {
@@ -143,6 +230,14 @@ function render() {
     const statusLabel = onBreak ? "On break" : (serving ? "In session" : "Available");
 
     const isNewServing = serving && lastServingByDoctor[d.id] !== serving.id;
+    if (isNewServing) {
+      announceToken(serving.tokenNumber, d.room, d.name);
+      startRepeatTimer(d.id, serving.tokenNumber, d.room, d.name);
+    }
+    // If no longer serving (patient started/completed), clear the repeat timer
+    if (!serving || serving.status !== "called") {
+      clearRepeatTimer(d.id);
+    }
     lastServingByDoctor[d.id] = serving ? serving.id : null;
 
     return `
@@ -160,21 +255,48 @@ function render() {
             <div class="label">Now serving</div>
             <div class="tok-big">#${serving.tokenNumber}</div>
             <div class="patient-name">${escapeHtml(firstNameOnly(serving.patientName))}</div>
+            <button class="repeat-announce-btn"
+              data-token="${serving.tokenNumber}"
+              data-room="${escapeHtml(d.room || "")}"
+              data-doctor="${escapeHtml(d.name)}"
+              title="Repeat announcement">🔁</button>
           </div>
         ` : `<div class="now-serving-box empty">${onBreak ? "☕ On a short break" : "No patient called yet"}</div>`}
 
         <div class="token-grid-label">${waiting.length > 0 ? "Waiting" : ""}</div>
         <div class="token-grid">
-          ${waiting.slice(0, 8).map((v, idx) => `
-            <div class="token-box ${idx === 0 ? "next-up" : ""} ${v.vitals ? "vitals-done" : ""}">
-              <div class="token-box-num">#${v.tokenNumber}${v.vitals ? ' <span class="vitals-dot" title="Vitals recorded">●</span>' : ""}</div>
-              <div class="token-box-eta">${idx === 0 ? "NEXT · " : ""}${formatETA(etas[v.id])}</div>
-            </div>`).join("") || '<div class="queue-empty">Queue is empty.</div>'}
+          ${waiting.slice(0, 8).map((v, idx) => {
+            const isSlot = !!v.slotTime;
+            const slotMs = isSlot ? new Date(v.slotTime).getTime() : null;
+            const now = Date.now();
+            const slotDue    = isSlot && now >= slotMs;
+            const slotUrgent = isSlot && now >= slotMs - 5 * 60 * 1000;
+            const slotClass  = slotDue ? "slot-due" : slotUrgent ? "slot-urgent" : isSlot ? "slot-booked" : "";
+            return `
+            <div class="token-box ${idx === 0 && !isSlot ? "next-up" : ""} ${v.vitals ? "vitals-done" : ""} ${slotClass}">
+              <div class="token-box-num">
+                #${v.tokenNumber}
+                ${isSlot ? `<span style="font-size:0.55rem;vertical-align:middle;">${slotDue ? "🔔" : "🕐"}</span>` : ""}
+                ${v.vitals ? ' <span class="vitals-dot" title="Vitals recorded">●</span>' : ""}
+              </div>
+              <div class="token-box-eta">
+                ${isSlot ? formatETA(slotMs) : (idx === 0 ? "NEXT · " : "") + formatETA(etas[v.id])}
+              </div>
+            </div>`;
+          }).join("") || '<div class="queue-empty">Queue is empty.</div>'}
         </div>
 
         ${waiting.length > 8 ? `<div class="queue-empty">+ ${waiting.length - 8} more waiting</div>` : ""}
       </div>`;
   }).join("");
+
+  // Wire repeat-announce buttons via event delegation after innerHTML is set
+  document.getElementById("room-grid").querySelectorAll(".repeat-announce-btn").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      announceToken(btn.dataset.token, btn.dataset.room, btn.dataset.doctor);
+    });
+  });
 }
 
 function firstNameOnly(fullName) {
