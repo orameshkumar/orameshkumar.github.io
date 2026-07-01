@@ -200,10 +200,9 @@
       <button class="btn btn-sm btn-outline" id="rx-close">✕ Close</button>
     </div>
 
-    <!-- Thumbnail grid — always visible; empty state shown when no images yet -->
-    <div id="rx-grid" style="display:flex;flex-wrap:wrap;gap:0.5rem;min-height:40px;margin-bottom:1rem;">
-      <p class="small muted" id="rx-empty-msg" style="margin:0;align-self:center;">No prescription pages yet — use the buttons below to add.</p>
-    </div>
+    <!-- Thumbnail grid — always visible -->
+    <p class="small muted" id="rx-empty-msg" style="margin:0 0 0.75rem;">No prescription pages yet — use the buttons below to add.</p>
+    <div id="rx-grid" style="display:flex;flex-wrap:wrap;gap:0.5rem;margin-bottom:1rem;"></div>
 
     <!-- Add buttons — always visible -->
     <div style="display:flex;gap:0.75rem;flex-wrap:wrap;margin-bottom:0.75rem;">
@@ -668,15 +667,12 @@ function renderRxGrid(visit) {
   const grid = document.getElementById("rx-grid");
   const emptyMsg = document.getElementById("rx-empty-msg");
 
+  emptyMsg.style.display = saved.length === 0 ? "block" : "none";
+
   if (saved.length === 0) {
-    // No images yet — show empty state message, clear any old thumbnails
     grid.innerHTML = "";
-    grid.appendChild(emptyMsg);
-    emptyMsg.style.display = "block";
     return;
   }
-
-  emptyMsg.style.display = "none";
 
   // Render thumbnails for every saved page
   grid.innerHTML = saved.map((img, i) => `
