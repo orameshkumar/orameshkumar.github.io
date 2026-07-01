@@ -200,34 +200,21 @@
       <button class="btn btn-sm btn-outline" id="rx-close">✕ Close</button>
     </div>
 
-    <!-- Saved images grid — shown when at least one image exists -->
-    <div id="rx-saved-section" style="display:none;margin-bottom:1rem;">
-      <p class="small" style="font-weight:600;margin-bottom:0.5rem;">Saved pages</p>
-      <div id="rx-saved-grid" style="display:flex;flex-wrap:wrap;gap:0.5rem;"></div>
-      <hr class="section-divider" />
+    <!-- Thumbnail grid — always visible; empty state shown when no images yet -->
+    <div id="rx-grid" style="display:flex;flex-wrap:wrap;gap:0.5rem;min-height:40px;margin-bottom:1rem;">
+      <p class="small muted" id="rx-empty-msg" style="margin:0;align-self:center;">No prescription pages yet — use the buttons below to add.</p>
     </div>
 
-    <!-- Add more pages -->
-    <p class="small" style="font-weight:600;margin-bottom:0.5rem;">Add page(s)</p>
-    <div style="display:flex;gap:0.75rem;margin-bottom:1rem;flex-wrap:wrap;">
-      <label class="btn btn-outline" style="cursor:pointer;">
+    <!-- Add buttons — always visible -->
+    <div style="display:flex;gap:0.75rem;flex-wrap:wrap;margin-bottom:0.75rem;">
+      <label class="btn btn-outline" style="cursor:pointer;" id="rx-camera-label">
         📷 Take photo
         <input type="file" id="rx-camera-input" accept="image/*" capture="environment" style="display:none;" />
       </label>
-      <label class="btn btn-outline" style="cursor:pointer;">
+      <label class="btn btn-outline" style="cursor:pointer;" id="rx-file-label">
         📁 Choose file(s)
         <input type="file" id="rx-file-input" accept="image/*" multiple style="display:none;" />
       </label>
-    </div>
-
-    <!-- Pending (not yet saved) images -->
-    <div id="rx-pending-section" style="display:none;margin-bottom:1rem;">
-      <p class="small" style="font-weight:600;margin-bottom:0.5rem;">Ready to save</p>
-      <div id="rx-pending-grid" style="display:flex;flex-wrap:wrap;gap:0.5rem;"></div>
-      <div class="flex-between" style="margin-top:0.75rem;">
-        <button class="btn btn-outline btn-sm" id="rx-discard-all">Discard all pending</button>
-        <button class="btn btn-primary" id="rx-save">Save <span id="rx-save-count"></span> page(s)</button>
-      </div>
     </div>
 
     <p class="small muted" id="rx-settings-note"></p>
@@ -622,12 +609,12 @@ document.getElementById("token-status-filter").addEventListener("change", render
 document.getElementById("token-refresh-btn").addEventListener("click", fetchHistory);
 datePicker.addEventListener("change", () => { syncDateDisplay(datePicker.value); fetchHistory(); });
 
-// ----- Prescription capture, compression, and save (multi-image) -----
-// Data model: visits/{id}.prescriptions = array of { id, pageNumber, dataUrl, mimeType, compressedAt, originalSizeKb, compressedSizeKb }
-// Legacy: visits/{id}.prescription (singular object) is transparently migrated to the array on first save.
+// ----- Prescription capture, compression, and auto-save -----
+// UX model: selecting or photographing a file immediately compresses and saves it to Firestore.
+// No pending queue, no separate Save button — each pick is an immediate addition.
+// The same file can be picked again because we reset the input value after reading the files.
 
 let rxFromHistory = false;
-let rxPendingImages = []; // { dataUrl, originalKb, compressedKb, width, height } — not yet saved
 
 async function getRxSettings() {
   try {
@@ -648,23 +635,16 @@ function getSavedImages(visit) {
 async function openRx(visitId, fromHistory = false) {
   activeRxVisitId = visitId;
   rxFromHistory = fromHistory;
-  rxPendingImages = [];
-  document.getElementById("rx-file-input").value = "";
-  document.getElementById("rx-camera-input").value = "";
 
-  // Always fetch the visit fresh from Firestore when opening the modal.
-  // The onSnapshot listener that populates todayVisits may not carry prescription
-  // image data reliably — large base64 arrays in query snapshots can be dropped
-  // or stale. A direct getDoc on the single document is always authoritative.
+  // Always fetch fresh from Firestore — the onSnapshot cache may not carry large prescription arrays
   let visit;
   try {
     const snap = await getDoc(doc(db, "visits", visitId));
     visit = snap.exists() ? { id: snap.id, ...snap.data() } : null;
   } catch (err) {
-    // Fall back to the cached version if the fetch fails (e.g. offline)
     const list = fromHistory ? historyVisits : todayVisits;
     visit = list.find((v) => v.id === visitId) || null;
-    console.warn("openRx: getDoc failed, using cached visit:", err);
+    console.warn("openRx: getDoc failed, using cache:", err);
   }
   if (!visit) return;
 
@@ -673,77 +653,64 @@ async function openRx(visitId, fromHistory = false) {
 
   const { quality, maxPx } = await getRxSettings();
   document.getElementById("rx-settings-note").textContent =
-    `JPEG ${Math.round(quality * 100)}%, max ${maxPx}px · Change in Admin Setup. Each compressed image is ~20–50 KB; Firestore limit is 1 MB per visit.`;
+    `JPEG ${Math.round(quality * 100)}%, max ${maxPx}px — each page ~20–50 KB. Change in Admin Setup.`;
 
-  renderRxModal(visit);
+  // Reset file inputs so the same file can be selected again
+  document.getElementById("rx-file-input").value = "";
+  document.getElementById("rx-camera-input").value = "";
+
+  renderRxGrid(visit);
   document.getElementById("rx-modal").style.display = "flex";
 }
 
-function renderRxModal(visit) {
+function renderRxGrid(visit) {
   const saved = getSavedImages(visit);
+  const grid = document.getElementById("rx-grid");
+  const emptyMsg = document.getElementById("rx-empty-msg");
 
-  // Saved section
-  const savedSection = document.getElementById("rx-saved-section");
-  const savedGrid = document.getElementById("rx-saved-grid");
-  if (saved.length > 0) {
-    savedGrid.innerHTML = saved.map((img, i) => `
-      <div style="position:relative;width:120px;">
-        <img src="${img.dataUrl}" alt="Page ${img.pageNumber || i + 1}"
-          style="width:120px;height:90px;object-fit:cover;border-radius:6px;border:1px solid var(--line);display:block;cursor:pointer;"
-          onclick="this.parentElement.querySelector('.rx-lightbox').style.display='flex'" />
-        <span style="position:absolute;top:4px;left:6px;background:rgba(0,0,0,0.55);color:white;font-size:0.65rem;padding:1px 5px;border-radius:3px;">
-          p.${img.pageNumber || i + 1}
-        </span>
-        <div class="rx-lightbox" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:300;align-items:center;justify-content:center;flex-direction:column;gap:1rem;"
-          onclick="this.style.display='none'">
-          <img src="${img.dataUrl}" style="max-width:90vw;max-height:80vh;border-radius:8px;" onclick="event.stopPropagation()" />
-          <p style="color:rgba(255,255,255,0.6);font-size:0.8rem;">Tap anywhere to close</p>
-        </div>
-        <button class="btn btn-sm btn-danger" data-delete-saved-rx="${img.id}"
-          style="width:100%;margin-top:0.25rem;font-size:0.75rem;padding:0.2rem 0;">
-          Delete p.${img.pageNumber || i + 1}
-        </button>
-      </div>`).join("");
-    savedSection.style.display = "block";
-    savedGrid.querySelectorAll("[data-delete-saved-rx]").forEach((b) =>
-      b.addEventListener("click", () => deleteSavedRxImage(b.dataset.deleteSavedRx))
-    );
-  } else {
-    savedSection.style.display = "none";
-    savedGrid.innerHTML = "";
-  }
-
-  renderPendingGrid();
-}
-
-function renderPendingGrid() {
-  const pendingSection = document.getElementById("rx-pending-section");
-  const pendingGrid = document.getElementById("rx-pending-grid");
-  if (rxPendingImages.length === 0) {
-    pendingSection.style.display = "none";
+  if (saved.length === 0) {
+    // No images yet — show empty state message, clear any old thumbnails
+    grid.innerHTML = "";
+    grid.appendChild(emptyMsg);
+    emptyMsg.style.display = "block";
     return;
   }
-  pendingSection.style.display = "block";
-  document.getElementById("rx-save-count").textContent = rxPendingImages.length;
-  pendingGrid.innerHTML = rxPendingImages.map((img, i) => `
-    <div style="position:relative;width:120px;">
-      <img src="${img.dataUrl}" alt="Pending ${i + 1}"
-        style="width:120px;height:90px;object-fit:cover;border-radius:6px;border:2px solid var(--teal-500);display:block;" />
-      <span style="position:absolute;top:4px;left:6px;background:rgba(0,0,0,0.55);color:white;font-size:0.65rem;padding:1px 5px;border-radius:3px;">
-        new ${i + 1}
+
+  emptyMsg.style.display = "none";
+
+  // Render thumbnails for every saved page
+  grid.innerHTML = saved.map((img, i) => `
+    <div style="position:relative;width:110px;">
+      <img src="${img.dataUrl}" alt="p.${img.pageNumber || i + 1}"
+        style="width:110px;height:82px;object-fit:cover;border-radius:6px;border:1px solid var(--line);display:block;cursor:pointer;"
+        onclick="this.parentElement.querySelector('.rx-lb').style.display='flex'" />
+      <span style="position:absolute;top:3px;left:4px;background:rgba(0,0,0,0.6);color:white;font-size:0.6rem;padding:1px 5px;border-radius:3px;">
+        p.${img.pageNumber || i + 1}
       </span>
-      <span style="position:absolute;top:4px;right:6px;background:rgba(0,0,0,0.55);color:white;font-size:0.6rem;padding:1px 4px;border-radius:3px;">
-        ${img.compressedKb}KB
-      </span>
-      <button class="btn btn-sm btn-danger" data-discard-pending="${i}"
-        style="width:100%;margin-top:0.25rem;font-size:0.75rem;padding:0.2rem 0;">✕ Remove</button>
+      <div class="rx-lb" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.88);z-index:300;align-items:center;justify-content:center;flex-direction:column;gap:1rem;"
+        onclick="this.style.display='none'">
+        <img src="${img.dataUrl}" style="max-width:92vw;max-height:82vh;border-radius:8px;" onclick="event.stopPropagation()" />
+        <p style="color:rgba(255,255,255,0.6);font-size:0.8rem;">Tap anywhere to close</p>
+      </div>
+      <button class="btn btn-sm btn-danger" data-delete-saved-rx="${img.id}"
+        style="width:100%;margin-top:0.25rem;font-size:0.7rem;padding:0.15rem 0;">
+        Delete p.${img.pageNumber || i + 1}
+      </button>
     </div>`).join("");
-  pendingGrid.querySelectorAll("[data-discard-pending]").forEach((b) =>
-    b.addEventListener("click", () => {
-      rxPendingImages.splice(Number(b.dataset.discardPending), 1);
-      renderPendingGrid();
-    })
+
+  grid.querySelectorAll("[data-delete-saved-rx]").forEach((b) =>
+    b.addEventListener("click", () => deleteSavedRxImage(b.dataset.deleteSavedRx))
   );
+}
+
+function setRxBusy(busy) {
+  // Disable the add buttons and show a status message while compressing/saving
+  const note = document.getElementById("rx-settings-note");
+  document.getElementById("rx-camera-label").style.pointerEvents = busy ? "none" : "";
+  document.getElementById("rx-camera-label").style.opacity = busy ? "0.5" : "";
+  document.getElementById("rx-file-label").style.pointerEvents = busy ? "none" : "";
+  document.getElementById("rx-file-label").style.opacity = busy ? "0.5" : "";
+  if (busy) note.textContent = "Compressing and saving…";
 }
 
 async function compressImage(file, quality, maxPx) {
@@ -770,80 +737,73 @@ async function compressImage(file, quality, maxPx) {
   });
 }
 
-async function handleFilesSelected(files) {
-  if (!files || files.length === 0) return;
+async function handleFilesSelected(inputEl) {
+  // Capture files FIRST, then reset the input — this is the correct order.
+  // Resetting value="" after capturing the FileList ensures the same file can
+  // be picked again on the next click (the input has no memory of prior picks).
+  const files = Array.from(inputEl.files || []);
+  inputEl.value = "";   // reset immediately so same file is selectable next time
+  if (files.length === 0) return;
+
+  setRxBusy(true);
   const { quality, maxPx } = await getRxSettings();
-  document.getElementById("rx-settings-note").textContent = `Compressing ${files.length} image(s)…`;
-  for (const file of Array.from(files)) {
-    const originalKb = Math.round(file.size / 1024);
-    const { dataUrl, width, height } = await compressImage(file, quality, maxPx);
-    const compressedKb = Math.round((dataUrl.length * 3) / 4 / 1024);
-    rxPendingImages.push({ dataUrl, originalKb, compressedKb, width, height });
-  }
-  const totalKb = rxPendingImages.reduce((s, i) => s + i.compressedKb, 0);
-  const note = `JPEG ${Math.round(quality * 100)}%, max ${maxPx}px · ${rxPendingImages.length} pending, ~${totalKb} KB total.`;
-  document.getElementById("rx-settings-note").textContent =
-    totalKb > 700 ? `⚠ ${note} Approaching Firestore 1 MB limit.` : note;
-  renderPendingGrid();
-}
 
-document.getElementById("rx-camera-input").addEventListener("change", (e) => {
-  handleFilesSelected(e.target.files); e.target.value = "";
-});
-document.getElementById("rx-file-input").addEventListener("change", (e) => {
-  handleFilesSelected(e.target.files); e.target.value = "";
-});
-
-document.getElementById("rx-discard-all").addEventListener("click", () => {
-  rxPendingImages = []; renderPendingGrid();
-});
-
-document.getElementById("rx-close").addEventListener("click", () => {
-  document.getElementById("rx-modal").style.display = "none";
-});
-
-document.getElementById("rx-save").addEventListener("click", async () => {
-  if (rxPendingImages.length === 0) return;
-  const saveBtn = document.getElementById("rx-save");
-  saveBtn.textContent = "Saving…"; saveBtn.disabled = true;
   try {
-    // Always re-fetch the visit from Firestore to get the definitive current prescriptions array —
-    // avoids any staleness in the cached todayVisits/historyVisits arrays (e.g. if onSnapshot
-    // replaced the array between when the modal opened and when Save is clicked).
+    // Always re-fetch from Firestore to get the definitive current prescriptions array
     const visitSnap = await getDoc(doc(db, "visits", activeRxVisitId));
     if (!visitSnap.exists()) throw new Error("Visit not found");
-    const freshVisit = { id: visitSnap.id, ...visitSnap.data() };
+    let currentVisit = { id: visitSnap.id, ...visitSnap.data() };
+    let existingSaved = getSavedImages(currentVisit).filter((x) => x.id !== "legacy");
 
-    const existingSaved = getSavedImages(freshVisit).filter((x) => x.id !== "legacy");
-    const nextPage = existingSaved.length + 1;
-    const newImages = rxPendingImages.map((img, i) => ({
-      id: `rx-${Date.now()}-${i}`,
-      pageNumber: nextPage + i,
-      dataUrl: img.dataUrl,
-      mimeType: "image/jpeg",
-      compressedAt: new Date().toISOString(),
-      originalSizeKb: img.originalKb,
-      compressedSizeKb: img.compressedKb,
-    }));
-    const updatedPrescriptions = [...existingSaved, ...newImages];
-    await updateDoc(doc(db, "visits", activeRxVisitId), { prescriptions: updatedPrescriptions, prescription: null });
+    for (const file of files) {
+      const originalKb = Math.round(file.size / 1024);
+      const { dataUrl, width, height } = await compressImage(file, quality, maxPx);
+      const compressedKb = Math.round((dataUrl.length * 3) / 4 / 1024);
+      const newPage = {
+        id: `rx-${Date.now()}-${Math.random().toString(36).slice(2,6)}`,
+        pageNumber: existingSaved.length + 1,
+        dataUrl,
+        mimeType: "image/jpeg",
+        compressedAt: new Date().toISOString(),
+        originalSizeKb: originalKb,
+        compressedSizeKb: compressedKb,
+      };
+      existingSaved = [...existingSaved, newPage];
 
-    // Update the correct cached list so the Rx button badge reflects the new count immediately
-    const list = rxFromHistory ? historyVisits : todayVisits;
-    const cached = list.find((v) => v.id === activeRxVisitId);
-    if (cached) { cached.prescriptions = updatedPrescriptions; cached.prescription = null; }
+      // Save after each image so a partial batch failure doesn't lose previous pages
+      await updateDoc(doc(db, "visits", activeRxVisitId), {
+        prescriptions: existingSaved, prescription: null
+      });
 
-    rxPendingImages = [];
-    renderRxModal({ ...freshVisit, prescriptions: updatedPrescriptions, prescription: null });
+      // Update cache
+      const list = rxFromHistory ? historyVisits : todayVisits;
+      const cached = list.find((v) => v.id === activeRxVisitId);
+      if (cached) { cached.prescriptions = existingSaved; cached.prescription = null; }
+
+      // Show the thumbnail immediately after each save
+      currentVisit = { ...currentVisit, prescriptions: existingSaved, prescription: null };
+      renderRxGrid(currentVisit);
+    }
+
+    const totalKb = existingSaved.reduce((s, x) => s + (x.compressedSizeKb || 0), 0);
+    const { quality: q, maxPx: mp } = await getRxSettings();
+    document.getElementById("rx-settings-note").textContent =
+      `JPEG ${Math.round(q * 100)}%, max ${mp}px — ${existingSaved.length} page(s), ~${totalKb} KB total.${totalKb > 700 ? " ⚠ Approaching Firestore 1 MB limit." : ""}`;
+
     if (rxFromHistory) renderHistory();
 
   } catch (err) {
     document.getElementById("rx-settings-note").textContent = `Save failed: ${err.message}`;
   } finally {
-    saveBtn.textContent = "Save"; saveBtn.disabled = false;
-    const cnt = document.getElementById("rx-save-count");
-    if (cnt) cnt.textContent = rxPendingImages.length;
+    setRxBusy(false);
   }
+}
+
+document.getElementById("rx-camera-input").addEventListener("change", (e) => handleFilesSelected(e.target));
+document.getElementById("rx-file-input").addEventListener("change", (e) => handleFilesSelected(e.target));
+
+document.getElementById("rx-close").addEventListener("click", () => {
+  document.getElementById("rx-modal").style.display = "none";
 });
 
 async function deleteSavedRxImage(imageId) {
@@ -860,10 +820,9 @@ async function deleteSavedRxImage(imageId) {
     const cached = list.find((v) => v.id === activeRxVisitId);
     if (cached) { cached.prescriptions = updated; cached.prescription = null; }
     if (rxFromHistory) renderHistory();
-    renderRxModal({ ...freshVisit, prescriptions: updated, prescription: null });
+    renderRxGrid({ ...freshVisit, prescriptions: updated, prescription: null });
   } catch (err) { alert(`Delete failed: ${err.message}`); }
 }
-
 function docFeeFor(v) {
   const id = v.doctorId || (v.preferredDoctorIds || [])[0];
   return doctors.find((d) => d.id === id)?.consultationFee || 0;
