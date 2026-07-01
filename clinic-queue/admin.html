@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <meta name="apple-mobile-web-app-title" content="Clinic Queue" />
@@ -119,8 +120,12 @@
         <p class="small muted" style="margin-bottom:0.75rem;">Spoken aloud when a token is called. Uses the device's built-in text-to-speech. Multiple languages play in sequence.</p>
 
         <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.9rem;">
-          <input type="checkbox" id="announce-enabled-input" style="width:auto;margin:0;" />
-          <label for="announce-enabled-input" style="margin:0;font-weight:600;">Enable voice announcements</label>
+          <label class="toggle-wrap" for="announce-enabled-input">
+            <input type="checkbox" id="announce-enabled-input" />
+            <span class="toggle-track"></span>
+            <span class="toggle-label">Enable voice announcements</span>
+            <span class="toggle-state" id="announce-enabled-state">Off</span>
+          </label>
         </div>
 
         <div id="announce-config" style="display:none;">
@@ -281,9 +286,10 @@ function defaultLangList() {
   ];
 }
 
-// Toggle show/hide of voice config section
+// Toggle show/hide of voice config section and update state label
 document.getElementById("announce-enabled-input").addEventListener("change", (e) => {
   document.getElementById("announce-config").style.display = e.target.checked ? "block" : "none";
+  document.getElementById("announce-enabled-state").textContent = e.target.checked ? "On" : "Off";
 });
 
 function renderLangList(entries) {
@@ -377,6 +383,7 @@ await authReady;
     if (d.visitHistoryCount !== undefined) document.getElementById("visit-history-count-input").value = d.visitHistoryCount;
     // Voice settings
     document.getElementById("announce-enabled-input").checked = !!d.announceEnabled;
+    document.getElementById("announce-enabled-state").textContent = d.announceEnabled ? "On" : "Off";
     document.getElementById("announce-config").style.display = d.announceEnabled ? "block" : "none";
     if (d.announceRepeat) document.getElementById("announce-repeat-input").value = d.announceRepeat;
     if (d.announceRepeatInterval !== undefined) document.getElementById("announce-interval-input").value = d.announceRepeatInterval;
