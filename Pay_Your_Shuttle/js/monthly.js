@@ -45,42 +45,60 @@ const Monthly = (function () {
   }
 
   // ─── Calculate cumulative balance for a member/contribution up to refDate ───
-  // Walks every billing period from activationDate to current period.
+  // Uses actual monthly_fee_records (charges) vs monthly payments (credits).
+  // This ensures balance reflects real fee applications, not theoretical period counting.
   // balance > 0 → amount owed; balance < 0 → advance credit.
   async function calcMemberBalance(member, contrib, refDate) {
     if (!contrib || !contrib.activationDate) return { totalOwed: 0, totalPaid: 0, balance: 0, periods: [], currentPeriod: null };
 
+    var currentPeriod = getPeriodForDate(refDate, contrib);
+
+    // Sum all monthly payments up to refDate
     var payments = await DB.getPaymentsByMember(member.id);
     var monthlyPaid = payments.filter(function (p) {
                                 return p.type === 'monthly' && p.date <= refDate;
                               })
                               .reduce(function (s, p) { return s + (p.amount || 0); }, 0);
 
-    var actDate    = new Date(contrib.activationDate + 'T00:00:00');
-    var refD       = new Date(refDate + 'T00:00:00');
-    if (actDate > refD) return { totalOwed: 0, totalPaid: monthlyPaid, balance: -monthlyPaid, periods: [], currentPeriod: getPeriodForDate(refDate, contrib) };
+    // Sum all monthly fee records up to refDate (actual charges applied)
+    var feeRecords = await DB.getMonthlyFeeRecordsByMember(member.id);
+    var applicableFees = feeRecords.filter(function (r) { return r.date <= refDate; });
+    var totalOwed = applicableFees.reduce(function (s, r) { return s + (r.fee || 0); }, 0);
 
-    var anchorDay  = contrib.dueDay || 1;
-    if (anchorDay > 28) anchorDay = 28;
+    // If no fee records exist yet, fall back to period-counting so balance
+    // still shows for members enrolled before fee-records were introduced.
+    if (applicableFees.length === 0) {
+      var actDate = new Date(contrib.activationDate + 'T00:00:00');
+      var refD    = new Date(refDate + 'T00:00:00');
+      if (actDate > refD) return { totalOwed: 0, totalPaid: monthlyPaid, balance: -monthlyPaid, periods: [], currentPeriod: currentPeriod };
 
-    // First period that covers or starts at activationDate
-    var cursor = new Date(actDate.getFullYear(), actDate.getMonth(), anchorDay);
-    if (cursor > actDate) cursor = new Date(actDate.getFullYear(), actDate.getMonth() - 1, anchorDay);
+      var anchorDay = contrib.dueDay || 1;
+      if (anchorDay > 28) anchorDay = 28;
 
-    var currentPeriod = getPeriodForDate(refDate, contrib);
-    var periods = [];
-    var maxIter = 120;
-    for (var iter = 0; iter < maxIter; iter++) {
-      var pStart = cursor.toISOString().split('T')[0];
-      if (pStart > currentPeriod.start) break;
-      var pEnd   = new Date(cursor.getFullYear(), cursor.getMonth() + 1, anchorDay - 1).toISOString().split('T')[0];
-      periods.push({ start: pStart, end: pEnd, label: cursor.toLocaleString('default', { month: 'short', year: 'numeric' }) });
-      cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, anchorDay);
+      var cursor = new Date(actDate.getFullYear(), actDate.getMonth(), anchorDay);
+      if (cursor > actDate) cursor = new Date(actDate.getFullYear(), actDate.getMonth() - 1, anchorDay);
+
+      var periods = [];
+      var maxIter = 120;
+      for (var iter = 0; iter < maxIter; iter++) {
+        var pStart = cursor.toISOString().split('T')[0];
+        if (pStart > currentPeriod.start) break;
+        var pEnd = new Date(cursor.getFullYear(), cursor.getMonth() + 1, anchorDay - 1).toISOString().split('T')[0];
+        periods.push({ start: pStart, end: pEnd, label: cursor.toLocaleString('default', { month: 'short', year: 'numeric' }) });
+        cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, anchorDay);
+      }
+
+      totalOwed = periods.length * (contrib.monthlyFee || 0);
+      var balance = totalOwed - monthlyPaid;
+      return { totalOwed, totalPaid: monthlyPaid, balance, periods, currentPeriod };
     }
 
-    var totalOwed = periods.length * (contrib.monthlyFee || 0);
-    var balance   = totalOwed - monthlyPaid;
+    // Build periods list from actual fee records for display
+    var periods = applicableFees.map(function (r) {
+      return { start: r.date, end: r.date, label: r.period ? fmtPeriod(r.period) : r.date };
+    });
 
+    var balance = totalOwed - monthlyPaid;
     return { totalOwed, totalPaid: monthlyPaid, balance, periods, currentPeriod };
   }
 

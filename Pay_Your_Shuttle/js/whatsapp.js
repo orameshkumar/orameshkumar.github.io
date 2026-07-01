@@ -40,8 +40,26 @@ const WhatsApp = (function () {
 
   function openWA(mobile, message) {
     var phone = '91' + mobile.replace(/\D/g, '');
-    var url = 'https://wa.me/' + phone + '?text=' + encodeURIComponent(message);
-    window.open(url, '_blank');
+    var url = 'https://api.whatsapp.com/send?phone=' + phone + '&text=' + encodeURIComponent(message);
+
+    // iOS Safari and PWAs block window.open — use a click-dispatched anchor instead
+    var a = document.createElement('a');
+    a.href = url;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+
+    // Fallback: if the link didn't navigate (common in iOS standalone PWA mode),
+    // redirect the current page after a short delay
+    setTimeout(function () {
+      document.body.removeChild(a);
+      // Detect iOS standalone (home-screen PWA) mode
+      if (window.navigator.standalone || window.matchMedia('(display-mode: standalone)').matches) {
+        window.location.href = url;
+      }
+    }, 300);
   }
 
   function shouldConfirmMonthly() { return lsGet(KEYS.TOGGLE_MONTHLY, DEFAULTS.TOGGLE_MONTHLY) === '1'; }
