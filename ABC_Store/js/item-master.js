@@ -208,6 +208,7 @@ const ItemMaster = (function () {
     var nameVal = item ? _escapeAttr(item.name) : '';
     var itemCodeVal = item ? _escapeAttr(item.itemCode || '') : _generateItemCode();
     var priceVal = item ? item.basePricePerKg : '';
+    var mrpVal = item ? (item.mrpPerUnit != null ? item.mrpPerUnit : '') : '';
     var voiceTagVal = item ? _escapeAttr(item.voiceTag || '') : '';
     var baseUnit = item ? (item.baseUnit || 'kg') : 'kg';
 
@@ -249,6 +250,12 @@ const ItemMaster = (function () {
             '<label for="item-price-input" id="item-price-label">' + priceLabel + '</label>' +
             '<input type="number" id="item-price-input" placeholder="Enter price" value="' + priceVal + '" min="0" step="0.01">' +
             '<span id="item-price-error" style="color:#ea4335;font-size:0.75rem;display:none;margin-top:4px;">Base price is required</span>' +
+          '</div>' +
+          '<div class="form-group">' +
+            '<label for="item-mrp-input">MRP per Unit (₹)</label>' +
+            '<input type="number" id="item-mrp-input" placeholder="Enter MRP (optional)" value="' + mrpVal + '" min="0" max="999999.99" step="0.01">' +
+            '<span id="item-mrp-error" style="color:#ea4335;font-size:0.75rem;display:none;margin-top:4px;"></span>' +
+            '<span id="item-mrp-warning" style="color:#f9ab00;font-size:0.75rem;display:none;margin-top:4px;">MRP is less than Base Price</span>' +
           '</div>' +
           '<div class="form-group">' +
             '<label for="item-voicetag-input">Voice Tag</label>' +
@@ -523,11 +530,14 @@ const ItemMaster = (function () {
     var nameInput = document.getElementById('item-name-input');
     var itemCodeInput = document.getElementById('item-code-input');
     var priceInput = document.getElementById('item-price-input');
+    var mrpInput = document.getElementById('item-mrp-input');
     var voiceTagInput = document.getElementById('item-voicetag-input');
     var unitSelect = document.getElementById('item-unit-select');
     var nameError = document.getElementById('item-name-error');
     var codeError = document.getElementById('item-code-error');
     var priceError = document.getElementById('item-price-error');
+    var mrpError = document.getElementById('item-mrp-error');
+    var mrpWarning = document.getElementById('item-mrp-warning');
 
     var name = nameInput ? nameInput.value.trim() : '';
     var itemCode = itemCodeInput ? itemCodeInput.value.trim().toUpperCase() : '';
@@ -539,6 +549,8 @@ const ItemMaster = (function () {
     if (nameError) nameError.style.display = 'none';
     if (codeError) codeError.style.display = 'none';
     if (priceError) priceError.style.display = 'none';
+    if (mrpError) mrpError.style.display = 'none';
+    if (mrpWarning) mrpWarning.style.display = 'none';
 
     // Validate
     var valid = true;
@@ -558,7 +570,28 @@ const ItemMaster = (function () {
       valid = false;
     }
 
+    // MRP validation
+    var mrpPerUnit = null;
+    var mrpRawValue = mrpInput ? mrpInput.value.trim() : '';
+    if (mrpRawValue !== '') {
+      var mrpParsed = parseFloat(mrpRawValue);
+      if (isNaN(mrpParsed) || mrpParsed < 0 || mrpParsed > 999999.99) {
+        if (mrpError) {
+          mrpError.textContent = 'MRP must be a number between 0.00 and 999,999.99';
+          mrpError.style.display = 'block';
+        }
+        valid = false;
+      } else {
+        mrpPerUnit = mrpParsed;
+      }
+    }
+
     if (!valid) return;
+
+    // Non-blocking warning: MRP < Base Price
+    if (mrpPerUnit !== null && !isNaN(price) && mrpPerUnit < price) {
+      if (mrpWarning) mrpWarning.style.display = 'block';
+    }
 
     // Check uniqueness of item code
     var duplicateItem = allItems.find(function (i) {
@@ -593,6 +626,7 @@ const ItemMaster = (function () {
           itemCode: itemCode,
           basePricePerKg: price,
           baseUnit: baseUnit,
+          mrpPerUnit: mrpPerUnit,
           voiceTag: voiceTag,
           imageBase64: capturedImageBase64 || (existingItem ? existingItem.imageBase64 : null),
           isFavorite: existingItem ? (existingItem.isFavorite || false) : false,
@@ -613,6 +647,7 @@ const ItemMaster = (function () {
           itemCode: itemCode,
           basePricePerKg: price,
           baseUnit: baseUnit,
+          mrpPerUnit: mrpPerUnit,
           voiceTag: voiceTag,
           imageBase64: capturedImageBase64 || null,
           createdAt: now,

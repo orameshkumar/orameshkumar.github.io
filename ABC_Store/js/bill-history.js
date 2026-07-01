@@ -127,6 +127,9 @@ const BillHistory = (function () {
     html += '<div class="bill-card-header">';
     html += '<span class="bill-number">' + escapeHtml(bill.billNumber) + '</span>';
     html += '<span class="bill-card-date">' + escapeHtml(formattedDate) + '</span>';
+    if (bill.totalSavings && bill.totalSavings > 0) {
+      html += '<span class="bill-card-savings" style="color:#0d904f;font-size:0.7rem;font-weight:600;">Save ' + escapeHtml(Utils.formatCurrency(bill.totalSavings)) + '</span>';
+    }
     html += '<span class="bill-card-total">' + escapeHtml(formattedTotal) + '</span>';
     html += '<button class="bill-delete-btn" data-bill-id="' + bill.id + '" aria-label="Delete bill ' + escapeHtml(bill.billNumber) + '">🗑️</button>';
     html += '</div>';
@@ -151,16 +154,18 @@ const BillHistory = (function () {
   function renderBillDetail(bill) {
     var html = '<div class="bill-card-detail">';
     html += '<table class="bill-detail-table">';
-    html += '<thead><tr><th>Item</th><th>Qty</th><th>Price</th></tr></thead>';
+    html += '<thead><tr><th>Item</th><th>Qty</th><th>Savings</th><th>Price</th></tr></thead>';
     html += '<tbody>';
 
     if (bill.lineItems && bill.lineItems.length > 0) {
       bill.lineItems.forEach(function (item) {
         var qty = Utils.formatQuantity(item.quantityGrams);
         var price = Utils.formatCurrency(item.lineTotal);
+        var savingsDisplay = (item.lineSavings && item.lineSavings > 0) ? Utils.formatCurrency(item.lineSavings) : '\u2014';
         html += '<tr>';
         html += '<td>' + escapeHtml(item.itemName) + '</td>';
         html += '<td>' + escapeHtml(qty) + '</td>';
+        html += '<td style="color:#0d904f;">' + escapeHtml(savingsDisplay) + '</td>';
         html += '<td>' + escapeHtml(price) + '</td>';
         html += '</tr>';
       });
@@ -169,6 +174,9 @@ const BillHistory = (function () {
     html += '</tbody>';
     html += '</table>';
     html += '<div class="bill-detail-total">Total: ' + escapeHtml(Utils.formatCurrency(bill.total)) + '</div>';
+    if (bill.totalSavings && bill.totalSavings > 0) {
+      html += '<div class="bill-detail-savings" style="color:#0d904f;font-weight:600;text-align:right;font-size:0.85rem;margin-top:4px;">You Saved: ' + escapeHtml(Utils.formatCurrency(bill.totalSavings)) + '</div>';
+    }
     html += '<button class="btn-whatsapp-share" data-bill-id="' + bill.id + '">Share via WhatsApp</button>';
     html += '</div>';
 

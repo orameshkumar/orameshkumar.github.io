@@ -120,6 +120,9 @@ const Utils = (function () {
 
     lines.push('');
     lines.push('*Total: ' + formatCurrency(bill.total) + '*');
+    if (bill.totalSavings && bill.totalSavings > 0) {
+      lines.push('\u{1F389} *You Saved: ' + formatCurrency(bill.totalSavings) + '*');
+    }
     lines.push('');
     lines.push('Thank you for your purchase!');
 

@@ -155,6 +155,36 @@ const Billing = (function () {
     });
   }
 
+  // ─── Savings Calculation ───────────────────────────────────────────────────
+
+  /**
+   * Calculate line-level savings for a single bill line item.
+   * Savings = (MRP total) - (Base price total), floored at zero.
+   *
+   * @param {number|null|undefined} mrpPerUnit - MRP per unit (null/undefined means no MRP)
+   * @param {number} basePricePerKg - Base selling price per unit
+   * @param {number} quantity - Quantity (grams/ml for kg/litre, count for count items)
+   * @param {string} baseUnit - 'kg', 'litre', or 'count'
+   * @returns {number} Savings rounded to 2 decimal places, minimum 0
+   */
+  function calculateLineSavings(mrpPerUnit, basePricePerKg, quantity, baseUnit) {
+    if (mrpPerUnit === null || mrpPerUnit === undefined) return 0;
+
+    var mrpTotal, baseTotal;
+    if (baseUnit === 'count') {
+      mrpTotal = mrpPerUnit * quantity;
+      baseTotal = basePricePerKg * quantity;
+    } else {
+      // kg or litre: quantity is in grams/ml
+      mrpTotal = mrpPerUnit * quantity / 1000;
+      baseTotal = basePricePerKg * quantity / 1000;
+    }
+
+    var savings = mrpTotal - baseTotal;
+    if (savings < 0) savings = 0;
+    return Math.round(savings * 100) / 100;
+  }
+
   // ─── Item Grid (5.1, 5.2) ──────────────────────────────────────────────────
 
   /**
@@ -374,6 +404,9 @@ const Billing = (function () {
       lineTotal = Utils.calculateLineTotal(item.basePricePerKg, quantity);
     }
 
+    var mrpPerUnit = item.mrpPerUnit || null;
+    var lineSavings = calculateLineSavings(mrpPerUnit, item.basePricePerKg, quantity, baseUnit);
+
     var lineItem = {
       id: Utils.generateId(),
       itemId: item.id,
@@ -382,7 +415,9 @@ const Billing = (function () {
       quantityGrams: quantity,
       pricePerKg: item.basePricePerKg,
       lineTotal: lineTotal,
-      priceOverridden: false
+      priceOverridden: false,
+      mrpPerUnit: mrpPerUnit,
+      lineSavings: lineSavings
     };
 
     currentBillItems.push(lineItem);
@@ -453,6 +488,7 @@ const Billing = (function () {
         + '<span class="line-item-index">' + (index + 1) + '.</span>'
         + '<span class="line-item-name">' + lineItem.itemName + '</span>'
         + '<span class="line-item-qty" data-action="edit-qty" title="Tap to edit quantity">' + qtyDisplay + '</span>'
+        + (lineItem.lineSavings > 0 ? '<span class="line-item-savings" style="color:#0d904f;font-size:0.7rem;">Save ' + Utils.formatCurrency(lineItem.lineSavings) + '</span>' : '')
         + '<span class="line-item-price' + (lineItem.priceOverridden ? ' price-overridden' : '') + '" data-action="edit-price" title="Tap to override price">' + priceDisplay + '</span>'
         + '<button class="line-item-delete" data-action="delete" aria-label="Delete ' + lineItem.itemName + '">❌</button>'
         + '</div>';
@@ -477,6 +513,7 @@ const Billing = (function () {
 
   /**
    * Update the bill total display.
+   * Also calculates and displays total savings below the bill total.
    */
   function updateBillTotal() {
     var total = currentBillItems.reduce(function (sum, item) {
@@ -487,6 +524,33 @@ const Billing = (function () {
 
     if (billTotalEl) {
       billTotalEl.textContent = Utils.formatCurrency(total);
+    }
+
+    // Calculate total savings as sum of all lineSavings
+    var totalSavings = currentBillItems.reduce(function (sum, item) {
+      return sum + (item.lineSavings || 0);
+    }, 0);
+    totalSavings = Math.round(totalSavings * 100) / 100;
+
+    // Get or create the total savings display element
+    var savingsEl = document.getElementById('bill-total-savings');
+    if (!savingsEl) {
+      savingsEl = document.createElement('div');
+      savingsEl.id = 'bill-total-savings';
+      savingsEl.style.cssText = 'color:#0d904f;font-size:0.85rem;font-weight:600;text-align:right;padding:4px 8px;display:none;';
+      // Insert after the bill-footer (parent of billTotalEl)
+      if (billTotalEl && billTotalEl.parentElement) {
+        billTotalEl.parentElement.parentElement.insertBefore(savingsEl, billTotalEl.parentElement.nextSibling);
+      }
+    }
+
+    // Show or hide based on totalSavings value
+    if (totalSavings > 0) {
+      savingsEl.textContent = 'Total Savings: ' + Utils.formatCurrency(totalSavings);
+      savingsEl.style.display = 'block';
+    } else {
+      savingsEl.style.display = 'none';
+      savingsEl.textContent = '';
     }
   }
 
@@ -529,6 +593,9 @@ const Billing = (function () {
         lineItem.lineTotal = Utils.calculateLineTotal(lineItem.pricePerKg, newQty);
       }
     }
+
+    // Recalculate savings regardless of price override (savings always use original base price)
+    lineItem.lineSavings = calculateLineSavings(lineItem.mrpPerUnit, lineItem.pricePerKg, newQty, unit);
 
     renderBillItems();
     updateBillTotal();
@@ -605,9 +672,17 @@ const Billing = (function () {
         itemName: li.itemName,
         quantityGrams: li.quantityGrams,
         pricePerKg: li.pricePerKg,
-        lineTotal: li.lineTotal
+        lineTotal: li.lineTotal,
+        mrpPerUnit: li.mrpPerUnit || null,
+        lineSavings: li.lineSavings || 0
       };
     });
+
+    // Calculate total savings as sum of all line savings
+    var totalSavings = lineItemsForStorage.reduce(function (sum, li) {
+      return sum + (li.lineSavings || 0);
+    }, 0);
+    totalSavings = Math.round(totalSavings * 100) / 100;
 
     var bill = {
       id: Utils.generateId(),
@@ -616,6 +691,7 @@ const Billing = (function () {
       time: timeStr,
       lineItems: lineItemsForStorage,
       total: total,
+      totalSavings: totalSavings,
       createdAt: now.toISOString()
     };
 
@@ -651,6 +727,13 @@ const Billing = (function () {
 
     renderBillItems();
     updateBillTotal();
+
+    // Hide total savings display on reset
+    var savingsEl = document.getElementById('bill-total-savings');
+    if (savingsEl) {
+      savingsEl.style.display = 'none';
+      savingsEl.textContent = '';
+    }
 
     // Full reset — clear item and quantity selections
     if (itemGrid) {

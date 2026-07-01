@@ -118,16 +118,34 @@ const Reports = (function () {
       totalSales += bill.total;
     });
 
+    var totalSavings = 0;
+    bills.forEach(function (bill) {
+      totalSavings += (bill.totalSavings || 0);
+    });
+    var billCount = bills.length;
+    var avgSavings = billCount > 0 ? (totalSavings / billCount) : 0;
+
     var formattedTotal = Utils.formatCurrency(totalSales);
     var formattedFrom = Utils.formatDate(startDate);
     var formattedTo = Utils.formatDate(endDate);
-    var billCount = bills.length;
+    var formattedTotalSavings = Utils.formatCurrency(totalSavings);
+    var formattedAvgSavings = Utils.formatCurrency(avgSavings);
 
     var html = '<div class="report-summary">' +
       '<div class="report-summary-amount">' + formattedTotal + '</div>' +
       '<div class="report-summary-label">Total Sales</div>' +
       '<div class="report-summary-subtext">' +
         formattedFrom + ' to ' + formattedTo + ' &middot; ' + billCount + ' bill' + (billCount !== 1 ? 's' : '') +
+      '</div>' +
+      '<div class="report-summary-savings" style="margin-top:12px;padding-top:12px;border-top:1px solid #e0e0e0;">' +
+        '<div style="display:flex;justify-content:space-between;margin-bottom:4px;">' +
+          '<span style="color:#5f6368;font-size:0.85rem;">Total Savings</span>' +
+          '<span style="color:#0d904f;font-weight:600;font-size:0.85rem;">' + formattedTotalSavings + '</span>' +
+        '</div>' +
+        '<div style="display:flex;justify-content:space-between;">' +
+          '<span style="color:#5f6368;font-size:0.85rem;">Avg. Savings per Bill</span>' +
+          '<span style="color:#0d904f;font-weight:600;font-size:0.85rem;">' + formattedAvgSavings + '</span>' +
+        '</div>' +
       '</div>' +
     '</div>';
 
@@ -151,10 +169,11 @@ const Reports = (function () {
     bills.forEach(function (bill) {
       var date = bill.date;
       if (!grouped[date]) {
-        grouped[date] = { total: 0, count: 0 };
+        grouped[date] = { total: 0, count: 0, savings: 0 };
       }
       grouped[date].total += bill.total;
       grouped[date].count += 1;
+      grouped[date].savings += (bill.totalSavings || 0);
     });
 
     // Sort dates descending
@@ -167,6 +186,7 @@ const Reports = (function () {
       '<thead><tr>' +
         '<th>Date</th>' +
         '<th>Bills</th>' +
+        '<th>Customer Savings</th>' +
         '<th>Daily Total</th>' +
       '</tr></thead>' +
       '<tbody>';
@@ -176,6 +196,7 @@ const Reports = (function () {
       html += '<tr>' +
         '<td>' + Utils.formatDate(date) + '</td>' +
         '<td>' + entry.count + '</td>' +
+        '<td style="color:#0d904f;">' + Utils.formatCurrency(entry.savings) + '</td>' +
         '<td>' + Utils.formatCurrency(entry.total) + '</td>' +
       '</tr>';
     });
