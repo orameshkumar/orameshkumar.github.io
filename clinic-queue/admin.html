@@ -81,6 +81,17 @@
               <option value="600">600 px — minimum</option>
             </select>
           </div>
+          <div class="field">
+            <label for="visit-history-count-input">Past visits shown in consultation modal</label>
+            <select id="visit-history-count-input">
+              <option value="1">1 visit</option>
+              <option value="2">2 visits</option>
+              <option value="3" selected>3 visits (default)</option>
+              <option value="5">5 visits</option>
+              <option value="10">10 visits</option>
+              <option value="0">All visits</option>
+            </select>
+          </div>
         </div>
       </form>
     </div>
@@ -184,6 +195,7 @@ await authReady;
     if (d.upiMerchantCode) document.getElementById("upi-code-input").value = d.upiMerchantCode;
     if (d.prescriptionQuality) document.getElementById("rx-quality-input").value = d.prescriptionQuality;
     if (d.prescriptionMaxPx) document.getElementById("rx-maxpx-input").value = d.prescriptionMaxPx;
+    if (d.visitHistoryCount !== undefined) document.getElementById("visit-history-count-input").value = d.visitHistoryCount;
   }
 })();
 
@@ -196,6 +208,7 @@ document.getElementById("branding-form").addEventListener("submit", async (e) =>
   const upiMerchantCode = document.getElementById("upi-code-input").value.trim();
   const prescriptionQuality = Number(document.getElementById("rx-quality-input").value);
   const prescriptionMaxPx = Number(document.getElementById("rx-maxpx-input").value);
+  const visitHistoryCount = Number(document.getElementById("visit-history-count-input").value);
   if (!name) return;
   await setDoc(doc(db, "clinicSettings", "main"), {
     name,
@@ -205,6 +218,7 @@ document.getElementById("branding-form").addEventListener("submit", async (e) =>
     upiMerchantCode: upiMerchantCode || null,
     prescriptionQuality,
     prescriptionMaxPx,
+    visitHistoryCount,
     updatedAt: new Date().toISOString()
   });
   await applyClinicBranding(); // refresh this page's own banner immediately

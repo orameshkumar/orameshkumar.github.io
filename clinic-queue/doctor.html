@@ -64,7 +64,7 @@
   <div class="card" style="max-width:560px;width:100%;">
     <h2>Consultation — <span id="consult-token-label"></span></h2>
     <div id="consult-patient-info" class="small muted" style="margin-bottom:0.75rem;"></div>
-    <div id="consult-history"></div>
+    <div id="consult-history" style="max-height:40vh;overflow-y:auto;"></div>
     <hr class="section-divider" />
     <div class="field"><label>Consultation notes</label><textarea id="c-notes" rows="4" placeholder="Diagnosis, advice, follow-up…"></textarea></div>
     <div class="flex-between">
@@ -271,22 +271,44 @@ document.getElementById("consult-complete").onclick = async () => {
   act = await computeACT(doctorId); // refresh rolling average for next ETA calc
 };
 
-async function getLastVisits(patientId, excludeVisitId, limit = 3) {
+async function getLastVisits(patientId, excludeVisitId) {
+  // Read the configured visit history count from clinicSettings.
+  // Falls back to 3 if not configured yet (keeps behaviour identical to before for existing deployments).
+  // A value of 0 means "show all visits".
+  let limit = 3;
+  try {
+    const snap = await getDoc(doc(db, "clinicSettings", "main"));
+    if (snap.exists() && snap.data().visitHistoryCount !== undefined) {
+      limit = Number(snap.data().visitHistoryCount);
+    }
+  } catch (err) {
+    console.warn("Could not read visitHistoryCount from clinicSettings, using default of 3:", err);
+  }
+
   const q = query(collection(db, "visits"), where("patientId", "==", patientId), where("status", "==", "completed"));
   const snap = await getDocs(q);
   const visits = [];
   snap.forEach((d) => { if (d.id !== excludeVisitId) visits.push({ id: d.id, ...d.data() }); });
   visits.sort((a, b) => new Date(b.consultEndAt || 0) - new Date(a.consultEndAt || 0));
-  return visits.slice(0, limit);
+  return limit === 0 ? visits : visits.slice(0, limit);
 }
 
 function renderHistory(visits) {
   if (visits.length === 0) return "<p class='small muted'>No prior visits on record.</p>";
-  return `<strong class="small">Last ${visits.length} visit(s)</strong>` + visits.map((v) => `
+  return `<strong class="small">Last ${visits.length} visit(s)</strong>` + visits.map((v) => {
+    const rxSection = v.prescription
+      ? `<details style="margin-top:0.4rem;">
+           <summary class="small" style="cursor:pointer;color:var(--teal-900);font-weight:600;">📋 Prescription image (${v.prescription.compressedSizeKb || "?"}KB)</summary>
+           <img src="${v.prescription.dataUrl}" alt="Prescription" style="max-width:100%;border-radius:6px;border:1px solid var(--line);margin-top:0.4rem;display:block;" loading="lazy" />
+         </details>`
+      : `<p class="small muted" style="margin-top:0.3rem;">No prescription image on record.</p>`;
+    return `
     <div style="padding:0.5rem 0;border-bottom:1px dashed var(--line);">
       <p class="small"><strong>${v.visitDate}</strong> — ${v.doctorNotes ? escapeHtml(v.doctorNotes) : '<span class="muted">No notes recorded</span>'}</p>
       ${v.vitals ? `<p class="small muted">Wt ${v.vitals.weight || "—"}kg · BP ${v.vitals.bpSystolic || "—"}/${v.vitals.bpDiastolic || "—"}</p>` : ""}
-    </div>`).join("");
+      ${rxSection}
+    </div>`;
+  }).join("");
 }
 
 // ---- Patient lookup (simulated barcode scan via manual ID entry) ----
