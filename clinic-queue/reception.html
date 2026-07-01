@@ -94,7 +94,14 @@
         <!-- HISTORY tab -->
         <div id="pane-history" style="display:none;">
           <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;margin-bottom:0.75rem;">
-            <input type="date" id="token-date-picker" style="font-size:0.85rem;padding:0.3rem 0.5rem;border:1px solid var(--line);border-radius:6px;background:white;" />
+            <!-- Date picker: hidden native input for value, visible styled button showing dd-mmm-yyyy -->
+            <div style="position:relative;display:inline-block;">
+              <button id="token-date-display" style="font-size:0.85rem;padding:0.3rem 0.6rem;border:1px solid var(--line);border-radius:6px;background:white;cursor:pointer;min-width:120px;text-align:left;">
+                Select date
+              </button>
+              <input type="date" id="token-date-picker"
+                style="position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;" />
+            </div>
             <select id="token-status-filter" style="font-size:0.85rem;padding:0.3rem 0.5rem;border:1px solid var(--line);border-radius:6px;background:white;">
               <option value="all">All statuses</option>
               <option value="waiting">Waiting</option>
@@ -102,6 +109,7 @@
               <option value="in_consultation">In Consultation</option>
               <option value="completed">Completed</option>
               <option value="fee_pending">Fee pending</option>
+              <option value="fee_collected">Fee collected</option>
               <option value="cancelled">Cancelled</option>
               <option value="no_show">No-Show</option>
             </select>
@@ -557,17 +565,27 @@ let historyVisits = [];
 
 const datePicker = document.getElementById("token-date-picker");
 datePicker.value = todayKey();
+syncDateDisplay(todayKey());
+
+function syncDateDisplay(iso) {
+  if (!iso) return;
+  const d = new Date(iso + "T00:00:00");
+  const formatted = d.toLocaleDateString([], { day: "2-digit", month: "short", year: "numeric" })
+    .replace(/ /g, "-"); // produces "15-Jun-2026" on most locales; the replace normalises separators
+  document.getElementById("token-date-display").textContent = formatted;
+}
 
 function updateDateLabel(iso) {
   const d = new Date(iso + "T00:00:00");
   document.getElementById("token-date-label").textContent =
-    `${d.toLocaleDateString([], { day: "2-digit", month: "short", year: "numeric" })}`;
+    d.toLocaleDateString([], { day: "2-digit", month: "short", year: "numeric" }).replace(/ /g, "-");
 }
 
 function applyHistoryFilter(visits) {
   const f = document.getElementById("token-status-filter").value;
   if (f === "all") return visits;
-  if (f === "fee_pending") return visits.filter((v) => v.status === "completed" && !v.fees);
+  if (f === "fee_pending") return visits.filter((v) => v.status === "completed" && !v.feeCollected && !v.fees);
+  if (f === "fee_collected") return visits.filter((v) => v.feeCollected || !!v.fees);
   return visits.filter((v) => v.status === f);
 }
 
@@ -587,8 +605,7 @@ async function fetchHistory() {
 
 document.getElementById("token-status-filter").addEventListener("change", renderHistory);
 document.getElementById("token-refresh-btn").addEventListener("click", fetchHistory);
-// Also auto-fetch when date changes so it's one-click friendly
-datePicker.addEventListener("change", fetchHistory);
+datePicker.addEventListener("change", () => { syncDateDisplay(datePicker.value); fetchHistory(); });
 
 // ----- Prescription capture, compression, and save (multi-image) -----
 // Data model: visits/{id}.prescriptions = array of { id, pageNumber, dataUrl, mimeType, compressedAt, originalSizeKb, compressedSizeKb }
@@ -903,7 +920,8 @@ async function saveFeeTransaction(mode) {
   const total = consultationFee + medicineFee + otherFee;
   const receiptNumber = `RCPT-${Date.now()}`;
   await updateDoc(doc(db, "visits", activeBillingVisitId), {
-    fees: { consultationFee, medicineFee, otherFee, total, mode, collectedAt: new Date().toISOString(), receiptNumber }
+    fees: { consultationFee, medicineFee, otherFee, total, mode, collectedAt: new Date().toISOString(), receiptNumber },
+    feeCollected: true,   // explicit flag — makes fee status directly queryable/filterable without checking fees != null
   });
   return { total, mode };
 }
