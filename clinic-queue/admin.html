@@ -122,6 +122,9 @@
     <div class="card" style="margin-bottom:1.5rem;">
       <h2>🔊 Voice announcements</h2>
       <p class="helper" style="margin-bottom:1rem;">Spoken aloud on the Queue Board screen when a token is called. Uses the device's built-in text-to-speech engine — no internet required. Configure languages and templates below, then open the Board screen to verify the speaker is working.</p>
+      <div class="helper" style="margin-bottom:1rem;background:var(--amber-100);border-left:3px solid var(--amber-500);padding:0.5rem 0.75rem;border-radius:0 6px 6px 0;">
+        <strong>Important:</strong> each language requires a TTS (text-to-speech) voice to be installed on the device running the Board screen. If a language shows ⚠ on the Board, install that language's TTS voice in the device's <em>Settings → Accessibility → Text-to-speech</em> (Android) or <em>Settings → General → Accessibility → Spoken Content</em> (iOS/iPad).
+      </div>
 
       <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.9rem;">
         <label class="toggle-wrap" for="announce-enabled-input">
