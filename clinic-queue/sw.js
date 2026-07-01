@@ -1,4 +1,4 @@
-const CACHE_NAME = "clinic-queue-v21";
+const CACHE_NAME = "clinic-queue-v25";
 const SHELL_FILES = [
   "./index.html", "./reception.html", "./doctor.html", "./board.html",
   "./self-service.html", "./admin.html", "./patients.html", "./billing.html",

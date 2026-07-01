@@ -108,6 +108,25 @@ export function formatETA(ms) {
   return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
+/**
+ * Format any date value (ISO string, YYYY-MM-DD, or Date) as dd-mmm-yyyy.
+ * e.g. "2026-06-15" → "15-Jun-2026", "2026-01-01T00:00:00Z" → "01-Jan-2026"
+ * Returns "—" for null/undefined/invalid input.
+ */
+export function fmtDate(val) {
+  if (!val) return "—";
+  // YYYY-MM-DD plain date strings (no time component) must be parsed as local midnight,
+  // not UTC midnight, otherwise the displayed date can shift by one day in timezones east of UTC.
+  const d = (typeof val === "string" && /^\d{4}-\d{2}-\d{2}$/.test(val))
+    ? new Date(val + "T00:00:00")
+    : new Date(val);
+  if (isNaN(d)) return "—";
+  const day = String(d.getDate()).padStart(2, "0");
+  const month = d.toLocaleString([], { month: "short" }); // "Jan", "Feb", …
+  const year = d.getFullYear();
+  return `${day}-${month}-${year}`;
+}
+
 export function formatDuration(seconds) {
   const m = Math.floor(seconds / 60);
   const s = Math.round(seconds % 60);

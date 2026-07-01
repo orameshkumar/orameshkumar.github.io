@@ -9,12 +9,11 @@
 <script>
   // Apply stored theme immediately before first paint to avoid flash
   const t = localStorage.getItem("clinic-queue-theme") || "light";
-  if (t !== "light") document.documentElement.dataset.earlyTheme = t;
-  // We set the class once body is available via DOMContentLoaded
   document.addEventListener("DOMContentLoaded", () => {
-    if (t === "dark")   document.body.classList.add("theme-dark");
-    if (t === "forest") document.body.classList.add("theme-forest");
-    if (t === "sunset") document.body.classList.add("theme-sunset");
+    if (t === "dark")     document.body.classList.add("theme-dark");
+    if (t === "midnight") document.body.classList.add("theme-midnight");
+    if (t === "forest")   document.body.classList.add("theme-forest");
+    if (t === "sunset")   document.body.classList.add("theme-sunset");
   });
 </script>
 </head>
@@ -114,7 +113,7 @@
               <input type="date" id="token-date-picker"
                 style="position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;" />
             </div>
-            <select id="token-status-filter" style="font-size:0.85rem;padding:0.3rem 0.5rem;border:1px solid var(--line);border-radius:6px;background:white;">
+            <select id="token-status-filter" style="font-size:0.85rem;padding:0.3rem 0.5rem;border:1px solid var(--line);border-radius:6px;background:var(--paper);color:var(--ink);">
               <option value="all">All statuses</option>
               <option value="waiting">Waiting</option>
               <option value="called">Called</option>
@@ -226,12 +225,31 @@ import {
   collection, addDoc, doc, updateDoc, deleteDoc, getDoc, getDocs, onSnapshot,
   query, where, orderBy
 } from "./js/firebase-config.js";
-import { computeACT, calculateETAs, formatETA, todayKey, STATUS_LABELS, NO_SHOW_GRACE_SECONDS, generatePatientId, applyClinicBranding } from "./js/queue-logic.js";
+import { computeACT, calculateETAs, formatETA, todayKey, STATUS_LABELS, NO_SHOW_GRACE_SECONDS, generatePatientId, applyClinicBranding, fmtDate } from "./js/queue-logic.js";
 import { attachScanButton } from "./js/barcode-scanner.js";
 import { generateQR } from "./js/qrcode-lib.js";
 import { attachThemeToggle } from "./js/theme.js";
 
 attachThemeToggle();
+
+// Null-safe getElementById — returns a no-op proxy when an element doesn't exist,
+// so async functions that access modal elements after an await never crash if the
+// user closed the modal before the await resolved.
+function el(id) {
+  const node = document.getElementById(id);
+  if (node) return node;
+  // Return a proxy that silently absorbs any property get/set so callers don't need
+  // to individually guard every access. The most common patterns (.style.x, .textContent,
+  // .innerHTML, .disabled, .value, .dataset.x) are all handled by the same trap.
+  return new Proxy({}, {
+    get(_, prop) {
+      if (prop === "style" || prop === "dataset") return new Proxy({}, { get: () => undefined, set: () => true });
+      if (prop === "classList") return { add: ()=>{}, remove: ()=>{}, toggle: ()=>{} };
+      return () => {};   // methods like appendChild, querySelectorAll, etc.
+    },
+    set() { return true; }
+  });
+}
 
 applyClinicBranding();
 await authReady;
@@ -365,7 +383,7 @@ function fillPatientForm(p) {
   document.getElementById("p-age").value = p.age;
   document.getElementById("p-gender").value = p.gender;
   document.getElementById("p-address").value = p.address || "";
-  const registeredStr = p.registeredAt ? new Date(p.registeredAt).toLocaleDateString([], { day: "numeric", month: "short", year: "numeric" }) : "unknown date";
+  const registeredStr = fmtDate(p.registeredAt) || "unknown date";
   document.getElementById("form-mode-label").textContent = `Editing existing patient — ID: ${p.patientCode || "(legacy, no ID)"} · Registered ${registeredStr}`;
   document.getElementById("patient-edit-actions").style.display = "flex";
 }
@@ -570,16 +588,11 @@ syncDateDisplay(todayKey());
 
 function syncDateDisplay(iso) {
   if (!iso) return;
-  const d = new Date(iso + "T00:00:00");
-  const formatted = d.toLocaleDateString([], { day: "2-digit", month: "short", year: "numeric" })
-    .replace(/ /g, "-");
-  document.getElementById("token-date-text").textContent = formatted;
+  document.getElementById("token-date-text").textContent = fmtDate(iso);
 }
 
 function updateDateLabel(iso) {
-  const d = new Date(iso + "T00:00:00");
-  document.getElementById("token-date-label").textContent =
-    d.toLocaleDateString([], { day: "2-digit", month: "short", year: "numeric" }).replace(/ /g, "-");
+  document.getElementById("token-date-label").textContent = fmtDate(iso);
 }
 
 function applyHistoryFilter(visits) {
@@ -647,11 +660,11 @@ async function openRx(visitId, fromHistory = false) {
   }
   if (!visit) return;
 
-  document.getElementById("rx-token-label").textContent =
+  el("rx-token-label").textContent =
     `#${visit.tokenNumber || "—"} ${escapeHtml(visit.patientName || "")}`;
 
   const { quality, maxPx } = await getRxSettings();
-  document.getElementById("rx-settings-note").textContent =
+  el("rx-settings-note").textContent =
     `JPEG ${Math.round(quality * 100)}%, max ${maxPx}px — each page ~20–50 KB. Change in Admin Setup.`;
 
   // Reset file inputs so the same file can be selected again
@@ -659,13 +672,16 @@ async function openRx(visitId, fromHistory = false) {
   document.getElementById("rx-camera-input").value = "";
 
   renderRxGrid(visit);
-  document.getElementById("rx-modal").style.display = "flex";
+  el("rx-modal").style.display = "flex";
 }
 
 function renderRxGrid(visit) {
   const saved = getSavedImages(visit);
-  const grid = document.getElementById("rx-grid");
-  const emptyMsg = document.getElementById("rx-empty-msg");
+  const grid = el("rx-grid");
+  const emptyMsg = el("rx-empty-msg");
+
+  // Guard: if the modal was closed or its elements removed from DOM, bail silently
+  if (!grid || !emptyMsg) return;
 
   emptyMsg.style.display = saved.length === 0 ? "block" : "none";
 
@@ -700,13 +716,12 @@ function renderRxGrid(visit) {
 }
 
 function setRxBusy(busy) {
-  // Disable the add buttons and show a status message while compressing/saving
-  const note = document.getElementById("rx-settings-note");
-  document.getElementById("rx-camera-label").style.pointerEvents = busy ? "none" : "";
-  document.getElementById("rx-camera-label").style.opacity = busy ? "0.5" : "";
-  document.getElementById("rx-file-label").style.pointerEvents = busy ? "none" : "";
-  document.getElementById("rx-file-label").style.opacity = busy ? "0.5" : "";
-  if (busy) note.textContent = "Compressing and saving…";
+  const cameraLabel = el("rx-camera-label");
+  const fileLabel = el("rx-file-label");
+  const note = el("rx-settings-note");
+  if (cameraLabel) { cameraLabel.style.pointerEvents = busy ? "none" : ""; cameraLabel.style.opacity = busy ? "0.5" : ""; }
+  if (fileLabel)   { fileLabel.style.pointerEvents   = busy ? "none" : ""; fileLabel.style.opacity   = busy ? "0.5" : ""; }
+  if (busy && note) note.textContent = "Compressing and saving…";
 }
 
 async function compressImage(file, quality, maxPx) {
@@ -783,13 +798,13 @@ async function handleFilesSelected(inputEl) {
 
     const totalKb = existingSaved.reduce((s, x) => s + (x.compressedSizeKb || 0), 0);
     const { quality: q, maxPx: mp } = await getRxSettings();
-    document.getElementById("rx-settings-note").textContent =
+    el("rx-settings-note").textContent =
       `JPEG ${Math.round(q * 100)}%, max ${mp}px — ${existingSaved.length} page(s), ~${totalKb} KB total.${totalKb > 700 ? " ⚠ Approaching Firestore 1 MB limit." : ""}`;
 
     if (rxFromHistory) renderHistory();
 
   } catch (err) {
-    document.getElementById("rx-settings-note").textContent = `Save failed: ${err.message}`;
+    el("rx-settings-note").textContent = `Save failed: ${err.message}`;
   } finally {
     setRxBusy(false);
   }
@@ -799,7 +814,7 @@ document.getElementById("rx-camera-input").addEventListener("change", (e) => han
 document.getElementById("rx-file-input").addEventListener("change", (e) => handleFilesSelected(e.target));
 
 document.getElementById("rx-close").addEventListener("click", () => {
-  document.getElementById("rx-modal").style.display = "none";
+  el("rx-modal").style.display = "none";
 });
 
 async function deleteSavedRxImage(imageId) {
@@ -898,7 +913,7 @@ function openBilling(visitId, defaultFee) {
   document.getElementById("b-med-fee").value = 0;
   document.getElementById("b-other-fee").value = 0;
   updateTotal();
-  document.getElementById("billing-modal").style.display = "flex";
+  el("billing-modal").style.display = "flex";
 }
 ["b-consult-fee","b-med-fee","b-other-fee"].forEach((id) => document.getElementById(id).addEventListener("input", updateTotal));
 function updateTotal() {
@@ -936,13 +951,13 @@ document.getElementById("billing-save").onclick = async () => {
     const settings = snap.exists() ? snap.data() : {};
     const vpa = settings.upiVpa || null;
 
-    document.getElementById("billing-modal").style.display = "none";
+    el("billing-modal").style.display = "none";
 
     if (!vpa) {
-      document.getElementById("upi-noscettings").style.display = "block";
-      document.getElementById("upi-qr-box").innerHTML = "";
+      el("upi-noscettings").style.display = "block";
+      el("upi-qr-box").innerHTML = "";
     } else {
-      document.getElementById("upi-noscettings").style.display = "none";
+      el("upi-noscettings").style.display = "none";
       // Build the UPI intent URI per the NPCI standard.
       // URLSearchParams encodes @ as %40 which some UPI apps reject in the VPA field,
       // so we build the URI manually, allowing @ through unencoded only in the VPA.
@@ -959,45 +974,45 @@ document.getElementById("billing-save").onclick = async () => {
         for (let r = 0; r < size; r++)
           for (let c = 0; c < size; c++)
             if (matrix[r][c] === 1) path += `M${c + quietZone},${r + quietZone}h1v1h-1z `;
-        document.getElementById("upi-qr-box").innerHTML = `<svg viewBox="0 0 ${totalSize} ${totalSize}" xmlns="http://www.w3.org/2000/svg" shape-rendering="crispEdges" style="width:200px;height:200px;"><rect width="${totalSize}" height="${totalSize}" fill="#ffffff"/><path d="${path}" fill="#0F4C4F"/></svg>`;
+        el("upi-qr-box").innerHTML = `<svg viewBox="0 0 ${totalSize} ${totalSize}" xmlns="http://www.w3.org/2000/svg" shape-rendering="crispEdges" style="width:200px;height:200px;"><rect width="${totalSize}" height="${totalSize}" fill="#ffffff"/><path d="${path}" fill="#0F4C4F"/></svg>`;
       } catch (err) {
         console.error("UPI QR generation failed:", err);
-        document.getElementById("upi-qr-box").innerHTML = `<p style="font-size:0.75rem;color:var(--teal-900);padding:0.5rem;">QR error — check console</p>`;
+        el("upi-qr-box").innerHTML = `<p style="font-size:0.75rem;color:var(--teal-900);padding:0.5rem;">QR error — check console</p>`;
       }
     }
 
-    document.getElementById("upi-amount-label").textContent = `₹${total}`;
-    document.getElementById("upi-vpa-label").textContent = vpa || "UPI not configured";
-    document.getElementById("upi-name-label").textContent = settings.upiMerchantName || "";
-    document.getElementById("upi-modal").style.display = "flex";
+    el("upi-amount-label").textContent = `₹${total}`;
+    el("upi-vpa-label").textContent = vpa || "UPI not configured";
+    el("upi-name-label").textContent = settings.upiMerchantName || "";
+    el("upi-modal").style.display = "flex";
 
     // Store fee fields for the confirm handler.
-    document.getElementById("upi-modal").dataset.total = total;
-    document.getElementById("upi-modal").dataset.receipt = receiptRef;
+    el("upi-modal").dataset.total = total;
+    el("upi-modal").dataset.receipt = receiptRef;
     return;
   }
 
   // Non-UPI path — save directly and close.
   const { total, mode: savedMode } = await saveFeeTransaction(mode);
-  document.getElementById("billing-modal").style.display = "none";
+  el("billing-modal").style.display = "none";
   alert(`Receipt generated. Total collected: ₹${total} via ${savedMode}.`);
 };
 
 // UPI overlay handlers
 document.getElementById("upi-cancel").onclick = () => {
-  document.getElementById("upi-modal").style.display = "none";
+  el("upi-modal").style.display = "none";
   // Re-open billing modal so staff can choose a different mode.
-  document.getElementById("billing-modal").style.display = "flex";
+  el("billing-modal").style.display = "flex";
 };
 
 document.getElementById("upi-confirm").onclick = async () => {
-  document.getElementById("upi-confirm").textContent = "Saving…";
-  document.getElementById("upi-confirm").disabled = true;
-  const total = document.getElementById("upi-modal").dataset.total;
+  el("upi-confirm").textContent = "Saving…";
+  el("upi-confirm").disabled = true;
+  const total = el("upi-modal").dataset.total;
   await saveFeeTransaction("UPI");
-  document.getElementById("upi-modal").style.display = "none";
-  document.getElementById("upi-confirm").textContent = "Payment received ✓";
-  document.getElementById("upi-confirm").disabled = false;
+  el("upi-modal").style.display = "none";
+  el("upi-confirm").textContent = "Payment received ✓";
+  el("upi-confirm").disabled = false;
   alert(`Receipt generated. Total collected: ₹${total} via UPI.`);
 };
 

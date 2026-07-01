@@ -9,9 +9,10 @@
 <script>
   const t = localStorage.getItem("clinic-queue-theme") || "light";
   document.addEventListener("DOMContentLoaded", () => {
-    if (t === "dark")   document.body.classList.add("theme-dark");
-    if (t === "forest") document.body.classList.add("theme-forest");
-    if (t === "sunset") document.body.classList.add("theme-sunset");
+    if (t === "dark")     document.body.classList.add("theme-dark");
+    if (t === "midnight") document.body.classList.add("theme-midnight");
+    if (t === "forest")   document.body.classList.add("theme-forest");
+    if (t === "sunset")   document.body.classList.add("theme-sunset");
   });
 </script>
 </head>
@@ -89,7 +90,7 @@ import {
   collection, doc, updateDoc, getDoc, getDocs, addDoc, onSnapshot,
   query, where, orderBy
 } from "./js/firebase-config.js";
-import { computeACT, calculateETAs, formatETA, todayKey, STATUS_LABELS, NO_SHOW_GRACE_SECONDS, applyClinicBranding } from "./js/queue-logic.js";
+import { computeACT, calculateETAs, formatETA, todayKey, STATUS_LABELS, NO_SHOW_GRACE_SECONDS, applyClinicBranding, fmtDate } from "./js/queue-logic.js";
 import { attachThemeToggle } from "./js/theme.js";
 attachThemeToggle();
 import { attachScanButton } from "./js/barcode-scanner.js";
@@ -367,7 +368,7 @@ function renderHistory(visits) {
       : `<p class="small muted" style="margin-top:0.3rem;">No prescription image on record.</p>`;
     return `
     <div style="padding:0.5rem 0;border-bottom:1px dashed var(--line);">
-      <p class="small"><strong>${v.visitDate}</strong> — ${v.doctorNotes ? escapeHtml(v.doctorNotes) : '<span class="muted">No notes recorded</span>'}</p>
+      <p class="small"><strong>${fmtDate(v.visitDate)}</strong> — ${v.doctorNotes ? escapeHtml(v.doctorNotes) : '<span class="muted">No notes recorded</span>'}</p>
       ${v.vitals ? `<p class="small muted">Wt ${v.vitals.weight || "—"}kg · BP ${v.vitals.bpSystolic || "—"}/${v.vitals.bpDiastolic || "—"}</p>` : ""}
       ${rxSection}
     </div>`;

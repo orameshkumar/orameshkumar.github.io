@@ -9,9 +9,10 @@
 <script>
   const t = localStorage.getItem("clinic-queue-theme") || "light";
   document.addEventListener("DOMContentLoaded", () => {
-    if (t === "dark")   document.body.classList.add("theme-dark");
-    if (t === "forest") document.body.classList.add("theme-forest");
-    if (t === "sunset") document.body.classList.add("theme-sunset");
+    if (t === "dark")     document.body.classList.add("theme-dark");
+    if (t === "midnight") document.body.classList.add("theme-midnight");
+    if (t === "forest")   document.body.classList.add("theme-forest");
+    if (t === "sunset")   document.body.classList.add("theme-sunset");
   });
 </script>
 </head>
@@ -94,7 +95,7 @@ import {
   auth, authReady, db, onAuthStateChanged, signOut,
   collection, getDocs, getDoc, doc, query, where, orderBy, updateDoc, deleteDoc
 } from "./js/firebase-config.js";
-import { applyClinicBranding } from "./js/queue-logic.js";
+import { applyClinicBranding, fmtDate } from "./js/queue-logic.js";
 import { attachThemeToggle } from "./js/theme.js";
 attachThemeToggle();
 import { attachScanButton } from "./js/barcode-scanner.js";
@@ -160,7 +161,7 @@ function renderTable(list) {
             <td class="small">${p.age || "—"}/${p.gender || "—"}</td>
             <td class="small">${escapeHtml(p.mobile || "—")}</td>
             <td class="small">${escapeHtml(p.address || "—")}</td>
-            <td class="small">${formatRegisteredDate(p.registeredAt)}</td>
+            <td class="small">${fmtDate(p.registeredAt)}</td>
             <td class="small">${sourceLabel(p.registrationSource)}</td>
             <td><button class="btn btn-sm btn-outline" data-view="${p.id}">View</button></td>
           </tr>`).join("")}
@@ -192,7 +193,7 @@ async function openDetail(patientId) {
   exitEditMode(); // always reopen in view mode, not mid-edit from a previous patient
   document.getElementById("detail-name").textContent = p.name;
   document.getElementById("detail-code").textContent = p.patientCode || "—";
-  document.getElementById("detail-meta").textContent = `${p.age || "—"} years · ${p.gender || "—"} · ${p.mobile || "—"} · ${p.address || "No address on file"} · Registered ${formatRegisteredDate(p.registeredAt)}`;
+  document.getElementById("detail-meta").textContent = `${p.age || "—"} years · ${p.gender || "—"} · ${p.mobile || "—"} · ${p.address || "No address on file"} · Registered ${fmtDate(p.registeredAt)}`;
 
   document.getElementById("edit-name").value = p.name || "";
   document.getElementById("edit-mobile").value = p.mobile || "";
@@ -214,7 +215,7 @@ async function openDetail(patientId) {
     histBox.innerHTML = visits.map((v) => `
       <div style="padding:0.6rem 0;border-bottom:1px solid var(--paper-dim);">
         <div class="flex-between">
-          <span><span class="token-tag" style="font-size:0.85rem;padding:0.2rem 0.5rem;">#${v.tokenNumber}</span> <span class="small muted" style="margin-left:0.5rem;">${v.visitDate}</span></span>
+          <span><span class="token-tag" style="font-size:0.85rem;padding:0.2rem 0.5rem;">#${v.tokenNumber}</span> <span class="small muted" style="margin-left:0.5rem;">${fmtDate(v.visitDate)}</span></span>
           <span class="badge badge-${v.status}">${v.status.replace("_"," ")}</span>
         </div>
         ${v.doctorNotes ? `<p class="small" style="margin-top:0.4rem;">${escapeHtml(v.doctorNotes)}</p>` : ""}
@@ -288,11 +289,6 @@ document.getElementById("delete-patient-btn").onclick = async () => {
   }
   // Any other input (including empty/cancel) does nothing.
 };
-
-function formatRegisteredDate(iso) {
-  if (!iso) return "—"; // legacy records created before this field existed
-  return new Date(iso).toLocaleDateString([], { day: "numeric", month: "short", year: "numeric" });
-}
 
 function escapeHtml(s) {
   return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));

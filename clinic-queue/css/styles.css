@@ -4,8 +4,10 @@
   --teal-500: #1F8289;
   --teal-100: #DCEAEA;
   --amber-500: #E8A23D;
+  --amber-700: #8A5A14;
   --amber-100: #FBEBD4;
   --sage-500: #7FA68C;
+  --sage-700: #3F6650;
   --sage-100: #E3EEE6;
   --clay-500: #C25450;
   --clay-100: #F6DEDD;
@@ -26,8 +28,10 @@ body.theme-dark {
   --teal-500: #26888E;
   --teal-100: #0D2E30;
   --amber-500: #F0B84A;
+  --amber-700: #F0C87A;
   --amber-100: #3A2D10;
   --sage-500: #82B090;
+  --sage-700: #A8D4B4;
   --sage-100: #1A2D20;
   --clay-500: #E06B68;
   --clay-100: #3A1A1A;
@@ -38,6 +42,27 @@ body.theme-dark {
   --line: #2C3E3D;
 }
 
+/* ---- Midnight theme (deep dark, higher contrast) ---- */
+body.theme-midnight {
+  --teal-900: #5DD5DA;
+  --teal-700: #44BCBF;
+  --teal-500: #2E9EA0;
+  --teal-100: #081A1B;
+  --amber-500: #FFB83F;
+  --amber-700: #FFD07A;
+  --amber-100: #2A1F05;
+  --sage-500: #90C4A0;
+  --sage-700: #B8E0C6;
+  --sage-100: #0D1F12;
+  --clay-500: #F07370;
+  --clay-100: #2A0D0C;
+  --paper: #08100F;
+  --paper-dim: #101A19;
+  --ink: #F0F8F7;
+  --ink-soft: #9ABFBE;
+  --line: #1E3230;
+}
+
 /* ---- Forest theme ---- */
 body.theme-forest {
   --teal-900: #2D5A27;
@@ -45,8 +70,10 @@ body.theme-forest {
   --teal-500: #4A8C3F;
   --teal-100: #D6EAD3;
   --amber-500: #C8832A;
+  --amber-700: #7A4D10;
   --amber-100: #F5E6CE;
   --sage-500: #6B9E5E;
+  --sage-700: #3D6632;
   --sage-100: #DFF0DA;
   --clay-500: #B85450;
   --clay-100: #F3DCDB;
@@ -64,8 +91,10 @@ body.theme-sunset {
   --teal-500: #B5649E;
   --teal-100: #EDD8E8;
   --amber-500: #E87832;
+  --amber-700: #8A4010;
   --amber-100: #FCEBD8;
   --sage-500: #C47850;
+  --sage-700: #7A4220;
   --sage-100: #F5E3D6;
   --clay-500: #C03535;
   --clay-100: #F5D8D8;
@@ -159,7 +188,7 @@ a { color: inherit; }
 }
 
 .card {
-  background: white;
+  background: var(--paper);
   border: 1px solid var(--line);
   border-radius: var(--radius);
   padding: 1.25rem;
@@ -210,9 +239,9 @@ input:focus, select:focus, textarea:focus {
 .btn-primary:hover { background: var(--teal-700); }
 .btn-amber { background: var(--amber-500); color: var(--ink); }
 .btn-amber:hover { opacity: 0.9; }
-.btn-outline { background: white; border-color: var(--line); color: var(--ink); }
-.btn-outline:hover { border-color: var(--teal-700); }
-.btn-danger { background: white; border-color: var(--clay-500); color: var(--clay-500); }
+.btn-outline { background: var(--paper); border-color: var(--line); color: var(--ink); }
+.btn-outline:hover { background: var(--paper-dim); border-color: var(--teal-700); }
+.btn-danger { background: var(--paper); border-color: var(--clay-500); color: var(--clay-500); }
 .btn-danger:hover { background: var(--clay-100); }
 .btn-sm { padding: 0.4rem 0.75rem; font-size: 0.82rem; }
 .btn-block { width: 100%; }
@@ -223,10 +252,10 @@ input:focus, select:focus, textarea:focus {
   font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;
   padding: 0.22rem 0.6rem; border-radius: 999px;
 }
-.badge-waiting { background: var(--sage-100); color: #3F6650; }
-.badge-called { background: var(--amber-100); color: #8A5A14; }
+.badge-waiting { background: var(--sage-100); color: var(--sage-700, #3F6650); }
+.badge-called { background: var(--amber-100); color: var(--amber-700, #8A5A14); }
 .badge-in_consultation { background: var(--teal-100); color: var(--teal-900); }
-.badge-completed { background: #E7E7E7; color: #555; }
+.badge-completed { background: var(--paper-dim); color: var(--ink-soft); }
 .badge-cancelled { background: var(--clay-100); color: var(--clay-500); }
 .badge-no_show { background: var(--clay-100); color: var(--clay-500); }
 
@@ -291,7 +320,7 @@ tr.row-flash { animation: flash-row 1.2s ease; }
 }
 @keyframes toast-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 
-.btn-vitals-pending { background: var(--amber-100); border-color: var(--amber-500); color: #8A5A14; }
+.btn-vitals-pending { background: var(--amber-100); border-color: var(--amber-500); color: var(--amber-700, #8A5A14); }
 .btn-vitals-pending:hover { background: var(--amber-500); color: var(--ink); }
 .btn-vitals-done { background: var(--sage-500); border-color: var(--sage-500); color: white; }
 .btn-vitals-done:hover { background: #6a9078; }

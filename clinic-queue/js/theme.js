@@ -5,10 +5,11 @@
 // immediately on load so there's no flash of the wrong theme.
 
 const THEMES = [
-  { key: "light",   label: "Light",   icon: "☀️",  bodyClass: "" },
-  { key: "dark",    label: "Dark",    icon: "🌙",  bodyClass: "theme-dark" },
-  { key: "forest",  label: "Forest",  icon: "🌿",  bodyClass: "theme-forest" },
-  { key: "sunset",  label: "Sunset",  icon: "🌅",  bodyClass: "theme-sunset" },
+  { key: "light",    label: "Light",    icon: "☀️",  bodyClass: "" },
+  { key: "dark",     label: "Dark",     icon: "🌙",  bodyClass: "theme-dark" },
+  { key: "midnight", label: "Midnight", icon: "🌑",  bodyClass: "theme-midnight" },
+  { key: "forest",   label: "Forest",   icon: "🌿",  bodyClass: "theme-forest" },
+  { key: "sunset",   label: "Sunset",   icon: "🌅",  bodyClass: "theme-sunset" },
 ];
 
 export function applyStoredTheme() {

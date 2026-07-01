@@ -9,9 +9,10 @@
 <script>
   const t = localStorage.getItem("clinic-queue-theme") || "light";
   document.addEventListener("DOMContentLoaded", () => {
-    if (t === "dark")   document.body.classList.add("theme-dark");
-    if (t === "forest") document.body.classList.add("theme-forest");
-    if (t === "sunset") document.body.classList.add("theme-sunset");
+    if (t === "dark")     document.body.classList.add("theme-dark");
+    if (t === "midnight") document.body.classList.add("theme-midnight");
+    if (t === "forest")   document.body.classList.add("theme-forest");
+    if (t === "sunset")   document.body.classList.add("theme-sunset");
   });
 </script>
 </head>
@@ -46,12 +47,22 @@
       </div>
       <div class="field-row" style="align-items:flex-end;flex-wrap:wrap;gap:0.75rem;">
         <div class="field" style="margin-bottom:0;min-width:160px;">
-          <label for="date-from">From</label>
-          <input type="date" id="date-from" />
+          <label>From</label>
+          <div style="position:relative;display:inline-block;width:100%;">
+            <button id="date-from-display" style="width:100%;font-size:0.85rem;padding:0.3rem 0.6rem;border:1px solid var(--line);border-radius:6px;background:var(--paper);color:var(--ink);cursor:pointer;text-align:left;display:flex;align-items:center;gap:0.4rem;">
+              <span>📅</span><span id="date-from-text">—</span>
+            </button>
+            <input type="date" id="date-from" style="position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;" />
+          </div>
         </div>
         <div class="field" style="margin-bottom:0;min-width:160px;">
-          <label for="date-to">To</label>
-          <input type="date" id="date-to" />
+          <label>To</label>
+          <div style="position:relative;display:inline-block;width:100%;">
+            <button id="date-to-display" style="width:100%;font-size:0.85rem;padding:0.3rem 0.6rem;border:1px solid var(--line);border-radius:6px;background:var(--paper);color:var(--ink);cursor:pointer;text-align:left;display:flex;align-items:center;gap:0.4rem;">
+              <span>📅</span><span id="date-to-text">—</span>
+            </button>
+            <input type="date" id="date-to" style="position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;" />
+          </div>
         </div>
         <div class="field" style="margin-bottom:0;min-width:180px;">
           <label for="filter-doctor">Doctor</label>
@@ -104,7 +115,7 @@ import {
   auth, authReady, db, onAuthStateChanged, signOut,
   collection, getDocs, getDoc, doc, query, where, orderBy
 } from "./js/firebase-config.js";
-import { applyClinicBranding, todayKey } from "./js/queue-logic.js";
+import { applyClinicBranding, todayKey, fmtDate } from "./js/queue-logic.js";
 import { attachThemeToggle } from "./js/theme.js";
 attachThemeToggle();
 
@@ -157,6 +168,17 @@ function dateInputValue(d) {
   return todayKey(d); // YYYY-MM-DD, matches visitDate format used throughout the app
 }
 
+function syncBillingDates() {
+  const fromVal = document.getElementById("date-from").value;
+  const toVal = document.getElementById("date-to").value;
+  document.getElementById("date-from-text").textContent = fromVal ? fmtDate(fromVal) : "—";
+  document.getElementById("date-to-text").textContent = toVal ? fmtDate(toVal) : "—";
+}
+
+// Sync display spans whenever either hidden date input changes directly
+document.getElementById("date-from").addEventListener("change", syncBillingDates);
+document.getElementById("date-to").addEventListener("change", syncBillingDates);
+
 document.querySelectorAll("[data-preset]").forEach((btn) => {
   btn.addEventListener("click", () => { setPreset(btn.dataset.preset); runReport(); });
 });
@@ -178,6 +200,7 @@ function setPreset(preset) {
   }
   document.getElementById("date-from").value = dateInputValue(from);
   document.getElementById("date-to").value = dateInputValue(to);
+  syncBillingDates();
 }
 
 document.getElementById("apply-filters").addEventListener("click", runReport);
@@ -264,7 +287,7 @@ function renderTransactions(visits) {
     ${sorted.map((v) => {
       const docName = doctors.find((d) => d.id === (v.doctorId || (v.preferredDoctorIds || [])[0]))?.name || "—";
       return `<tr>
-        <td class="small">${v.visitDate}</td>
+        <td class="small">${fmtDate(v.visitDate)}</td>
         <td><span class="token-tag" style="font-size:0.8rem;padding:0.2rem 0.5rem;">#${v.tokenNumber}</span></td>
         <td class="small">${escapeHtml(v.patientName)}${v.patientCode ? ` <span class="muted">(${v.patientCode})</span>` : ""}</td>
         <td class="small">${escapeHtml(docName)}</td>
