@@ -252,6 +252,14 @@ tr.row-flash { animation: flash-row 1.2s ease; }
   filter: grayscale(1) opacity(0.35);
 }
 
+.tab-btn {
+  background: none; border: none; border-bottom: 3px solid transparent;
+  padding: 0.5rem 1.1rem; font-size: 0.9rem; font-weight: 600;
+  color: var(--ink-soft); cursor: pointer; margin-bottom: -2px;
+}
+.tab-btn.tab-active { color: var(--teal-900); border-bottom-color: var(--teal-900); }
+.tab-btn:hover:not(.tab-active) { color: var(--ink); }
+
 .section-divider { border: none; border-top: 1px solid var(--line); margin: 1.5rem 0; }
 .muted { color: var(--ink-soft); }
 .small { font-size: 0.82rem; }

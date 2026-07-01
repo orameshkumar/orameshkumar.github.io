@@ -42,7 +42,45 @@
         <div class="field">
           <label for="self-service-url-input">Self-service booking URL (used to generate the QR code on the Queue Board)</label>
           <input id="self-service-url-input" placeholder="https://yourname.github.io/your-repo/self-service.html" />
-          <p class="helper">Leave blank to auto-use this device's current page location — works fine for most single-deployment setups. Only set this explicitly if your deployed URL differs from what the Queue Board's own browser tab shows (e.g. a custom domain), or if you want to be certain the QR stays correct even if board.html is ever opened from a different/incorrect URL.</p>
+          <p class="helper">Leave blank to auto-use this device's current page location.</p>
+        </div>
+        <hr class="section-divider" />
+        <p class="small muted" style="margin-bottom:0.75rem;">UPI payment details — shown as a scannable QR code when a patient pays by UPI in the billing modal.</p>
+        <div class="field-row">
+          <div class="field">
+            <label for="upi-vpa-input">UPI ID (VPA)</label>
+            <input id="upi-vpa-input" placeholder="clinic@upi or 9876543210@paytm" />
+          </div>
+          <div class="field">
+            <label for="upi-name-input">Merchant name</label>
+            <input id="upi-name-input" placeholder="Sunrise Clinic" />
+          </div>
+        </div>
+        <div class="field">
+          <label for="upi-code-input">Merchant code (optional — your bank/PSP's merchant category code, if any)</label>
+          <input id="upi-code-input" placeholder="Leave blank if not applicable" />
+        </div>
+        <hr class="section-divider" />
+        <p class="small muted" style="margin-bottom:0.75rem;">Prescription image settings — images are compressed in the browser before saving to the database. Lower quality and smaller resolution reduce storage size significantly.</p>
+        <div class="field-row">
+          <div class="field">
+            <label for="rx-quality-input">JPEG compression quality</label>
+            <select id="rx-quality-input">
+              <option value="0.8">High (80%) — larger file, clearer text</option>
+              <option value="0.6" selected>Medium (60%) — recommended</option>
+              <option value="0.4">Low (40%) — smallest file</option>
+              <option value="0.25">Very low (25%) — poorest quality</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="rx-maxpx-input">Max resolution (longest side)</label>
+            <select id="rx-maxpx-input">
+              <option value="1600">1600 px — high detail</option>
+              <option value="1200" selected>1200 px — recommended</option>
+              <option value="800">800 px — compact</option>
+              <option value="600">600 px — minimum</option>
+            </select>
+          </div>
         </div>
       </form>
     </div>
@@ -138,8 +176,14 @@ await authReady;
 (async () => {
   const snap = await getDoc(doc(db, "clinicSettings", "main"));
   if (snap.exists()) {
-    if (snap.data().name) document.getElementById("clinic-name-input").value = snap.data().name;
-    if (snap.data().selfServiceUrl) document.getElementById("self-service-url-input").value = snap.data().selfServiceUrl;
+    const d = snap.data();
+    if (d.name) document.getElementById("clinic-name-input").value = d.name;
+    if (d.selfServiceUrl) document.getElementById("self-service-url-input").value = d.selfServiceUrl;
+    if (d.upiVpa) document.getElementById("upi-vpa-input").value = d.upiVpa;
+    if (d.upiMerchantName) document.getElementById("upi-name-input").value = d.upiMerchantName;
+    if (d.upiMerchantCode) document.getElementById("upi-code-input").value = d.upiMerchantCode;
+    if (d.prescriptionQuality) document.getElementById("rx-quality-input").value = d.prescriptionQuality;
+    if (d.prescriptionMaxPx) document.getElementById("rx-maxpx-input").value = d.prescriptionMaxPx;
   }
 })();
 
@@ -147,8 +191,22 @@ document.getElementById("branding-form").addEventListener("submit", async (e) =>
   e.preventDefault();
   const name = document.getElementById("clinic-name-input").value.trim();
   const selfServiceUrl = document.getElementById("self-service-url-input").value.trim();
+  const upiVpa = document.getElementById("upi-vpa-input").value.trim();
+  const upiMerchantName = document.getElementById("upi-name-input").value.trim();
+  const upiMerchantCode = document.getElementById("upi-code-input").value.trim();
+  const prescriptionQuality = Number(document.getElementById("rx-quality-input").value);
+  const prescriptionMaxPx = Number(document.getElementById("rx-maxpx-input").value);
   if (!name) return;
-  await setDoc(doc(db, "clinicSettings", "main"), { name, selfServiceUrl: selfServiceUrl || null, updatedAt: new Date().toISOString() });
+  await setDoc(doc(db, "clinicSettings", "main"), {
+    name,
+    selfServiceUrl: selfServiceUrl || null,
+    upiVpa: upiVpa || null,
+    upiMerchantName: upiMerchantName || null,
+    upiMerchantCode: upiMerchantCode || null,
+    prescriptionQuality,
+    prescriptionMaxPx,
+    updatedAt: new Date().toISOString()
+  });
   await applyClinicBranding(); // refresh this page's own banner immediately
   alert("Saved. The new name will appear on every screen the next time it loads.");
 });
