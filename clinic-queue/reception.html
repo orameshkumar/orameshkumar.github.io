@@ -290,11 +290,12 @@ onSnapshot(doctorsRef, async (snap) => {
 
 function renderDoctorCheckboxes() {
   const box = document.getElementById("doctor-checkboxes");
-  if (doctors.length === 0) {
-    box.innerHTML = '<p class="helper">No doctors configured yet. Add one in Admin Setup.</p>';
+  const activeDoctors = doctors.filter((d) => d.status !== "inactive");
+  if (activeDoctors.length === 0) {
+    box.innerHTML = '<p class="helper">No active doctors — mark a doctor as active in Admin Setup.</p>';
     return;
   }
-  box.innerHTML = doctors.map((d) => `
+  box.innerHTML = activeDoctors.map((d) => `
     <label class="checkbox-chip ${selectedDoctorIds.has(d.id) ? "checked" : ""}" data-doc="${d.id}">
       <input type="checkbox" value="${d.id}" ${selectedDoctorIds.has(d.id) ? "checked" : ""} />
       ${escapeHtml(d.name)}

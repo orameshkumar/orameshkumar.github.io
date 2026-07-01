@@ -186,7 +186,7 @@
 <script type="module">
 import {
   auth, authReady, db, onAuthStateChanged, signOut,
-  collection, addDoc, doc, setDoc, getDocs, onSnapshot, query, orderBy, getDoc
+  collection, addDoc, doc, setDoc, updateDoc, getDocs, onSnapshot, query, orderBy, getDoc
 } from "./js/firebase-config.js";
 import { applyClinicBranding } from "./js/queue-logic.js";
 import { attachThemeToggle } from "./js/theme.js";
@@ -262,13 +262,17 @@ onSnapshot(query(doctorsRef, orderBy("name")), (snap) => {
   snap.forEach((d) => {
     const doc_ = { id: d.id, ...d.data() };
     doctorsCache.push(doc_);
+    const isActive = doc_.status !== "inactive";
     html += `
-      <div class="flex-between" style="padding:0.6rem 0;border-bottom:1px solid var(--paper-dim);">
+      <div class="flex-between" style="padding:0.6rem 0;border-bottom:1px solid var(--paper-dim);${isActive ? "" : "opacity:0.55;"}">
         <div>
-          <strong>${escapeHtml(doc_.name)}</strong><br/>
+          <strong>${escapeHtml(doc_.name)}</strong>
+          <span class="badge ${isActive ? "badge-waiting" : "badge-cancelled"}" style="margin-left:0.5rem;font-size:0.7rem;">${isActive ? "Active" : "Inactive"}</span><br/>
           <span class="small muted">${escapeHtml(doc_.specialization || "")} · ${doc_.room || "no room"} · ₹${doc_.consultationFee} · seed ACT ${doc_.seedActMinutes}m</span>
         </div>
-        <span class="small muted">ID: ${doc_.id.slice(0,6)}…</span>
+        <button class="btn btn-sm btn-outline" data-toggle-doctor="${doc_.id}" data-current-status="${doc_.status || "active"}">
+          ${isActive ? "Set inactive" : "Set active"}
+        </button>
       </div>`;
     const opt = document.createElement("option");
     opt.value = doc_.id;
@@ -276,6 +280,17 @@ onSnapshot(query(doctorsRef, orderBy("name")), (snap) => {
     doctorSelect.appendChild(opt);
   });
   list.innerHTML = html;
+
+  list.querySelectorAll("[data-toggle-doctor]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const docId = btn.dataset.toggleDoctor;
+      const current = btn.dataset.currentStatus || "active";
+      const next = current === "active" ? "inactive" : "active";
+      btn.textContent = "Saving…"; btn.disabled = true;
+      await updateDoc(doc(db, "doctors", docId), { status: next });
+      // The onSnapshot listener will re-render the list automatically
+    });
+  });
 });
 
 document.getElementById("doctor-form").addEventListener("submit", async (e) => {

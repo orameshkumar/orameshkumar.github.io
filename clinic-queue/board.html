@@ -114,7 +114,7 @@ function render() {
     return;
   }
 
-  grid.innerHTML = doctors.map((d) => {
+  grid.innerHTML = doctors.filter((d) => d.status !== "inactive").map((d) => {
     const onBreak = d.onBreakUntil && d.onBreakUntil > Date.now();
     const mine = visitsToday.filter((v) => v.doctorId === d.id || (v.preferredDoctorIds || []).includes(d.id));
     const active = mine.filter((v) => ["waiting","called","in_consultation"].includes(v.status));
