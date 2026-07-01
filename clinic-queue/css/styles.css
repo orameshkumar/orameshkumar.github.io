@@ -296,7 +296,7 @@ tr.row-flash { animation: flash-row 1.2s ease; }
   background: var(--paper); border-radius: 14px; padding: 2.25rem 2rem;
   width: 100%; max-width: 380px;
 }
-.login-card .brand { color: var(--teal-900); font-weight: 800; font-size: 1.3rem; margin-bottom: 0.2rem; display:flex; align-items:center; gap:0.5rem;}
+.login-card .brand { color: var(--teal-900); font-weight: 800; font-size: 1.3rem; margin-bottom: 0.2rem; display:flex; align-items:center; gap:0.6rem;}
 .login-card .brand .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--amber-500); }
 .login-card p.sub { color: var(--ink-soft); font-size: 0.88rem; margin: 0 0 1.5rem; }
 .error-msg { color: var(--clay-500); font-size: 0.85rem; margin-top: 0.6rem; }

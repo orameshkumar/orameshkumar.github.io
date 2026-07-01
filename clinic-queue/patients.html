@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Patients — Clinic Queue</title>
 <link rel="manifest" href="manifest.json" />
+<link rel="icon" type="image/svg+xml" href="assets/icon.svg" />
 <link rel="stylesheet" href="css/styles.css" />
 <script>
   const t = localStorage.getItem("clinic-queue-theme") || "light";
@@ -19,7 +20,13 @@
 <body>
 <div class="app-shell">
   <header class="topbar">
-    <div class="brand"><span class="dot"></span> <span data-clinic-name>Clinic Queue</span></div>
+    <div class="brand"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 72 72" width="28" height="28" aria-hidden="true" style="flex-shrink:0;border-radius:6px;">
+  <rect width="72" height="72" rx="16" fill="white"/>
+  <text x="36" y="37" text-anchor="middle" font-size="28" font-weight="800" fill="#0F4C4F"
+    font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif">Q</text>
+  <polyline points="8,56 15,56 19,48 23,64 27,44 31,60 35,56 64,56"
+    fill="none" stroke="#E8A23D" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg> <span data-clinic-name>Clinic Queue</span></div>
     <nav id="nav-links">
       <a href="reception.html">Reception</a>
       <a href="patients.html" class="active">Patients</a>
@@ -212,16 +219,54 @@ async function openDetail(patientId) {
   if (visits.length === 0) {
     histBox.innerHTML = '<p class="small muted">No visits recorded yet.</p>';
   } else {
-    histBox.innerHTML = visits.map((v) => `
-      <div style="padding:0.6rem 0;border-bottom:1px solid var(--paper-dim);">
-        <div class="flex-between">
-          <span><span class="token-tag" style="font-size:0.85rem;padding:0.2rem 0.5rem;">#${v.tokenNumber}</span> <span class="small muted" style="margin-left:0.5rem;">${fmtDate(v.visitDate)}</span></span>
-          <span class="badge badge-${v.status}">${v.status.replace("_"," ")}</span>
-        </div>
-        ${v.doctorNotes ? `<p class="small" style="margin-top:0.4rem;">${escapeHtml(v.doctorNotes)}</p>` : ""}
-        ${v.vitals ? `<p class="small muted">Wt ${v.vitals.weight || "—"}kg · Temp ${v.vitals.temperature || "—"}°F · BP ${v.vitals.bpSystolic || "—"}/${v.vitals.bpDiastolic || "—"}</p>` : ""}
-        ${v.fees ? `<p class="small muted">Fee collected: ₹${v.fees.total} (${v.fees.mode})</p>` : ""}
-      </div>`).join("");
+    histBox.innerHTML = visits.map((v) => {
+      // Normalise prescriptions — handles new array and legacy single-image field
+      const imgs = v.prescriptions && Array.isArray(v.prescriptions) && v.prescriptions.length > 0
+        ? v.prescriptions
+        : (v.prescription?.dataUrl ? [{ id: "legacy", pageNumber: 1, ...v.prescription }] : []);
+
+      const rxSection = imgs.length > 0
+        ? `<div style="margin-top:0.5rem;">
+             <p class="small" style="margin:0 0 0.4rem;font-weight:600;color:var(--teal-900);">
+               📋 ${imgs.length} prescription page(s)
+             </p>
+             <div style="display:flex;flex-wrap:wrap;gap:0.5rem;">
+               ${imgs.map((img, i) => `
+                 <div style="position:relative;width:90px;">
+                   <img src="${img.dataUrl}" alt="p.${img.pageNumber || i + 1}"
+                     style="width:90px;height:68px;object-fit:cover;border-radius:5px;border:1px solid var(--line);display:block;cursor:pointer;"
+                     onclick="this.parentElement.querySelector('.rx-lb').style.display='flex'" loading="lazy" />
+                   <span style="position:absolute;top:2px;left:3px;background:rgba(0,0,0,0.6);color:white;font-size:0.58rem;padding:1px 4px;border-radius:2px;">
+                     p.${img.pageNumber || i + 1}
+                   </span>
+                   <div class="rx-lb" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:400;flex-direction:column;">
+                     <div style="display:flex;justify-content:flex-end;padding:0.6rem 0.75rem;flex-shrink:0;">
+                       <button onclick="this.closest('.rx-lb').style.display='none'"
+                         style="background:rgba(255,255,255,0.15);border:none;color:white;font-size:1.4rem;line-height:1;width:2.2rem;height:2.2rem;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;"
+                         aria-label="Close image preview">✕</button>
+                     </div>
+                     <div style="flex:1;overflow:auto;display:flex;align-items:center;justify-content:center;padding:0 1rem 1rem;">
+                       <img src="${img.dataUrl}" alt="Prescription page ${img.pageNumber || i + 1}"
+                         style="max-width:100%;border-radius:8px;touch-action:pinch-zoom;display:block;" />
+                     </div>
+                   </div>
+                 </div>`).join("")}
+             </div>
+           </div>`
+        : "";
+
+      return `
+        <div style="padding:0.6rem 0;border-bottom:1px solid var(--paper-dim);">
+          <div class="flex-between">
+            <span><span class="token-tag" style="font-size:0.85rem;padding:0.2rem 0.5rem;">#${v.tokenNumber}</span> <span class="small muted" style="margin-left:0.5rem;">${fmtDate(v.visitDate)}</span></span>
+            <span class="badge badge-${v.status}">${v.status.replace("_"," ")}</span>
+          </div>
+          ${v.doctorNotes ? `<p class="small" style="margin-top:0.4rem;">${escapeHtml(v.doctorNotes)}</p>` : ""}
+          ${v.vitals ? `<p class="small muted">Wt ${v.vitals.weight || "—"}kg · Temp ${v.vitals.temperature || "—"}°F · BP ${v.vitals.bpSystolic || "—"}/${v.vitals.bpDiastolic || "—"}</p>` : ""}
+          ${v.fees ? `<p class="small muted">Fee collected: ₹${v.fees.total} (${v.fees.mode})</p>` : ""}
+          ${rxSection}
+        </div>`;
+    }).join("");
   }
   document.getElementById("detail-modal").style.display = "flex";
 }
