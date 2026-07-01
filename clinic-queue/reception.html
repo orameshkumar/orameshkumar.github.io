@@ -185,7 +185,10 @@
     <div id="upi-name-label" style="font-size:0.8rem;opacity:0.55;"></div>
   </div>
   <div style="display:flex;gap:1rem;margin-top:0.5rem;">
-    <button class="btn btn-outline" id="upi-cancel" style="color:white;border-color:rgba(255,255,255,0.4);">Cancel</button>
+    <button id="upi-cancel"
+      style="background:rgba(255,255,255,0.15);border:2px solid rgba(255,255,255,0.7);color:white;font-weight:700;font-size:0.95rem;padding:0.6rem 1.4rem;border-radius:8px;cursor:pointer;min-width:100px;">
+      ✕ Cancel
+    </button>
     <button class="btn btn-primary" id="upi-confirm" style="background:var(--sage-500);border-color:var(--sage-500);font-size:1rem;padding:0.7rem 1.6rem;">Payment received ✓</button>
   </div>
   <div id="upi-noscettings" style="display:none;color:rgba(255,255,255,0.6);font-size:0.8rem;text-align:center;max-width:320px;">UPI details not configured yet — add your UPI ID in Admin Setup → Clinic branding to enable this QR.</div>
@@ -578,9 +581,13 @@ function renderVisitRows(visits, containerId, isHistory = false) {
     const hasRx = !!(v.prescriptions?.length || v.prescription?.dataUrl);
     const rxBtn = `<button class="btn btn-sm ${hasRx ? "btn-vitals-done" : "btn-outline"}" data-rx="${v.id}" title="${hasRx ? "View / replace prescription" : "Add prescription photo"}">${hasRx ? "📋 View Rx" : "📷 Add Rx"}</button>`;
     const allReceipts = getAllReceipts(v);
+    const totalCollected = allReceipts.reduce((s, r) => s + (r.total || 0), 0);
     const actions = isHistory
-      ? `${v.status === "completed" ? `<button class="btn btn-sm btn-amber" data-addfee="${v.id}" data-fee="${docFeeFor(v)}">Add fee</button>` : ""}
-         ${allReceipts.length > 0 ? `<button class="btn btn-sm btn-outline" data-viewreceipts="${v.id}">🧾 ${allReceipts.length} receipt(s)</button>` : ""}`
+      ? `<div style="display:flex;flex-wrap:wrap;gap:0.3rem;align-items:center;">
+           ${v.status === "completed" ? `<button class="btn btn-sm btn-amber" data-addfee="${v.id}" data-fee="${docFeeFor(v)}" title="Add fee / additional payment">💳 Fee</button>` : ""}
+           ${allReceipts.length > 0 ? `<button class="btn btn-sm btn-outline" data-viewreceipts="${v.id}" title="View all receipts">🧾 ₹${totalCollected}</button>` : ""}
+           <button class="btn btn-sm btn-danger" data-deletevisit="${v.id}" title="Delete this visit record">🗑</button>
+         </div>`
       : `${v.status === "waiting" ? `<button class="btn btn-sm ${v.vitals ? "btn-vitals-done" : "btn-vitals-pending"}" data-visit='${escapeHtmlAttr(JSON.stringify(v))}'>${v.vitals ? "✓ Vitals" : "Add vitals"}</button> <button class="btn btn-sm btn-outline" data-move-end='${escapeHtmlAttr(JSON.stringify(v))}'>Move to end</button> <button class="btn btn-sm btn-danger" data-cancel="${v.id}">Cancel</button>` : ""}
          ${v.status === "completed" && !v.fees ? `<button class="btn btn-sm btn-amber" data-bill="${v.id}" data-fee="${docFeeFor(v)}">Collect fee</button>` : ""}
          ${v.fees ? `<span class="small muted">Paid ₹${v.fees.total}</span>` : ""}`;
@@ -602,6 +609,7 @@ function renderVisitRows(visits, containerId, isHistory = false) {
   list.querySelectorAll("[data-bill]").forEach((b) => b.addEventListener("click", () => openBilling(b.dataset.bill, Number(b.dataset.fee))));
   list.querySelectorAll("[data-addfee]").forEach((b) => b.addEventListener("click", () => openAddFee(b.dataset.addfee, Number(b.dataset.fee))));
   list.querySelectorAll("[data-viewreceipts]").forEach((b) => b.addEventListener("click", () => openReceiptsView(b.dataset.viewreceipts)));
+  list.querySelectorAll("[data-deletevisit]").forEach((b) => b.addEventListener("click", () => deleteVisit(b.dataset.deletevisit)));
   list.querySelectorAll("[data-rx]").forEach((b) => b.addEventListener("click", () => openRx(b.dataset.rx, isHistory)));
 }
 
@@ -1055,6 +1063,19 @@ function openReceiptsView(visitId) {
 }
 
 document.getElementById("receipts-close").onclick = () => el("receipts-modal").style.display = "none";
+
+async function deleteVisit(visitId) {
+  const visit = historyVisits.find((v) => v.id === visitId);
+  const label = visit ? `#${visit.tokenNumber} — ${visit.patientName} (${fmtDate(visit.visitDate)})` : visitId;
+  if (!confirm(`Delete visit ${label}?\n\nThis permanently removes the visit record including any prescription images and fee receipts. The patient record itself is unaffected. This cannot be undone.`)) return;
+  try {
+    await deleteDoc(doc(db, "visits", visitId));
+    historyVisits = historyVisits.filter((v) => v.id !== visitId);
+    renderHistory();
+  } catch (err) {
+    alert(`Delete failed: ${err.message}`);
+  }
+}
 
 async function cancelToken(visitId) {
   if (!confirm("Cancel this token?")) return;
