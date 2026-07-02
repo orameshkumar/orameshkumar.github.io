@@ -40,6 +40,26 @@
             </div>
 
             <div class="form-group">
+                <label for="license-type">License Type</label>
+                <select id="license-type" aria-describedby="license-type-desc">
+                    <option value="perpetual" selected>Perpetual</option>
+                    <option value="date-restricted">Date-Restricted</option>
+                </select>
+                <span id="license-type-desc" class="visually-hidden">Select whether the license is perpetual or restricted to a date range</span>
+            </div>
+
+            <div id="date-fields-container" class="form-group date-fields" hidden aria-live="polite">
+                <div class="form-group">
+                    <label for="date-from">Valid From</label>
+                    <input type="date" id="date-from" aria-required="true">
+                </div>
+                <div class="form-group">
+                    <label for="date-to">Valid To</label>
+                    <input type="date" id="date-to" aria-required="true">
+                </div>
+            </div>
+
+            <div class="form-group">
                 <label for="user-name">User Name</label>
                 <input type="text" id="user-name" placeholder="Enter the licensee name" autocomplete="off">
             </div>

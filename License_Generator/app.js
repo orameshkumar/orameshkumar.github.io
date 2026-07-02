@@ -47,11 +47,24 @@
     { name: "Pay Up Partners", secret: [80,85,80,95,76,73,67,95,50,48,50,53,95,36,101,99,114,51,116,95,75,51,121,33] },
     { name: "ABC Store", secret: [65,66,67,95,76,73,67,95,50,48,50,53,95,36,116,48,114,51,95,75,51,121,33] },
     { name: "Build Calc", secret: [66,117,105,108,100,67,97,108,99] },
-    { name: "Pay Your Shuttle", secret: [80,97,121,89,111,117,114,83,104,117,116,116,108,101] }
+    { name: "Pay Your Shuttle", secret: [80,97,121,89,111,117,114,83,104,117,116,116,108,101] },
+    { name: "Patient Queue Management", secret: [80,97,116,105,101,110,116,81,117,101,117,101,77,97,110,97,103,101,109,101,110,116] }
   ];
 
   // Protected app names that cannot be modified or deleted (case-insensitive)
-  var PROTECTED_APPS = ["pay up partners", "abc store", "build calc", "pay your shuttle"];
+  var PROTECTED_APPS = ["pay up partners", "abc store", "build calc", "pay your shuttle", "patient queue management"];
+
+  // Backup metadata localStorage key
+  var BACKUP_META_KEY = 'license_gen_backup_meta';
+
+  // Reminder thresholds for backup notifications
+  var REMINDER_THRESHOLDS = {
+    licensesGenerated: 10,
+    daysSinceBackup: 30,
+    firstBackupLicenses: 3,
+    dismissDuration: 7,
+    snoozeDuration: 3
+  };
 
   // --- Registry Functions ---
 
@@ -97,7 +110,8 @@
           }
         }
         if (!found) {
-          registry.push({ name: defApp.name, secret: defApp.secret.slice() });
+          var newEntry = { name: defApp.name, secret: defApp.secret.slice() };
+          registry.push(newEntry);
           changed = true;
         }
       }
@@ -223,6 +237,77 @@
     return btoa(payload);
   }
 
+  // --- Validation Engine ---
+
+  /**
+   * Validates that a date string is in ISO 8601 date format (YYYY-MM-DD)
+   * and represents a real calendar date.
+   * @param {string} dateStr - The date string to validate
+   * @returns {boolean} True if valid ISO date format
+   */
+  function isValidISODate(dateStr) {
+    if (!dateStr || typeof dateStr !== 'string') return false;
+    // Check format: YYYY-MM-DD
+    var regex = /^\d{4}-\d{2}-\d{2}$/;
+    if (!regex.test(dateStr)) return false;
+    // Check that it's a real date (e.g., not 2025-02-30)
+    var parts = dateStr.split('-');
+    var year = parseInt(parts[0], 10);
+    var month = parseInt(parts[1], 10);
+    var day = parseInt(parts[2], 10);
+    if (month < 1 || month > 12) return false;
+    if (day < 1 || day > 31) return false;
+    var d = new Date(year, month - 1, day);
+    return d.getFullYear() === year && d.getMonth() === month - 1 && d.getDate() === day;
+  }
+
+  /**
+   * Validates date-restricted license inputs.
+   * Checks that both dates are present, valid format, and toDate > fromDate.
+   * @param {string} fromDate - The "Valid From" date (YYYY-MM-DD)
+   * @param {string} toDate - The "Valid To" date (YYYY-MM-DD)
+   * @returns {{ valid: boolean, error?: string }}
+   */
+  function validateDateRestrictedInputs(fromDate, toDate) {
+    if (!fromDate) {
+      return { valid: false, error: 'Please enter a Valid From date.' };
+    }
+    if (!toDate) {
+      return { valid: false, error: 'Please enter a Valid To date.' };
+    }
+    if (!isValidISODate(fromDate)) {
+      return { valid: false, error: 'Please enter a valid date.' };
+    }
+    if (!isValidISODate(toDate)) {
+      return { valid: false, error: 'Please enter a valid date.' };
+    }
+    // toDate must be on or after fromDate (same-day licenses are valid)
+    if (toDate < fromDate) {
+      return { valid: false, error: 'Valid To date must be on or after the Valid From date.' };
+    }
+    return { valid: true };
+  }
+
+  /**
+   * Checks if an app is restricted (date-restricted only).
+   * @param {number} appIndex - The index of the app in the registry
+   * @returns {boolean} True if the app is restricted
+   */
+  function isAppRestricted(appIndex) {
+    var registry = _getRegistry();
+    if (appIndex < 0 || appIndex >= registry.length) return false;
+    return registry[appIndex].restricted === true;
+  }
+
+  // --- Generate Date-Restricted License Key ---
+
+  async function generateDateRestrictedLicense(name, secretCodes, fromDate, toDate) {
+    var message = name + fromDate + toDate;
+    var hash = await hmacHex(message, secretCodes);
+    var payload = JSON.stringify({ n: name, f: fromDate, t: toDate, h: hash });
+    return btoa(payload);
+  }
+
   // --- History Manager ---
 
   var HISTORY_KEY = 'license_gen_history';
@@ -234,6 +319,19 @@
       if (!raw) return [];
       var parsed = JSON.parse(raw);
       if (!Array.isArray(parsed)) return [];
+      // Normalize entries for backward compatibility:
+      // Old entries may lack licenseType, validFrom, validTo
+      for (var i = 0; i < parsed.length; i++) {
+        if (!parsed[i].licenseType) {
+          parsed[i].licenseType = 'perpetual';
+        }
+        if (parsed[i].validFrom === undefined) {
+          parsed[i].validFrom = null;
+        }
+        if (parsed[i].validTo === undefined) {
+          parsed[i].validTo = null;
+        }
+      }
       return parsed;
     } catch (e) {
       console.warn('Corrupted history data in localStorage:', e);
@@ -250,12 +348,26 @@
     }
   }
 
-  function _addHistoryEntry(appName, userName, licenseKey) {
+  function _addHistoryEntry(appName, userName, licenseKey, licenseType, validFrom, validTo) {
+    // Default licenseType to "perpetual" if not provided (backward compat with old 3-arg calls)
+    if (!licenseType) {
+      licenseType = 'perpetual';
+    }
+    // Default validFrom and validTo to null if not provided
+    if (validFrom === undefined || validFrom === null) {
+      validFrom = null;
+    }
+    if (validTo === undefined || validTo === null) {
+      validTo = null;
+    }
     var entry = {
       appName: appName,
       userName: userName,
       licenseKey: licenseKey,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      licenseType: licenseType,
+      validFrom: validFrom,
+      validTo: validTo
     };
     var history = _loadHistory();
     if (history.length >= MAX_HISTORY) {
@@ -333,6 +445,64 @@
     toast.textContent = message;
     document.body.appendChild(toast);
     setTimeout(function() { if (toast.parentNode) toast.remove(); }, type === 'error' ? 3000 : 2000);
+  }
+
+  // --- Import/Export Engine ---
+
+  function _triggerDownload(content, filename) {
+    var blob = new Blob([content], { type: 'application/json' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  function exportAppRegistry() {
+    var registry = _getRegistry();
+    var now = new Date();
+    var dateStr = now.toISOString().slice(0, 10);
+    var exportFile = {
+      meta: {
+        type: 'license_gen_app_registry',
+        exportDate: now.toISOString(),
+        version: '2.0',
+        count: registry.length
+      },
+      data: registry
+    };
+    var content = JSON.stringify(exportFile, null, 2);
+    var filename = 'app_registry_' + dateStr + '.json';
+    _triggerDownload(content, filename);
+  }
+
+  /**
+   * Exports the License History as a JSON file download.
+   * Filename format: license_history_YYYY-MM-DD.json
+   * Meta header includes: type "license_gen_license_history", exportDate (ISO string),
+   * version "2.0", count (number of history entries).
+   * Data section contains the full License History array from localStorage.
+   * Validates: Requirements 5.1, 5.2, 5.3
+   */
+  function exportLicenseHistory() {
+    var history = _loadHistory();
+    var now = new Date();
+    var dateStr = now.toISOString().slice(0, 10);
+    var exportFile = {
+      meta: {
+        type: 'license_gen_license_history',
+        exportDate: now.toISOString(),
+        version: '2.0',
+        count: history.length
+      },
+      data: history
+    };
+    var content = JSON.stringify(exportFile, null, 2);
+    var filename = 'license_history_' + dateStr + '.json';
+    _triggerDownload(content, filename);
   }
 
   // --- Tab Controller ---
@@ -486,6 +656,17 @@
     userSpan.className = 'entry-user';
     userSpan.textContent = entry.userName;
 
+    // License type badge
+    var isDateRestricted = entry.licenseType === 'date-restricted';
+    var badge = document.createElement('span');
+    if (isDateRestricted) {
+      badge.className = 'badge-date-restricted';
+      badge.textContent = 'Date-Restricted';
+    } else {
+      badge.className = 'badge-perpetual';
+      badge.textContent = 'Perpetual';
+    }
+
     var keySpan = document.createElement('span');
     keySpan.className = 'entry-key-preview';
     keySpan.textContent = _truncateKey(entry.licenseKey);
@@ -505,9 +686,19 @@
     });
 
     summary.appendChild(userSpan);
+    summary.appendChild(badge);
     summary.appendChild(keySpan);
     summary.appendChild(dateSpan);
     summary.appendChild(inlineDeleteBtn);
+
+    // For date-restricted entries, show validity range
+    if (isDateRestricted && entry.validFrom && entry.validTo) {
+      var validitySpan = document.createElement('span');
+      validitySpan.className = 'entry-validity';
+      validitySpan.textContent = 'Valid: ' + entry.validFrom + ' \u2013 ' + entry.validTo;
+      summary.appendChild(validitySpan);
+    }
+
     entryDiv.appendChild(summary);
 
     entryDiv.addEventListener('click', function(e) {
@@ -619,6 +810,66 @@
     });
   }
 
+  // --- License Type Selector & Restriction Enforcement ---
+
+  var licenseTypeSelect = document.getElementById('license-type');
+  var dateFieldsContainer = document.getElementById('date-fields-container');
+
+  /**
+   * Shows or hides the date fields based on the selected license type.
+   * Requirements: 1.1, 1.2
+   */
+  function _updateDateFieldsVisibility() {
+    if (!licenseTypeSelect || !dateFieldsContainer) return;
+    if (licenseTypeSelect.value === 'date-restricted') {
+      dateFieldsContainer.removeAttribute('hidden');
+    } else {
+      dateFieldsContainer.setAttribute('hidden', '');
+    }
+  }
+
+  /**
+   * Checks the selected app's restriction flag and enforces license type constraints.
+   * If restricted: force "Date-Restricted", disable "Perpetual" option.
+   * If non-restricted: re-enable "Perpetual" option.
+   * Requirements: 11.1, 11.2, 11.3, 12.5
+   */
+  function _enforceAppRestriction() {
+    if (!licenseTypeSelect || !appSelect) return;
+    var selectedIndex = parseInt(appSelect.value, 10);
+    var perpetualOption = licenseTypeSelect.querySelector('option[value="perpetual"]');
+    if (!perpetualOption) return;
+
+    if (isAppRestricted(selectedIndex)) {
+      // Force Date-Restricted and disable Perpetual
+      licenseTypeSelect.value = 'date-restricted';
+      perpetualOption.disabled = true;
+    } else {
+      // Re-enable Perpetual option
+      perpetualOption.disabled = false;
+    }
+    _updateDateFieldsVisibility();
+  }
+
+  // Event listener: license type change shows/hides date fields
+  if (licenseTypeSelect) {
+    licenseTypeSelect.addEventListener('change', _updateDateFieldsVisibility);
+  }
+
+  // Event listener: app selection enforces restriction
+  if (appSelect) {
+    appSelect.addEventListener('change', _enforceAppRestriction);
+  }
+
+  // Default license type to "Perpetual" on page load (Requirement 1.3)
+  if (licenseTypeSelect) {
+    licenseTypeSelect.value = 'perpetual';
+  }
+  _updateDateFieldsVisibility();
+
+  // Enforce restriction for initially selected app on load
+  _enforceAppRestriction();
+
   // Generate button click
   generateBtn.addEventListener('click', async function() {
     var name = (nameInput.value || '').trim();
@@ -637,13 +888,32 @@
     var selectedApp = registry[selectedIndex];
 
     try {
-      var key = await generateLicense(name, selectedApp.secret);
-      licenseOutput.value = key;
-      // Save to history
-      var saved = _addHistoryEntry(selectedApp.name, name, key);
-      if (!saved) {
-        _showToast('\u26a0\ufe0f History entry could not be saved.', 'error');
+      var licenseType = licenseTypeSelect ? licenseTypeSelect.value : 'perpetual';
+      var key;
+
+      if (licenseType === 'date-restricted') {
+        // Validate date inputs
+        var fromDate = document.getElementById('date-from') ? document.getElementById('date-from').value : '';
+        var toDate = document.getElementById('date-to') ? document.getElementById('date-to').value : '';
+        var validation = validateDateRestrictedInputs(fromDate, toDate);
+        if (!validation.valid) {
+          alert(validation.error);
+          return;
+        }
+        key = await generateDateRestrictedLicense(name, selectedApp.secret, fromDate, toDate);
+        var saved = _addHistoryEntry(selectedApp.name, name, key, 'date-restricted', fromDate, toDate);
+        if (!saved) {
+          _showToast('\u26a0\ufe0f History entry could not be saved.', 'error');
+        }
+      } else {
+        key = await generateLicense(name, selectedApp.secret);
+        var saved = _addHistoryEntry(selectedApp.name, name, key, 'perpetual', null, null);
+        if (!saved) {
+          _showToast('\u26a0\ufe0f History entry could not be saved.', 'error');
+        }
       }
+
+      licenseOutput.value = key;
       outputSection.removeAttribute('hidden');
       // Display selected app name alongside generated key
       if (appNameLabel) {
@@ -716,5 +986,18 @@
     }).catch(function(err) {
       console.log('SW registration failed:', err);
     });
+  }
+
+  // Expose functions for testing (Node.js / test environment)
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports = {
+      isValidISODate: isValidISODate,
+      validateDateRestrictedInputs: validateDateRestrictedInputs,
+      isAppRestricted: isAppRestricted,
+      generateLicense: generateLicense,
+      generateDateRestrictedLicense: generateDateRestrictedLicense,
+      exportAppRegistry: exportAppRegistry,
+      exportLicenseHistory: exportLicenseHistory
+    };
   }
 })();
