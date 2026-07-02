@@ -12,6 +12,28 @@
 <link rel="manifest" href="manifest.json" />
 <link rel="icon" type="image/svg+xml" href="assets/icon.svg" />
 <link rel="stylesheet" href="css/styles.css" />
+
+<script>
+// Backup reminder banner — checks localStorage and injects a banner if overdue
+(function() {
+  const days = Number(localStorage.getItem("clinic-queue-backup-reminder-days") || 0);
+  if (days === 0) return;
+  const last = localStorage.getItem("clinic-queue-last-backup");
+  const overdue = !last || (Date.now() - new Date(last).getTime()) > days * 86400000;
+  if (!overdue) return;
+  document.addEventListener("DOMContentLoaded", function() {
+    const header = document.querySelector(".app-shell > header");
+    if (!header) return;
+    const banner = document.createElement("div");
+    banner.className = "backup-reminder-banner";
+    const daysAgo = last ? Math.floor((Date.now()-new Date(last).getTime())/86400000) : null;
+    banner.innerHTML = `<span>⚠</span>
+      <span>${daysAgo !== null ? `Backup overdue — last backup was ${daysAgo} day(s) ago.` : "No backup recorded yet."} <a href="backup.html">Back up now →</a></span>
+      <button onclick="this.parentElement.remove()" title="Dismiss">✕</button>`;
+    header.after(banner);
+  });
+})();
+</script>
 <script>
   const t = localStorage.getItem("clinic-queue-theme") || "light";
   document.addEventListener("DOMContentLoaded", () => {
@@ -101,6 +123,28 @@
     </div>
 
     <div class="card" style="margin-top:1.5rem;">
+      <h2>⏰ Backup reminders</h2>
+      <p class="helper" style="margin-bottom:1rem;">Shows a banner on every screen when a backup is overdue. Settings are saved in this browser only — set it on the device that regularly performs backups.</p>
+      <div class="field-row">
+        <div class="field">
+          <label for="reminder-interval">Remind me every</label>
+          <select id="reminder-interval">
+            <option value="0">Never (reminders off)</option>
+            <option value="1">Daily</option>
+            <option value="3">Every 3 days</option>
+            <option value="7" selected>Weekly</option>
+            <option value="14">Every 2 weeks</option>
+            <option value="30">Monthly</option>
+          </select>
+        </div>
+        <div class="field" style="align-self:flex-end;">
+          <button class="btn btn-primary" id="save-reminder-btn">Save reminder</button>
+        </div>
+      </div>
+      <div id="reminder-status" class="helper" style="margin-top:0.5rem;"></div>
+    </div>
+
+    <div class="card" style="margin-top:1.5rem;">
       <h2>Backup history</h2>
       <p class="helper">Backups are stored locally in your browser. Download them to a safe location — they are not automatically uploaded anywhere.</p>
       <div id="backup-log"><p class="small muted">No backups taken in this browser session.</p></div>
@@ -185,7 +229,9 @@ document.getElementById("backup-btn").addEventListener("click", async () => {
     const totalDocs = Object.values(backup.collections).reduce((s, c) => s + Object.keys(c).length, 0);
     const entry = { filename, createdAt: backup.createdAt, totalDocs };
     backupLog.unshift(entry);
+    localStorage.setItem(LAST_BACKUP_KEY, backup.createdAt); // record for reminder
     renderBackupLog();
+    updateReminderStatus();
 
     statusEl.textContent = `✓ Backup downloaded: ${filename} (${totalDocs} documents)`;
     statusEl.style.color = "var(--sage-700)";
@@ -308,6 +354,75 @@ function renderBackupLog() {
       <div class="small muted">${fmtDate(b.createdAt)} · ${b.totalDocs} documents</div>
     </div>`).join("");
 }
+
+// ---- Backup reminders ----
+const REMINDER_KEY = "clinic-queue-backup-reminder-days";
+const LAST_BACKUP_KEY = "clinic-queue-last-backup";
+
+function loadReminderSettings() {
+  const days = localStorage.getItem(REMINDER_KEY);
+  if (days !== null) document.getElementById("reminder-interval").value = days;
+  updateReminderStatus();
+}
+
+function updateReminderStatus() {
+  const statusEl = document.getElementById("reminder-status");
+  const days = Number(localStorage.getItem(REMINDER_KEY) || 0);
+  const lastBackup = localStorage.getItem(LAST_BACKUP_KEY);
+
+  if (days === 0) {
+    statusEl.textContent = "Reminders are off.";
+    statusEl.style.color = "var(--ink-soft)";
+    return;
+  }
+
+  if (!lastBackup) {
+    statusEl.textContent = `Reminders set to every ${days} day(s). No backup recorded yet in this browser.`;
+    statusEl.style.color = "var(--amber-700)";
+    return;
+  }
+
+  const lastDate = new Date(lastBackup);
+  const daysAgo = Math.floor((Date.now() - lastDate.getTime()) / (1000 * 60 * 60 * 24));
+  const overdue = daysAgo >= days;
+
+  if (overdue) {
+    statusEl.textContent = `⚠ Backup overdue — last backup was ${daysAgo} day(s) ago (${fmtDate(lastBackup)}). Reminder interval: every ${days} day(s).`;
+    statusEl.style.color = "var(--clay-500)";
+  } else {
+    const daysLeft = days - daysAgo;
+    statusEl.textContent = `✓ Next backup reminder in ${daysLeft} day(s). Last backup: ${fmtDate(lastBackup)}.`;
+    statusEl.style.color = "var(--sage-700)";
+  }
+}
+
+document.getElementById("save-reminder-btn").addEventListener("click", () => {
+  const days = document.getElementById("reminder-interval").value;
+  localStorage.setItem(REMINDER_KEY, days);
+  updateReminderStatus();
+  const btn = document.getElementById("save-reminder-btn");
+  btn.textContent = "Saved ✓";
+  setTimeout(() => btn.textContent = "Save reminder", 1500);
+});
+
+// Record last backup timestamp whenever a backup is downloaded
+// (patch into the existing backup button success path)
+const _origRenderLog = renderBackupLog;
+function recordBackupAndRender() {
+  if (backupLog.length > 0) {
+    localStorage.setItem(LAST_BACKUP_KEY, backupLog[0].createdAt);
+    updateReminderStatus();
+  }
+  _origRenderLog();
+}
+
+// Override renderBackupLog to also update the timestamp
+window.__backupLogHook = () => {
+  localStorage.setItem(LAST_BACKUP_KEY, new Date().toISOString());
+  updateReminderStatus();
+};
+
+loadReminderSettings();
 
 function fmtDate(val) {
   if (!val) return "—";

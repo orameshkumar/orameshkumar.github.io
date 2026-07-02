@@ -28,6 +28,10 @@
       <div class="time" id="clock-time">--:--</div>
       <div class="date" id="clock-date">—</div>
     </div>
+    <a href="self-service.html" id="board-book-btn"
+      style="display:none;background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.3);color:white;border-radius:8px;padding:0.4rem 0.85rem;font-size:0.82rem;text-decoration:none;white-space:nowrap;">
+      + Book token
+    </a>
   </div>
 
   <div class="board-self-service">
@@ -68,6 +72,11 @@ tickClock();
 setInterval(tickClock, 1000 * 15);
 // Re-render every 30s so slot alert colours (urgent/due) update as time passes
 setInterval(render, 1000 * 30);
+
+// Show "Book token" button only on mobile — wall display doesn't need it
+if (window.innerWidth < 768) {
+  document.getElementById("board-book-btn").style.display = "inline-block";
+}
 
 // The QR code is generated live in the browser using our own verified QR encoder
 // (js/qrcode-lib.js), pointed at a configurable URL rather than a baked static

@@ -13,6 +13,24 @@
 <link rel="icon" type="image/svg+xml" href="assets/icon.svg" />
 <link rel="stylesheet" href="css/styles.css" />
 <script>
+(function() {
+  const days = Number(localStorage.getItem("clinic-queue-backup-reminder-days") || 0);
+  if (days === 0) return;
+  const last = localStorage.getItem("clinic-queue-last-backup");
+  const overdue = !last || (Date.now() - new Date(last).getTime()) > days * 86400000;
+  if (!overdue) return;
+  document.addEventListener("DOMContentLoaded", function() {
+    const header = document.querySelector(".app-shell > header");
+    if (!header) return;
+    const banner = document.createElement("div");
+    banner.className = "backup-reminder-banner";
+    const daysAgo = last ? Math.floor((Date.now()-new Date(last).getTime())/86400000) : null;
+    banner.innerHTML = '<span>⚠</span><span>' + (daysAgo !== null ? 'Backup overdue — last backup was ' + daysAgo + ' day(s) ago.' : 'No backup recorded yet.') + ' <a href="backup.html">Back up now →</a></span><button onclick="this.parentElement.remove()" title="Dismiss">✕</button>';
+    header.after(banner);
+  });
+})();
+</script>
+<script>
   // Apply stored theme immediately before first paint to avoid flash
   const t = localStorage.getItem("clinic-queue-theme") || "light";
   document.addEventListener("DOMContentLoaded", () => {

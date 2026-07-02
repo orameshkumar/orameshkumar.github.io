@@ -488,3 +488,21 @@ tr.row-flash { animation: flash-row 1.2s ease; }
 .txn-name { font-weight: 600; font-size: 0.88rem; }
 .txn-meta { font-size: 0.76rem; color: var(--ink-soft); line-height: 1.5; }
 .txn-total { flex-shrink: 0; font-weight: 700; font-size: 0.95rem; text-align: right; }
+
+/* ---- Backup overdue banner ---- */
+.backup-reminder-banner {
+  background: var(--amber-100);
+  border-bottom: 2px solid var(--amber-500);
+  padding: 0.5rem 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.85rem;
+  color: var(--amber-700);
+  flex-wrap: wrap;
+}
+.backup-reminder-banner a { color: var(--teal-900); font-weight: 600; text-decoration: underline; }
+.backup-reminder-banner button {
+  background: none; border: none; cursor: pointer;
+  color: var(--ink-soft); font-size: 1rem; padding: 0; margin-left: auto; line-height: 1;
+}
