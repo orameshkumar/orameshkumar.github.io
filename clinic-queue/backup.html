@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Clinic Queue" />
+<link rel="apple-touch-icon" href="assets/icon-192.png" />
+<title>Backup & Recovery — Clinic Queue</title>
+<link rel="manifest" href="manifest.json" />
+<link rel="icon" type="image/svg+xml" href="assets/icon.svg" />
+<link rel="stylesheet" href="css/styles.css" />
+<script>
+  const t = localStorage.getItem("clinic-queue-theme") || "light";
+  document.addEventListener("DOMContentLoaded", () => {
+    if (t === "dark")     document.body.classList.add("theme-dark");
+    if (t === "midnight") document.body.classList.add("theme-midnight");
+    if (t === "forest")   document.body.classList.add("theme-forest");
+    if (t === "sunset")   document.body.classList.add("theme-sunset");
+  });
+</script>
+</head>
+<body>
+<div class="app-shell">
+  <header class="topbar">
+    <div class="brand">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 72 72" width="28" height="28" aria-hidden="true" style="flex-shrink:0;border-radius:6px;">
+        <rect width="72" height="72" rx="16" fill="white"/>
+        <text x="36" y="37" text-anchor="middle" font-size="28" font-weight="800" fill="#0F4C4F"
+          font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif">Q</text>
+        <polyline points="8,56 15,56 19,48 23,64 27,44 31,60 35,56 64,56"
+          fill="none" stroke="#E8A23D" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <span data-clinic-name>Clinic Queue</span>
+    </div>
+    <nav>
+      <a href="reception.html">Reception</a>
+      <a href="doctor.html">Doctor</a>
+      <a href="patients.html">Patients</a>
+      <a href="billing.html">Billing</a>
+      <a href="board.html">Queue Board</a>
+      <a href="admin.html">Admin Setup</a>
+      <a href="backup.html" class="active">Backup</a>
+    </nav>
+    <div class="user-pill"><span id="user-email">—</span><button id="logout-btn">Sign out</button></div>
+    <button id="theme-toggle-btn" title="Switch theme" style="background:none;border:none;cursor:pointer;font-size:1.1rem;padding:0.2rem 0.4rem;opacity:0.8;" aria-label="Switch theme">🎨</button>
+  </header>
+
+  <main class="page">
+    <div class="page-header">
+      <h1>Backup &amp; Recovery</h1>
+      <p>Download a full backup of all clinic data, or restore from a previous backup file.</p>
+    </div>
+
+    <div class="grid-2">
+      <!-- BACKUP -->
+      <div class="card">
+        <h2>📦 Download backup</h2>
+        <p class="helper" style="margin-bottom:1rem;">
+          Creates a JSON file containing all patients, visits, doctors, staff logins,
+          clinic settings, and counters. Prescription images (base64) are included.
+          Store the file in a safe location — Google Drive, email, or an external drive.
+        </p>
+        <div id="backup-status" class="helper" style="margin-bottom:0.75rem;"></div>
+        <div id="backup-progress" style="display:none;margin-bottom:0.75rem;">
+          <div style="background:var(--line);border-radius:999px;height:6px;overflow:hidden;">
+            <div id="backup-bar" style="background:var(--teal-700);height:100%;width:0%;transition:width 0.3s;"></div>
+          </div>
+          <p class="small muted" id="backup-progress-label" style="margin-top:0.35rem;"></p>
+        </div>
+        <button class="btn btn-primary btn-block" id="backup-btn">Download full backup</button>
+      </div>
+
+      <!-- RESTORE -->
+      <div class="card">
+        <h2>🔄 Restore from backup</h2>
+        <div class="helper" style="background:var(--clay-100);border-left:3px solid var(--clay-500);padding:0.6rem 0.75rem;border-radius:0 6px 6px 0;margin-bottom:1rem;">
+          <strong>⚠ Warning:</strong> Restore overwrites existing documents with the same IDs.
+          It does not delete documents that are not in the backup file.
+          Always download a fresh backup before restoring.
+        </div>
+        <p class="helper" style="margin-bottom:1rem;">
+          Select a JSON backup file downloaded from this page.
+          The system will validate the file structure before writing anything.
+        </p>
+        <div class="field">
+          <label for="restore-file">Backup file (.json)</label>
+          <input type="file" id="restore-file" accept=".json" />
+        </div>
+        <div id="restore-validate" class="helper" style="margin-bottom:0.75rem;display:none;"></div>
+        <div id="restore-progress" style="display:none;margin-bottom:0.75rem;">
+          <div style="background:var(--line);border-radius:999px;height:6px;overflow:hidden;">
+            <div id="restore-bar" style="background:var(--teal-700);height:100%;width:0%;transition:width 0.3s;"></div>
+          </div>
+          <p class="small muted" id="restore-progress-label" style="margin-top:0.35rem;"></p>
+        </div>
+        <button class="btn btn-primary btn-block" id="restore-btn" disabled>Restore from file</button>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:1.5rem;">
+      <h2>Backup history</h2>
+      <p class="helper">Backups are stored locally in your browser. Download them to a safe location — they are not automatically uploaded anywhere.</p>
+      <div id="backup-log"><p class="small muted">No backups taken in this browser session.</p></div>
+    </div>
+  </main>
+</div>
+
+<script type="module">
+import {
+  auth, authReady, db, onAuthStateChanged, signOut,
+  collection, doc, setDoc, getDocs, query, orderBy
+} from "./js/firebase-config.js";
+import { applyClinicBranding } from "./js/queue-logic.js";
+import { attachThemeToggle } from "./js/theme.js";
+
+attachThemeToggle();
+applyClinicBranding();
+
+await authReady;
+onAuthStateChanged(auth, (user) => {
+  if (!user) { window.location.href = "index.html"; return; }
+  document.getElementById("user-email").textContent = user.email || "—";
+});
+document.getElementById("logout-btn").onclick = () => signOut(auth);
+
+// Collections to back up — order matters for restore (settings before visits etc.)
+const COLLECTIONS = [
+  "clinicSettings",
+  "counters",
+  "doctors",
+  "users",
+  "patients",
+  "visits",
+];
+
+const backupLog = [];
+
+// ---- BACKUP ----
+document.getElementById("backup-btn").addEventListener("click", async () => {
+  const btn = document.getElementById("backup-btn");
+  const statusEl = document.getElementById("backup-status");
+  const progressWrap = document.getElementById("backup-progress");
+  const bar = document.getElementById("backup-bar");
+  const progressLabel = document.getElementById("backup-progress-label");
+
+  btn.disabled = true;
+  btn.textContent = "Backing up…";
+  statusEl.textContent = "";
+  progressWrap.style.display = "block";
+
+  try {
+    const backup = {
+      version: 1,
+      createdAt: new Date().toISOString(),
+      projectId: "clinic-queue-system-3f663",
+      collections: {}
+    };
+
+    for (let i = 0; i < COLLECTIONS.length; i++) {
+      const name = COLLECTIONS[i];
+      bar.style.width = `${Math.round((i / COLLECTIONS.length) * 100)}%`;
+      progressLabel.textContent = `Reading ${name}…`;
+
+      const snap = await getDocs(collection(db, name));
+      backup.collections[name] = {};
+      snap.forEach(d => { backup.collections[name][d.id] = d.data(); });
+      progressLabel.textContent = `✓ ${name} — ${snap.size} document(s)`;
+    }
+
+    bar.style.width = "100%";
+    progressLabel.textContent = "Preparing download…";
+
+    const json = JSON.stringify(backup, null, 2);
+    const blob = new Blob([json], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const dateStr = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+    const filename = `clinic-queue-backup-${dateStr}.json`;
+    const a = document.createElement("a");
+    a.href = url; a.download = filename; a.click();
+    URL.revokeObjectURL(url);
+
+    const totalDocs = Object.values(backup.collections).reduce((s, c) => s + Object.keys(c).length, 0);
+    const entry = { filename, createdAt: backup.createdAt, totalDocs };
+    backupLog.unshift(entry);
+    renderBackupLog();
+
+    statusEl.textContent = `✓ Backup downloaded: ${filename} (${totalDocs} documents)`;
+    statusEl.style.color = "var(--sage-700)";
+    progressLabel.textContent = `Done — ${totalDocs} documents across ${COLLECTIONS.length} collections.`;
+
+  } catch (err) {
+    statusEl.textContent = `Backup failed: ${err.message}`;
+    statusEl.style.color = "var(--clay-500)";
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Download full backup";
+  }
+});
+
+// ---- RESTORE ----
+let parsedBackup = null;
+
+document.getElementById("restore-file").addEventListener("change", async (e) => {
+  const file = e.target.files[0];
+  const validateEl = document.getElementById("restore-validate");
+  const restoreBtn = document.getElementById("restore-btn");
+  parsedBackup = null;
+  restoreBtn.disabled = true;
+  validateEl.style.display = "none";
+
+  if (!file) return;
+  validateEl.style.display = "block";
+  validateEl.textContent = "Validating file…";
+  validateEl.style.color = "var(--ink-soft)";
+
+  try {
+    const text = await file.text();
+    const data = JSON.parse(text);
+
+    // Validate structure
+    if (!data.version || !data.collections || !data.createdAt) {
+      throw new Error("Not a valid Clinic Queue backup file — missing required fields.");
+    }
+    if (data.version !== 1) {
+      throw new Error(`Unknown backup version ${data.version}. This tool supports version 1.`);
+    }
+    const found = Object.keys(data.collections);
+    const totalDocs = found.reduce((s, c) => s + Object.keys(data.collections[c]).length, 0);
+    parsedBackup = data;
+    restoreBtn.disabled = false;
+    validateEl.textContent = `✓ Valid backup from ${fmtDate(data.createdAt)} — ${totalDocs} documents across: ${found.join(", ")}`;
+    validateEl.style.color = "var(--sage-700)";
+  } catch (err) {
+    validateEl.textContent = `✕ ${err.message}`;
+    validateEl.style.color = "var(--clay-500)";
+  }
+});
+
+document.getElementById("restore-btn").addEventListener("click", async () => {
+  if (!parsedBackup) return;
+  const totalDocs = Object.values(parsedBackup.collections).reduce((s, c) => s + Object.keys(c).length, 0);
+  if (!confirm(`Restore ${totalDocs} documents from backup dated ${fmtDate(parsedBackup.createdAt)}?\n\nExisting documents with matching IDs will be overwritten. This cannot be undone.`)) return;
+
+  const btn = document.getElementById("restore-btn");
+  const progressWrap = document.getElementById("restore-progress");
+  const bar = document.getElementById("restore-bar");
+  const label = document.getElementById("restore-progress-label");
+  const validateEl = document.getElementById("restore-validate");
+
+  btn.disabled = true;
+  btn.textContent = "Restoring…";
+  progressWrap.style.display = "block";
+  bar.style.width = "0%";
+
+  let done = 0;
+  const errors = [];
+
+  try {
+    const colNames = Object.keys(parsedBackup.collections);
+    for (let ci = 0; ci < colNames.length; ci++) {
+      const colName = colNames[ci];
+      const docs = parsedBackup.collections[colName];
+      const docIds = Object.keys(docs);
+      label.textContent = `Restoring ${colName} (${docIds.length} documents)…`;
+
+      for (const docId of docIds) {
+        try {
+          await setDoc(doc(db, colName, docId), docs[docId]);
+        } catch (err) {
+          errors.push(`${colName}/${docId}: ${err.message}`);
+        }
+        done++;
+        bar.style.width = `${Math.round((done / totalDocs) * 100)}%`;
+      }
+    }
+
+    bar.style.width = "100%";
+    if (errors.length === 0) {
+      label.textContent = `✓ Restore complete — ${done} documents written.`;
+      validateEl.textContent = `✓ Restored ${done} documents successfully.`;
+      validateEl.style.color = "var(--sage-700)";
+    } else {
+      label.textContent = `Restore finished with ${errors.length} error(s) — ${done - errors.length} of ${done} documents written.`;
+      validateEl.textContent = `⚠ Restored with errors:\n${errors.slice(0, 5).join("\n")}${errors.length > 5 ? `\n…and ${errors.length - 5} more` : ""}`;
+      validateEl.style.color = "var(--clay-500)";
+    }
+  } catch (err) {
+    label.textContent = `Restore failed: ${err.message}`;
+    validateEl.style.color = "var(--clay-500)";
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Restore from file";
+  }
+});
+
+function renderBackupLog() {
+  const el = document.getElementById("backup-log");
+  if (backupLog.length === 0) {
+    el.innerHTML = '<p class="small muted">No backups taken in this browser session.</p>';
+    return;
+  }
+  el.innerHTML = backupLog.map(b => `
+    <div style="padding:0.5rem 0;border-bottom:1px solid var(--line);">
+      <div class="small"><strong>${b.filename}</strong></div>
+      <div class="small muted">${fmtDate(b.createdAt)} · ${b.totalDocs} documents</div>
+    </div>`).join("");
+}
+
+function fmtDate(val) {
+  if (!val) return "—";
+  const d = (typeof val === "string" && /^\d{4}-\d{2}-\d{2}$/.test(val))
+    ? new Date(val + "T00:00:00") : new Date(val);
+  if (isNaN(d)) return "—";
+  const day = String(d.getDate()).padStart(2,"0");
+  const month = d.toLocaleString([], { month: "short" });
+  return `${day}-${month}-${d.getFullYear()}`;
+}
+</script>
+<script>if("serviceWorker" in navigator){navigator.serviceWorker.register("sw.js").catch(()=>{});}</script>
+</body>
+</html>

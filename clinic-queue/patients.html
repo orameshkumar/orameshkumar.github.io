@@ -135,7 +135,8 @@ function adjustNavForRole() {
   if (currentRole === "doctor") {
     nav.innerHTML = `<a href="doctor.html">My Queue</a><a href="patients.html" class="active">Patients</a><a href="billing.html">Billing</a><a href="board.html">Queue Board</a>`;
   } else if (currentRole === "admin") {
-    nav.innerHTML = `<a href="admin.html">Admin Setup</a><a href="reception.html">Reception</a><a href="patients.html" class="active">Patients</a><a href="billing.html">Billing</a><a href="board.html">Queue Board</a>`;
+    nav.innerHTML = `<a href="admin.html">Admin Setup</a>
+      <a href="backup.html">Backup</a><a href="reception.html">Reception</a><a href="patients.html" class="active">Patients</a><a href="billing.html">Billing</a><a href="board.html">Queue Board</a>`;
   } else if (currentRole === "reception") {
     nav.innerHTML = `<a href="reception.html">Reception</a><a href="patients.html" class="active">Patients</a><a href="billing.html">Billing</a><a href="board.html">Queue Board</a><a href="admin.html">Admin Setup</a>`;
   }

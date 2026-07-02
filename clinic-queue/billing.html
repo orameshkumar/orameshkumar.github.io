@@ -12,6 +12,31 @@
 <link rel="manifest" href="manifest.json" />
 <link rel="icon" type="image/svg+xml" href="assets/icon.svg" />
 <link rel="stylesheet" href="css/styles.css" />
+<style>
+@media print {
+  /* Hide everything except the print report */
+  body > .app-shell > header,
+  body > .app-shell > main .page-header,
+  body > .app-shell > main .card:not(#print-wrapper),
+  body > .app-shell > main .grid-3,
+  #print-btn { display: none !important; }
+  #print-report { display: block !important; }
+  body { background: white; color: black; font-family: serif; font-size: 11pt; }
+  .print-section { margin-bottom: 1.2rem; }
+  .print-table { width: 100%; border-collapse: collapse; font-size: 10pt; }
+  .print-table th { background: #f0f0f0; border: 1px solid #ccc; padding: 4px 8px; text-align: left; font-weight: bold; }
+  .print-table td { border: 1px solid #ddd; padding: 4px 8px; }
+  .print-table tr:nth-child(even) td { background: #fafafa; }
+  .print-summary { display: flex; gap: 2rem; margin-bottom: 1rem; }
+  .print-summary-box { border: 1px solid #ccc; padding: 0.5rem 1rem; border-radius: 4px; }
+  .print-summary-box .label { font-size: 9pt; color: #666; }
+  .print-summary-box .value { font-size: 16pt; font-weight: bold; }
+  h2.print-heading { font-size: 13pt; border-bottom: 2px solid #333; padding-bottom: 4px; margin: 1rem 0 0.5rem; }
+}
+@media screen {
+  #print-report { display: none; }
+}
+</style>
 <script>
   const t = localStorage.getItem("clinic-queue-theme") || "light";
   document.addEventListener("DOMContentLoaded", () => {
@@ -116,8 +141,18 @@
     <div class="card flush">
       <div class="flex-between" style="padding:1rem 1.25rem 0;">
         <h2 style="margin:0;">Itemized transactions</h2>
+        <button class="btn btn-sm btn-outline" id="print-btn" onclick="window.print()">🖨 Print report</button>
       </div>
       <div id="transactions-table" style="padding:0 0 0.5rem;"><div class="empty-state">No transactions for this range.</div></div>
+    </div>
+
+    <!-- Print-only report — hidden on screen, shown only when printing -->
+    <div id="print-report" style="display:none;">
+      <div id="print-header"></div>
+      <div id="print-summary"></div>
+      <div id="print-by-doctor"></div>
+      <div id="print-by-mode"></div>
+      <div id="print-transactions"></div>
     </div>
   </main>
 </div>
@@ -170,7 +205,8 @@ function adjustNavForRole() {
   if (currentRole === "doctor") {
     nav.innerHTML = `<a href="doctor.html">My Queue</a><a href="patients.html">Patients</a><a href="billing.html" class="active">Billing</a><a href="board.html">Queue Board</a>`;
   } else if (currentRole === "admin") {
-    nav.innerHTML = `<a href="admin.html">Admin Setup</a><a href="reception.html">Reception</a><a href="patients.html">Patients</a><a href="billing.html" class="active">Billing</a><a href="board.html">Queue Board</a>`;
+    nav.innerHTML = `<a href="admin.html">Admin Setup</a>
+      <a href="backup.html">Backup</a><a href="reception.html">Reception</a><a href="patients.html">Patients</a><a href="billing.html" class="active">Billing</a><a href="board.html">Queue Board</a>`;
   } else if (currentRole === "reception") {
     nav.innerHTML = `<a href="reception.html">Reception</a><a href="patients.html">Patients</a><a href="billing.html" class="active">Billing</a><a href="board.html">Queue Board</a><a href="admin.html">Admin Setup</a>`;
   }
@@ -254,6 +290,74 @@ async function runReport() {
   renderByDoctor(allReceipts);
   renderByMode(allReceipts);
   renderTransactions(allReceipts);
+  buildPrintReport(from, to, allReceipts);
+}
+
+function buildPrintReport(from, to, receipts) {
+  const clinicName = document.querySelector("[data-clinic-name]")?.textContent || "Clinic Queue";
+  const total = receipts.reduce((s, r) => s + (r.total || 0), 0);
+  const consult = receipts.reduce((s, r) => s + (r.consultationFee || 0), 0);
+  const other = receipts.reduce((s, r) => s + (r.medicineFee || 0) + (r.otherFee || 0), 0);
+
+  document.getElementById("print-header").innerHTML = `
+    <div style="text-align:center;margin-bottom:1rem;border-bottom:2px solid #333;padding-bottom:0.75rem;">
+      <h1 style="margin:0;font-size:18pt;">${escapeHtml(clinicName)}</h1>
+      <p style="margin:0.25rem 0 0;font-size:10pt;color:#555;">Billing Report · ${fmtDate(from)} to ${fmtDate(to)} · Printed ${fmtDate(new Date().toISOString())}</p>
+    </div>`;
+
+  document.getElementById("print-summary").innerHTML = `
+    <div class="print-summary">
+      <div class="print-summary-box"><div class="label">Total collected</div><div class="value">₹${total}</div></div>
+      <div class="print-summary-box"><div class="label">Consultation fees</div><div class="value">₹${consult}</div></div>
+      <div class="print-summary-box"><div class="label">Medicine + other</div><div class="value">₹${other}</div></div>
+      <div class="print-summary-box"><div class="label">Transactions</div><div class="value">${receipts.length}</div></div>
+    </div>`;
+
+  // By doctor
+  const byDoc = {};
+  receipts.forEach(r => {
+    const v = r._visit;
+    const id = v.doctorId || (v.preferredDoctorIds||[])[0] || "unknown";
+    if (!byDoc[id]) byDoc[id] = { count: 0, total: 0 };
+    byDoc[id].count++; byDoc[id].total += r.total || 0;
+  });
+  document.getElementById("print-by-doctor").innerHTML = `
+    <h2 class="print-heading">By Doctor</h2>
+    <table class="print-table"><thead><tr><th>Doctor</th><th>Receipts</th><th>Total</th></tr></thead><tbody>
+      ${Object.entries(byDoc).map(([id, d]) => `<tr>
+        <td>${escapeHtml(doctors.find(x=>x.id===id)?.name||"Unknown")}</td>
+        <td>${d.count}</td><td>₹${d.total}</td></tr>`).join("")}
+    </tbody></table>`;
+
+  // By mode
+  const byMode = {};
+  receipts.forEach(r => { const m = r.mode||"Unknown"; byMode[m] = (byMode[m]||0)+(r.total||0); });
+  document.getElementById("print-by-mode").innerHTML = `
+    <h2 class="print-heading">By Payment Mode</h2>
+    <table class="print-table"><thead><tr><th>Mode</th><th>Total</th></tr></thead><tbody>
+      ${Object.entries(byMode).map(([m,t])=>`<tr><td>${escapeHtml(m)}</td><td>₹${t}</td></tr>`).join("")}
+    </tbody></table>`;
+
+  // Transactions
+  const sorted = [...receipts].sort((a,b)=>new Date(b.collectedAt||0)-new Date(a.collectedAt||0));
+  document.getElementById("print-transactions").innerHTML = `
+    <h2 class="print-heading">Itemized Transactions (${sorted.length})</h2>
+    <table class="print-table"><thead><tr><th>Date</th><th>Token</th><th>Patient</th><th>Doctor</th><th>Consult</th><th>Medicine</th><th>Other</th><th>Total</th><th>Mode</th><th>Receipt</th></tr></thead><tbody>
+      ${sorted.map(r => {
+        const v = r._visit;
+        const dn = doctors.find(d=>d.id===(v.doctorId||(v.preferredDoctorIds||[])[0]))?.name||"—";
+        return `<tr>
+          <td>${fmtDate(r.collectedAt||v.visitDate)}</td>
+          <td>#${v.tokenNumber}</td>
+          <td>${escapeHtml(v.patientName)}${v.patientCode?` (${v.patientCode})`:""}</td>
+          <td>${escapeHtml(dn)}</td>
+          <td>₹${r.consultationFee||0}</td><td>₹${r.medicineFee||0}</td><td>₹${r.otherFee||0}</td>
+          <td><strong>₹${r.total||0}</strong></td>
+          <td>${escapeHtml(r.mode||"—")}</td>
+          <td style="font-size:9pt;">${r.receiptNumber||"—"}</td>
+        </tr>`;
+      }).join("")}
+    </tbody></table>`;
 }
 
 // Get all receipts for a visit — handles both new receipts[] array and legacy fees object

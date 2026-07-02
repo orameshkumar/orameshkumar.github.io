@@ -1,8 +1,8 @@
-const CACHE_NAME = "clinic-queue-v51";
+const CACHE_NAME = "clinic-queue-v52";
 const SHELL_FILES = [
   "./index.html", "./reception.html", "./doctor.html", "./board.html",
   "./self-service.html", "./admin.html", "./patients.html", "./billing.html",
-  "./patient-card.html",
+  "./patient-card.html", "./backup.html",
   "./css/styles.css", "./css/board.css", "./manifest.json",
   "./assets/icon.svg", "./assets/icon-192.png", "./assets/icon-512.png",
   "./assets/self-service-qr.svg", "./js/qrcode-lib.js", "./js/barcode-scanner.js",
