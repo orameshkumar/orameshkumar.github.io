@@ -1,4 +1,4 @@
-const CACHE_NAME = "clinic-queue-v59";
+const CACHE_NAME = "clinic-queue-v60";
 const SHELL_FILES = [
   "./index.html", "./reception.html", "./doctor.html", "./board.html",
   "./self-service.html", "./admin.html", "./patients.html", "./billing.html",
@@ -6,7 +6,7 @@ const SHELL_FILES = [
   "./css/styles.css", "./css/board.css", "./manifest.json",
   "./assets/icon.svg", "./assets/icon-192.png", "./assets/icon-512.png",
   "./assets/self-service-qr.svg", "./js/qrcode-lib.js", "./js/barcode-scanner.js",
-  "./js/theme.js"
+  "./js/theme.js", "./js/license-guard.js"
 ];
 
 self.addEventListener("install", (event) => {

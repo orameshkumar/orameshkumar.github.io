@@ -119,6 +119,9 @@
 </div>
 
 <script type="module">
+import { ensureLicense } from "./js/license-guard.js";
+await ensureLicense();
+
 import {
   auth, authReady, db, onAuthStateChanged, signOut,
   collection, doc, updateDoc, getDoc, getDocs, addDoc, onSnapshot,
