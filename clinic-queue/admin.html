@@ -167,8 +167,9 @@
 
     <div class="grid-2">
       <div class="card">
-        <h2>Add a doctor</h2>
+        <h2 id="doctor-form-title">Add a doctor</h2>
         <form id="doctor-form">
+          <input type="hidden" id="doc-edit-id" value="" />
           <div class="field">
             <label for="doc-name">Full name</label>
             <input id="doc-name" placeholder="Dr. Anjali Sharma" required />
@@ -191,7 +192,10 @@
             <label for="doc-room">Default room</label>
             <input id="doc-room" placeholder="Room 1" required />
           </div>
-          <button class="btn btn-primary btn-block" type="submit">Add doctor</button>
+          <div style="display:flex;gap:0.5rem;">
+            <button class="btn btn-primary" type="submit" id="doc-submit-btn" style="flex:1;">Add doctor</button>
+            <button class="btn btn-outline" type="button" id="doc-cancel-btn" style="display:none;">Cancel</button>
+          </div>
         </form>
       </div>
 
@@ -482,9 +486,12 @@ onSnapshot(query(doctorsRef, orderBy("name")), (snap) => {
               title="Pre-fill the seed ACT input with the system-calculated value">Use this ↓</button>
           </div>
         </div>
-        <button class="btn btn-sm btn-outline" data-toggle-doctor="${doc_.id}" data-current-status="${doc_.status || "active"}">
-          ${isActive ? "Set inactive" : "Set active"}
-        </button>
+        <div style="display:flex;gap:0.4rem;flex-shrink:0;">
+          <button class="btn btn-sm btn-outline" data-edit-doctor="${doc_.id}" title="Edit doctor details">✏️ Edit</button>
+          <button class="btn btn-sm btn-outline" data-toggle-doctor="${doc_.id}" data-current-status="${doc_.status || "active"}">
+            ${isActive ? "Set inactive" : "Set active"}
+          </button>
+        </div>
       </div>`;
     const opt = document.createElement("option");
     opt.value = doc_.id;
@@ -500,6 +507,27 @@ onSnapshot(query(doctorsRef, orderBy("name")), (snap) => {
       const next = current === "active" ? "inactive" : "active";
       btn.textContent = "Saving…"; btn.disabled = true;
       await updateDoc(doc(db, "doctors", docId), { status: next });
+    });
+  });
+
+  list.querySelectorAll("[data-edit-doctor]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const docId = btn.dataset.editDoctor;
+      const doctor = doctorsCache.find(d => d.id === docId);
+      if (!doctor) return;
+      // Pre-fill the form
+      document.getElementById("doc-edit-id").value = docId;
+      document.getElementById("doc-name").value = doctor.name || "";
+      document.getElementById("doc-spec").value = doctor.specialization || "";
+      document.getElementById("doc-fee").value = doctor.consultationFee || "";
+      document.getElementById("doc-act").value = doctor.seedActMinutes || "";
+      document.getElementById("doc-room").value = doctor.room || "";
+      // Switch form to edit mode
+      document.getElementById("doctor-form-title").textContent = `Edit — ${doctor.name}`;
+      document.getElementById("doc-submit-btn").textContent = "Save changes";
+      document.getElementById("doc-cancel-btn").style.display = "inline-flex";
+      // Scroll the form into view
+      document.getElementById("doctor-form").scrollIntoView({ behavior: "smooth", block: "start" });
     });
   });
 
@@ -554,18 +582,44 @@ onSnapshot(query(doctorsRef, orderBy("name")), (snap) => {
   });
 });
 
+function resetDoctorForm() {
+  document.getElementById("doc-edit-id").value = "";
+  document.getElementById("doctor-form").reset();
+  document.getElementById("doctor-form-title").textContent = "Add a doctor";
+  document.getElementById("doc-submit-btn").textContent = "Add doctor";
+  document.getElementById("doc-cancel-btn").style.display = "none";
+}
+
+document.getElementById("doc-cancel-btn").addEventListener("click", resetDoctorForm);
+
 document.getElementById("doctor-form").addEventListener("submit", async (e) => {
   e.preventDefault();
+  const editId = document.getElementById("doc-edit-id").value.trim();
   const name = document.getElementById("doc-name").value.trim();
   const specialization = document.getElementById("doc-spec").value.trim();
   const consultationFee = Number(document.getElementById("doc-fee").value);
   const seedActMinutes = Number(document.getElementById("doc-act").value);
   const room = document.getElementById("doc-room").value.trim();
-  await addDoc(doctorsRef, {
-    name, specialization, consultationFee, seedActMinutes, room,
-    status: "active", createdAt: new Date().toISOString()
-  });
-  e.target.reset();
+  const btn = document.getElementById("doc-submit-btn");
+  btn.textContent = "Saving…"; btn.disabled = true;
+  try {
+    if (editId) {
+      // Edit mode — update existing doctor document
+      await updateDoc(doc(db, "doctors", editId), {
+        name, specialization, consultationFee, seedActMinutes, room,
+        updatedAt: new Date().toISOString()
+      });
+    } else {
+      // Add mode — create new doctor document
+      await addDoc(doctorsRef, {
+        name, specialization, consultationFee, seedActMinutes, room,
+        status: "active", createdAt: new Date().toISOString()
+      });
+    }
+    resetDoctorForm();
+  } finally {
+    btn.disabled = false;
+  }
 });
 
 document.getElementById("user-role").addEventListener("change", (e) => {
