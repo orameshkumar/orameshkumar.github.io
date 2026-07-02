@@ -306,7 +306,7 @@
 import {
   auth, authReady, db, onAuthStateChanged, signOut,
   collection, addDoc, doc, updateDoc, deleteDoc, getDoc, getDocs, onSnapshot,
-  query, where, orderBy
+  query, where, orderBy, runTransaction
 } from "./js/firebase-config.js";
 import { computeACT, calculateETAs, formatETA, todayKey, STATUS_LABELS, NO_SHOW_GRACE_SECONDS, generatePatientId, applyClinicBranding, fmtDate, earliestAvailableSlot } from "./js/queue-logic.js";
 import { attachScanButton } from "./js/barcode-scanner.js";
@@ -642,7 +642,7 @@ document.getElementById("patient-form").addEventListener("submit", async (e) => 
   }
 
   const preferredDoctorIds = Array.from(selectedDoctorIds);
-  const tokenNumber = await nextTokenNumber(preferredDoctorIds[0]);
+  const tokenNumber = await nextTokenNumber();
 
   // Fixed slot: read the chosen time if slot toggle is on
   let slotTime = null;
@@ -712,19 +712,19 @@ document.getElementById("patient-form").addEventListener("submit", async (e) => 
   switchTab("today"); // jump to Today tab so the issued token is immediately visible
 });
 
-async function nextTokenNumber(doctorId) {
-  const q = query(visitsRef, where("visitDate", "==", todayKey()), where("doctorId", "==", doctorId));
-  const snap = await getDocs(q);
-  // Also count tokens still pending across preferences for this doctor (doctorId null but listed as preferred)
-  const allToday = await getDocs(query(visitsRef, where("visitDate", "==", todayKey())));
-  let max = 0;
-  allToday.forEach((d) => {
-    const v = d.data();
-    if (v.doctorId === doctorId || (v.preferredDoctorIds || []).includes(doctorId)) {
-      if (v.tokenNumber > max) max = v.tokenNumber;
-    }
+async function nextTokenNumber() {
+  // Use a Firestore transaction on a per-day counter document to guarantee
+  // uniqueness even under concurrent issuance (two receptionists, double-click, etc.)
+  // The counter lives at counters/tokens-YYYY-MM-DD and auto-initialises to 0.
+  const counterRef = doc(db, "counters", `tokens-${todayKey()}`);
+  const newNumber = await runTransaction(db, async (txn) => {
+    const snap = await txn.get(counterRef);
+    const current = snap.exists() ? (snap.data().value || 0) : 0;
+    const next = current + 1;
+    txn.set(counterRef, { value: next, date: todayKey() });
+    return next;
   });
-  return max + 1;
+  return newNumber;
 }
 
 // ----- Tab switching -----
@@ -1134,7 +1134,7 @@ document.getElementById("addfee-save").onclick = async () => {
   const otherFee = Number(el("af-other-fee").value || 0);
   const total = consultationFee + medicineFee + otherFee;
   const mode = document.getElementById("af-mode").value;
-  const receiptNumber = `RCPT-${Date.now()}`;
+  const receiptNumber = `RCPT-${Date.now()}-${Math.random().toString(36).slice(2,5).toUpperCase()}`;
 
   if (mode === "UPI") {
     // Reuse the UPI overlay — store the fee data then show it
@@ -1373,7 +1373,7 @@ async function saveFeeTransaction(mode) {
   const medicineFee = Number(document.getElementById("b-med-fee").value || 0);
   const otherFee = Number(document.getElementById("b-other-fee").value || 0);
   const total = consultationFee + medicineFee + otherFee;
-  const receiptNumber = `RCPT-${Date.now()}`;
+  const receiptNumber = `RCPT-${Date.now()}-${Math.random().toString(36).slice(2,5).toUpperCase()}`;
   const receipt = { id: `fee-${Date.now()}`, consultationFee, medicineFee, otherFee, total, mode, collectedAt: new Date().toISOString(), receiptNumber };
   // Fetch current receipts to build the array (in case this visit already has some)
   const visitSnap = await getDoc(doc(db, "visits", activeBillingVisitId));
@@ -1394,7 +1394,7 @@ document.getElementById("billing-save").onclick = async () => {
     const total = Number(document.getElementById("b-consult-fee").value || 0)
       + Number(document.getElementById("b-med-fee").value || 0)
       + Number(document.getElementById("b-other-fee").value || 0);
-    const receiptRef = `RCPT-${Date.now()}`;
+    const receiptRef = `RCPT-${Date.now()}-${Math.random().toString(36).slice(2,5).toUpperCase()}`;
     const snap = await getDoc(doc(db, "clinicSettings", "main"));
     const settings = snap.exists() ? snap.data() : {};
     const vpa = settings.upiVpa || null;

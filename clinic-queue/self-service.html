@@ -64,7 +64,7 @@
   </div>
 
 <script type="module">
-import { db, collection, addDoc, getDocs, query, where } from "./js/firebase-config.js";
+import { db, collection, addDoc, getDocs, query, where, doc, runTransaction } from "./js/firebase-config.js";
 import { computeACT, todayKey, generatePatientId, applyClinicBranding } from "./js/queue-logic.js";
 
 applyClinicBranding();
@@ -165,7 +165,7 @@ document.getElementById("booking-form").addEventListener("submit", async (e) => 
   }
 
   const preferredDoctorIds = Array.from(selectedDoctorIds);
-  const tokenNumber = await nextTokenNumber(preferredDoctorIds[0]);
+  const tokenNumber = await nextTokenNumber();
 
   await addDoc(visitsRef, {
     patientId,
@@ -197,16 +197,15 @@ document.getElementById("booking-form").addEventListener("submit", async (e) => 
   document.getElementById("confirm-eta").textContent = new Date(etaMs).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 });
 
-async function nextTokenNumber(doctorId) {
-  const allToday = await getDocs(query(visitsRef, where("visitDate", "==", todayKey())));
-  let max = 0;
-  allToday.forEach((d) => {
-    const v = d.data();
-    if (v.doctorId === doctorId || (v.preferredDoctorIds || []).includes(doctorId)) {
-      if (v.tokenNumber > max) max = v.tokenNumber;
-    }
+async function nextTokenNumber() {
+  const counterRef = doc(db, "counters", `tokens-${todayKey()}`);
+  return await runTransaction(db, async (txn) => {
+    const snap = await txn.get(counterRef);
+    const current = snap.exists() ? (snap.data().value || 0) : 0;
+    const next = current + 1;
+    txn.set(counterRef, { value: next, date: todayKey() });
+    return next;
   });
-  return max + 1;
 }
 
 function escapeHtml(s) {

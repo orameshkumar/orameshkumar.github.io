@@ -21,6 +21,7 @@
   --radius: 10px;
   --mono: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
   --sans: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  color-scheme: light;
 }
 
 /* ---- Dark theme ---- */
@@ -44,6 +45,7 @@ body.theme-dark {
   --line: #2C3E3D;
   --topbar-bg: #0A2426;
   --topbar-text: #E8F0EF;
+  color-scheme: dark;
 }
 
 /* ---- Midnight theme (deep dark, higher contrast) ---- */
@@ -67,6 +69,7 @@ body.theme-midnight {
   --line: #1E3230;
   --topbar-bg: #040C0B;
   --topbar-text: #F0F8F7;
+  color-scheme: dark;
 }
 
 /* ---- Forest theme ---- */
@@ -90,6 +93,7 @@ body.theme-forest {
   --line: #CCDDC8;
   --topbar-bg: #1A3A16;
   --topbar-text: #FFFFFF;
+  color-scheme: light;
 }
 
 /* ---- Sunset theme ---- */
@@ -113,9 +117,14 @@ body.theme-sunset {
   --line: #E8D4C4;
   --topbar-bg: #4A1F42;
   --topbar-text: #FFFFFF;
+  color-scheme: light;
 }
 
 * { box-sizing: border-box; }
+
+/* Accent colour for native form controls (date/time pickers, checkboxes, range etc.)
+   — makes the selected date and today's indicator use the brand colour in all themes */
+:root, body { accent-color: var(--teal-900); }
 html, body { margin: 0; padding: 0; }
 html {
   /* Prevent iOS Safari from auto-adjusting font sizes in landscape */
@@ -230,9 +239,19 @@ input, select, textarea {
   border-radius: 7px;
   background: var(--paper);
   color: var(--ink);
+  /* Inherit the page's color-scheme so native pickers (date/time calendars) render
+     in light or dark mode to match the active theme */
+  color-scheme: inherit;
   /* Prevent iOS from adding inner shadow on inputs */
   -webkit-appearance: none;
   appearance: none;
+}
+/* Date and time inputs — don't apply appearance:none (it breaks the native picker
+   on some browsers), but do inherit color-scheme so the calendar popup matches the theme */
+input[type="date"], input[type="time"] {
+  -webkit-appearance: auto;
+  appearance: auto;
+  color-scheme: inherit;
 }
 select {
   /* Restore dropdown arrow removed by appearance:none */
