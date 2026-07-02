@@ -104,7 +104,7 @@ const WhatsApp = (function () {
     openWA(mobile, msg);
   }
 
-  function sendMonthlyReminder(memberId, mobile, name, balance, fee) {
+  function sendMonthlyReminder(mobile, name, balance, fee) {
     var tpl = lsGet(KEYS.TPL_MONTHLY_REMINDER, DEFAULTS.TPL_MONTHLY_REMINDER);
     var msg = processTemplate(tpl, { memberName: name, balance: balance.toFixed(2), fee: fee.toFixed(2) });
     openWA(mobile, msg);
