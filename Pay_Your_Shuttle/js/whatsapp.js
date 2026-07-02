@@ -42,24 +42,57 @@ const WhatsApp = (function () {
     var phone = '91' + mobile.replace(/\D/g, '');
     var url = 'https://api.whatsapp.com/send?phone=' + phone + '&text=' + encodeURIComponent(message);
 
-    // iOS Safari and PWAs block window.open — use a click-dispatched anchor instead
-    var a = document.createElement('a');
-    a.href = url;
-    a.target = '_blank';
-    a.rel = 'noopener noreferrer';
-    a.style.display = 'none';
-    document.body.appendChild(a);
-    a.click();
+    // iOS Safari blocks programmatic navigation after any async gap (await/IndexedDB).
+    // The only reliable fix is a real user tap — show a tappable toast instead.
+    var existing = document.getElementById('_wa_toast');
+    if (existing) existing.parentNode.removeChild(existing);
 
-    // Fallback: if the link didn't navigate (common in iOS standalone PWA mode),
-    // redirect the current page after a short delay
-    setTimeout(function () {
-      document.body.removeChild(a);
-      // Detect iOS standalone (home-screen PWA) mode
-      if (window.navigator.standalone || window.matchMedia('(display-mode: standalone)').matches) {
-        window.location.href = url;
-      }
-    }, 300);
+    var toast = document.createElement('div');
+    toast.id = '_wa_toast';
+    toast.style.cssText = [
+      'position:fixed',
+      'bottom:80px',
+      'left:50%',
+      'transform:translateX(-50%)',
+      'z-index:99999',
+      'background:#25D366',
+      'color:#fff',
+      'border-radius:14px',
+      'padding:13px 18px',
+      'font-size:1rem',
+      'font-weight:600',
+      'box-shadow:0 4px 20px rgba(0,0,0,0.35)',
+      'display:flex',
+      'align-items:center',
+      'gap:10px',
+      'white-space:nowrap',
+      'max-width:90vw'
+    ].join(';');
+
+    var link = document.createElement('a');
+    link.href = url;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    link.textContent = '📲 Send WhatsApp';
+    link.style.cssText = 'color:#fff;text-decoration:none;flex:1;';
+    link.addEventListener('click', function () {
+      setTimeout(function () { toast.parentNode && toast.parentNode.removeChild(toast); }, 300);
+    });
+
+    var closeBtn = document.createElement('button');
+    closeBtn.textContent = '✕';
+    closeBtn.setAttribute('aria-label', 'Dismiss');
+    closeBtn.style.cssText = 'background:none;border:none;color:#fff;font-size:1rem;cursor:pointer;padding:0;line-height:1;';
+    closeBtn.addEventListener('click', function () {
+      toast.parentNode && toast.parentNode.removeChild(toast);
+    });
+
+    toast.appendChild(link);
+    toast.appendChild(closeBtn);
+    document.body.appendChild(toast);
+
+    // Auto-dismiss after 12 seconds
+    setTimeout(function () { toast.parentNode && toast.parentNode.removeChild(toast); }, 12000);
   }
 
   function shouldConfirmMonthly() { return lsGet(KEYS.TOGGLE_MONTHLY, DEFAULTS.TOGGLE_MONTHLY) === '1'; }
