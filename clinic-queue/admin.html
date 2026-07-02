@@ -266,10 +266,27 @@
         <div id="user-list"><div class="empty-state">No staff logins linked yet.</div></div>
       </div>
     </div>
+
+    <hr class="section-divider" />
+
+    <div class="card" style="margin-top:1.5rem;">
+      <h2>🔑 License Information</h2>
+      <p class="helper">Current license status for this installation of Patient Queue Management.</p>
+      <div id="license-info-box" style="margin-top:1rem;">
+        <p class="small muted">Checking license…</p>
+      </div>
+      <div style="margin-top:1rem;display:flex;gap:0.75rem;flex-wrap:wrap;">
+        <button class="btn btn-outline" id="change-license-btn">Change license key</button>
+        <button class="btn btn-sm btn-danger" id="remove-license-btn">Remove license</button>
+      </div>
+    </div>
   </main>
 </div>
 
 <script type="module">
+import { ensureLicense } from "./js/license-guard.js";
+await ensureLicense();
+
 import {
   auth, authReady, db, onAuthStateChanged, signOut,
   collection, addDoc, doc, setDoc, updateDoc, getDocs, onSnapshot, query, orderBy, getDoc
@@ -279,6 +296,96 @@ import { attachThemeToggle } from "./js/theme.js";
 attachThemeToggle();
 
 applyClinicBranding();
+
+// ---- License Information Display ----
+import { validateLicense } from "./js/license-guard.js";
+
+(async function renderLicenseInfo() {
+  const box = document.getElementById("license-info-box");
+  const stored = localStorage.getItem("clinic-queue-license") || "";
+
+  if (!stored) {
+    box.innerHTML = `
+      <div style="background:#FEF3C7;border-left:3px solid var(--amber-500);padding:0.75rem 1rem;border-radius:0 8px 8px 0;">
+        <strong style="color:#92400E;">⚠ No license key applied</strong>
+        <p class="small" style="margin:0.3rem 0 0;color:#92400E;">This installation does not have a license key. Protected pages will prompt for one.</p>
+      </div>`;
+    return;
+  }
+
+  const result = await validateLicense(stored);
+  let payload = null;
+  try {
+    payload = JSON.parse(atob(stored.trim()));
+  } catch (e) { /* ignore */ }
+
+  if (result.valid) {
+    const isDateRestricted = payload && payload.f && payload.t;
+    const typeLabel = isDateRestricted ? "Date-Restricted" : "Perpetual";
+    const typeBadge = isDateRestricted
+      ? `<span style="background:#DBEAFE;color:#1E40AF;padding:0.2rem 0.5rem;border-radius:4px;font-size:0.78rem;font-weight:600;">📅 ${typeLabel}</span>`
+      : `<span style="background:#D1FAE5;color:#065F46;padding:0.2rem 0.5rem;border-radius:4px;font-size:0.78rem;font-weight:600;">♾️ ${typeLabel}</span>`;
+
+    box.innerHTML = `
+      <div style="background:#D1FAE5;border-left:3px solid #059669;padding:0.75rem 1rem;border-radius:0 8px 8px 0;">
+        <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
+          <strong style="color:#065F46;">✓ License active</strong>
+          ${typeBadge}
+        </div>
+        <table style="margin-top:0.75rem;font-size:0.85rem;border-collapse:collapse;width:100%;max-width:400px;">
+          <tr><td style="padding:0.3rem 0;color:#666;width:120px;">Licensed to:</td><td style="padding:0.3rem 0;font-weight:600;">${escapeHtml(payload.n)}</td></tr>
+          ${isDateRestricted ? `
+          <tr><td style="padding:0.3rem 0;color:#666;">Valid from:</td><td style="padding:0.3rem 0;">${payload.f}</td></tr>
+          <tr><td style="padding:0.3rem 0;color:#666;">Valid until:</td><td style="padding:0.3rem 0;">${payload.t}</td></tr>
+          <tr><td style="padding:0.3rem 0;color:#666;">Days remaining:</td><td style="padding:0.3rem 0;font-weight:600;">${daysRemaining(payload.t)}</td></tr>
+          ` : `
+          <tr><td style="padding:0.3rem 0;color:#666;">Validity:</td><td style="padding:0.3rem 0;">No expiry (perpetual)</td></tr>
+          `}
+        </table>
+      </div>`;
+  } else {
+    box.innerHTML = `
+      <div style="background:#FEE2E2;border-left:3px solid #DC2626;padding:0.75rem 1rem;border-radius:0 8px 8px 0;">
+        <strong style="color:#991B1B;">✕ License invalid</strong>
+        <p class="small" style="margin:0.3rem 0 0;color:#991B1B;">${escapeHtml(result.reason)}</p>
+        ${payload && payload.n ? `<p class="small" style="margin:0.3rem 0 0;color:#666;">Licensed to: ${escapeHtml(payload.n)}</p>` : ""}
+        ${payload && payload.f ? `<p class="small" style="margin:0.3rem 0 0;color:#666;">Valid: ${payload.f} — ${payload.t}</p>` : ""}
+      </div>`;
+  }
+})();
+
+function daysRemaining(toDateStr) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const toDate = new Date(toDateStr + "T00:00:00");
+  const diff = Math.ceil((toDate - today) / 86400000);
+  if (diff <= 0) return "Expired";
+  if (diff === 1) return "1 day";
+  return `${diff} days`;
+}
+
+document.getElementById("change-license-btn").addEventListener("click", () => {
+  const newKey = prompt("Enter new license key:");
+  if (newKey && newKey.trim()) {
+    validateLicense(newKey.trim()).then((result) => {
+      if (result.valid) {
+        localStorage.setItem("clinic-queue-license", newKey.trim());
+        alert("License key updated successfully.");
+        location.reload();
+      } else {
+        alert("Invalid license key: " + result.reason);
+      }
+    });
+  }
+});
+
+document.getElementById("remove-license-btn").addEventListener("click", () => {
+  if (confirm("Remove the current license key? Protected pages will ask for a new key on next load.")) {
+    localStorage.removeItem("clinic-queue-license");
+    alert("License key removed.");
+    location.reload();
+  }
+});
 
 // ---- Voice announcement language management ----
 const ALL_LANGUAGES = [
