@@ -1556,3 +1556,229 @@ body {
   background: var(--color-surface);
   color: var(--color-warning);
 }
+
+/* ============================================
+   Authentication UI Styles
+   ============================================ */
+
+/* --- Auth Overlay (Lock Screen & Setup Modal) --- */
+.auth-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-bg);
+  overflow: hidden;
+}
+
+.auth-overlay[hidden] {
+  display: none;
+}
+
+/* --- Auth App Title --- */
+.auth-app-title {
+  text-align: center;
+  margin-bottom: 24px;
+  font-size: 24px;
+  color: var(--color-text);
+}
+
+/* --- Auth Password Input --- */
+.auth-password-input {
+  width: 100%;
+  max-width: 280px;
+  padding: 12px 16px;
+  font-size: 18px;
+  border: 2px solid var(--color-border);
+  border-radius: 8px;
+  text-align: center;
+  background: var(--color-card-bg);
+  color: var(--color-text);
+}
+
+.auth-password-input:focus {
+  border-color: var(--color-primary);
+  outline: none;
+}
+
+/* --- Auth Submit Button --- */
+.auth-submit-btn {
+  max-width: 280px;
+  width: 100%;
+  padding: 12px;
+  margin-top: 12px;
+  font-size: 16px;
+  border-radius: 8px;
+  background-color: var(--color-primary);
+  color: #ffffff;
+  border: none;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.auth-submit-btn:hover {
+  background-color: var(--color-primary-dark);
+}
+
+.auth-submit-btn:active {
+  transform: scale(0.97);
+}
+
+/* --- Auth Biometric Button --- */
+.auth-biometric-btn {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  border: 2px solid var(--color-primary);
+  background: transparent;
+  font-size: 28px;
+  cursor: pointer;
+  margin-top: 16px;
+  color: var(--color-primary);
+  transition: background-color 0.2s ease, transform 0.2s ease;
+}
+
+.auth-biometric-btn:hover {
+  background-color: var(--color-surface);
+}
+
+.auth-biometric-btn:active {
+  transform: scale(0.93);
+}
+
+/* --- Auth Error Message --- */
+.auth-error-message {
+  color: #e74c3c;
+  text-align: center;
+  margin: 8px 0;
+  font-size: 14px;
+  min-height: 20px;
+  animation: fadeIn 0.3s;
+}
+
+/* --- Auth Setup Form (First-Launch Modal) --- */
+.auth-setup-form {
+  background: var(--color-card-bg);
+  border-radius: 12px;
+  padding: 24px;
+  max-width: 320px;
+  width: 90%;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.25);
+}
+
+.auth-setup-title {
+  text-align: center;
+  margin-bottom: 8px;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.auth-setup-message {
+  text-align: center;
+  color: var(--color-text-secondary);
+  margin-bottom: 16px;
+  font-size: 14px;
+}
+
+/* --- Auth Labels & Hints --- */
+.auth-label {
+  display: block;
+  margin-top: 12px;
+  margin-bottom: 4px;
+  font-size: 14px;
+  color: var(--color-text-secondary);
+}
+
+.auth-hint {
+  display: block;
+  margin-top: 4px;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+}
+
+/* --- Auth Settings Section --- */
+.auth-settings-btn {
+  margin-bottom: 12px;
+}
+
+.auth-settings-group {
+  margin-top: 12px;
+}
+
+.auth-timeout-select {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-card-bg);
+  color: var(--color-text);
+  font-size: 0.875rem;
+  min-height: 40px;
+}
+
+.auth-timeout-select:focus {
+  border-color: var(--color-primary);
+  outline: none;
+}
+
+/* --- Auth Change Password Form --- */
+.auth-change-password-form {
+  margin-top: 12px;
+  padding: 16px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-card-bg);
+}
+
+.auth-change-password-form .form-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+/* --- Auth Fadeout Animation --- */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* --- Responsive: Small viewports (320px and below) --- */
+@media (max-width: 320px) {
+  .auth-password-input {
+    max-width: 220px;
+    font-size: 16px;
+    padding: 10px 12px;
+  }
+
+  .auth-submit-btn {
+    max-width: 220px;
+    font-size: 14px;
+    padding: 10px;
+  }
+
+  .auth-setup-form {
+    padding: 16px;
+    width: 95%;
+    max-width: 280px;
+  }
+
+  .auth-app-title {
+    font-size: 20px;
+    margin-bottom: 16px;
+  }
+
+  .auth-biometric-btn {
+    width: 50px;
+    height: 50px;
+    font-size: 24px;
+  }
+}

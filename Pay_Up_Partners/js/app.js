@@ -11,34 +11,66 @@ var App = (function() {
       // Initialize database
       await DB.init();
 
-      // Initialize all modules
-      Settings.init();
-      if (typeof License !== 'undefined') await License.init();
-      Loans.init();
-      ClientMaster.init();
-      Collection.init();
-      InterestCollection.init();
-      if (typeof WhatsApp !== 'undefined') WhatsApp.init();
-      PaymentHistory.init();
-      Reports.init();
-      Backup.init();
+      // Initialize authentication module
+      Auth.init({
+        onLock: function() {
+          AuthUI.renderLockScreen();
+        }
+      });
 
-      // Setup navigation
-      setupTabNavigation();
+      // Set unlock callback to continue app initialization
+      AuthUI.setOnUnlockCallback(function() {
+        continueAppInit();
+      });
 
-      // Update app name display
-      Settings.updateAppNameDisplay();
+      // If auth is not setup, show first-launch flow and wait
+      if (!Auth.isSetup()) {
+        AuthUI.renderFirstLaunchSetup();
+        return;
+      }
 
-      // Register service worker
-      registerServiceWorker();
+      // If locked, show lock screen and wait
+      if (Auth.isLocked()) {
+        AuthUI.renderLockScreen();
+        return;
+      }
 
-      // Check backup reminder
-      Backup.checkBackupReminder();
+      // Auth passed, continue with app initialization
+      continueAppInit();
 
     } catch (e) {
       console.error('App initialization failed:', e);
       alert('Could not initialize app: ' + e.message);
     }
+  }
+
+  function continueAppInit() {
+    // Initialize all modules
+    Settings.init();
+    if (typeof License !== 'undefined') License.init();
+    Loans.init();
+    ClientMaster.init();
+    Collection.init();
+    InterestCollection.init();
+    if (typeof WhatsApp !== 'undefined') WhatsApp.init();
+    PaymentHistory.init();
+    Reports.init();
+    Backup.init();
+
+    // Setup navigation
+    setupTabNavigation();
+
+    // Update app name display
+    Settings.updateAppNameDisplay();
+
+    // Register service worker
+    registerServiceWorker();
+
+    // Check backup reminder
+    Backup.checkBackupReminder();
+
+    // Start session timer after successful authentication
+    Auth.startSessionTimer();
   }
 
   function navigateToScreen(screenId) {
@@ -134,6 +166,7 @@ var App = (function() {
 
   return {
     initApp: initApp,
+    continueAppInit: continueAppInit,
     navigateToScreen: navigateToScreen,
     setupTabNavigation: setupTabNavigation,
     registerServiceWorker: registerServiceWorker

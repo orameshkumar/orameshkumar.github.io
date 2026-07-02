@@ -59,6 +59,11 @@ const Settings = (function() {
     if (saveBtn) saveBtn.addEventListener('click', function(e) { e.preventDefault(); save(); });
 
     updateAppNameDisplay();
+
+    // Render auth settings (Security section)
+    if (typeof AuthUI !== 'undefined' && AuthUI.renderAuthSettings) {
+      AuthUI.renderAuthSettings();
+    }
   }
 
   function save() {
