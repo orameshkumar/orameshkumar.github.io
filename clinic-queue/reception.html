@@ -156,13 +156,13 @@
       <!-- HISTORY tab -->
       <div id="pane-history" style="display:none;">
         <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;margin-bottom:0.75rem;">
-          <!-- Date picker: hidden native input for value, visible styled button showing dd-mmm-yyyy -->
-          <div style="position:relative;display:inline-block;">
-            <button id="token-date-display" style="font-size:0.85rem;padding:0.3rem 0.6rem;border:1px solid var(--line);border-radius:6px;background:var(--paper);color:var(--ink);cursor:pointer;min-width:136px;text-align:left;display:flex;align-items:center;gap:0.4rem;">
+          <div style="position:relative;">
+            <label for="token-date-picker" class="sr-only">Select date</label>
+            <div id="token-date-display" class="date-picker-display" style="min-width:136px;">
               <span>📅</span><span id="token-date-text">Select date</span>
-            </button>
+            </div>
             <input type="date" id="token-date-picker"
-              style="position:absolute;top:0;right:0;bottom:0;left:0;opacity:0;cursor:pointer;width:100%;" />
+              style="position:absolute;top:0;left:0;width:100%;height:100%;opacity:0;cursor:pointer;z-index:1;" />
           </div>
           <select id="token-status-filter" style="font-size:0.85rem;padding:0.3rem 0.5rem;border:1px solid var(--line);border-radius:6px;background:var(--paper);color:var(--ink);">
             <option value="all">All statuses</option>
@@ -189,15 +189,15 @@
   <div class="card" style="max-width:420px;width:90%;margin:auto;">
     <h2>Intake vitals — <span id="vitals-token"></span></h2>
     <div class="field-row">
-      <div class="field"><label>Weight (kg)</label><input id="v-weight" type="number" /></div>
-      <div class="field"><label>Temp (°F)</label><input id="v-temp" type="number" step="0.1" /></div>
+      <div class="field"><label for="v-weight">Weight (kg)</label><input id="v-weight" type="number" /></div>
+      <div class="field"><label for="v-temp">Temp (°F)</label><input id="v-temp" type="number" step="0.1" /></div>
     </div>
     <div class="field-row">
-      <div class="field"><label>BP Systolic</label><input id="v-bp-sys" type="number" /></div>
-      <div class="field"><label>BP Diastolic</label><input id="v-bp-dia" type="number" /></div>
+      <div class="field"><label for="v-bp-sys">BP Systolic</label><input id="v-bp-sys" type="number" /></div>
+      <div class="field"><label for="v-bp-dia">BP Diastolic</label><input id="v-bp-dia" type="number" /></div>
     </div>
-    <div class="field"><label>Chief complaint / reason for visit</label><textarea id="v-complaint" rows="2"></textarea></div>
-    <div class="field"><label>Already consulted notes (referrals etc.)</label><textarea id="v-prior" rows="2"></textarea></div>
+    <div class="field"><label for="v-complaint">Chief complaint / reason for visit</label><textarea id="v-complaint" rows="2"></textarea></div>
+    <div class="field"><label for="v-prior">Already consulted notes (referrals etc.)</label><textarea id="v-prior" rows="2"></textarea></div>
     <div class="flex-between">
       <button class="btn btn-outline" id="vitals-cancel">Cancel</button>
       <button class="btn btn-primary" id="vitals-save">Save vitals</button>
@@ -209,11 +209,11 @@
 <div id="billing-modal" style="display:none;position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(28,36,34,0.55);z-index:100;align-items:flex-start;justify-content:center;overflow:auto;padding:1.5rem;">
   <div class="card" style="max-width:420px;width:90%;margin:auto;">
     <h2>Collect fee — <span id="billing-token"></span></h2>
-    <div class="field"><label>Consultation fee (₹)</label><input id="b-consult-fee" type="number" /></div>
-    <div class="field"><label>Medicine / pharmacy fee (₹)</label><input id="b-med-fee" type="number" value="0" /></div>
-    <div class="field"><label>Other charges (₹)</label><input id="b-other-fee" type="number" value="0" /></div>
+    <div class="field"><label for="b-consult-fee">Consultation fee (₹)</label><input id="b-consult-fee" type="number" /></div>
+    <div class="field"><label for="b-med-fee">Medicine / pharmacy fee (₹)</label><input id="b-med-fee" type="number" value="0" /></div>
+    <div class="field"><label for="b-other-fee">Other charges (₹)</label><input id="b-other-fee" type="number" value="0" /></div>
     <div class="field">
-      <label>Payment mode</label>
+      <label for="b-mode">Payment mode</label>
       <select id="b-mode"><option>Cash</option><option>Card</option><option selected>UPI</option><option>Other</option></select>
     </div>
     <p class="flex-between"><strong>Total</strong> <strong id="b-total">₹0</strong></p>
@@ -276,11 +276,11 @@
 <div id="addfee-modal" style="display:none;position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(28,36,34,0.55);z-index:100;align-items:flex-start;justify-content:center;overflow:auto;padding:1.5rem;">
   <div class="card" style="max-width:420px;width:100%;margin:auto;">
     <h2>Add fee — <span id="addfee-token"></span></h2>
-    <div class="field"><label>Consultation fee (₹)</label><input id="af-consult-fee" type="number" value="0" /></div>
-    <div class="field"><label>Medicine / pharmacy fee (₹)</label><input id="af-med-fee" type="number" value="0" /></div>
-    <div class="field"><label>Other charges (₹)</label><input id="af-other-fee" type="number" value="0" /></div>
+    <div class="field"><label for="af-consult-fee">Consultation fee (₹)</label><input id="af-consult-fee" type="number" value="0" /></div>
+    <div class="field"><label for="af-med-fee">Medicine / pharmacy fee (₹)</label><input id="af-med-fee" type="number" value="0" /></div>
+    <div class="field"><label for="af-other-fee">Other charges (₹)</label><input id="af-other-fee" type="number" value="0" /></div>
     <div class="field">
-      <label>Payment mode</label>
+      <label for="af-mode">Payment mode</label>
       <select id="af-mode"><option>Cash</option><option>Card</option><option selected>UPI</option><option>Other</option></select>
     </div>
     <p class="flex-between"><strong>Total</strong> <strong id="af-total">₹0</strong></p>
