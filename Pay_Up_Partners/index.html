@@ -164,56 +164,58 @@
                     </form>
                 </div>
 
-                <!-- Loan Form -->
-                <div id="loan-form-container" class="form-container" hidden>
-                    <h3 class="section-heading" id="loan-form-title">Add Loan</h3>
-                    <form id="loan-form" novalidate aria-label="Loan form">
-                        <div class="form-group">
-                            <label for="loan-type">Loan Type *</label>
-                            <select id="loan-type" required aria-required="true">
-                                <option value="daily_emi">Daily EMI</option>
-                                <option value="interest_only">Interest Only</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label for="loan-amount">Total Amount *</label>
-                            <input type="number" id="loan-amount" min="0.01" max="9999999.99" step="0.01" placeholder="Enter total amount" required aria-required="true">
-                            <span class="error-message" id="loan-amount-error" role="alert"></span>
-                        </div>
-                        <div class="form-group">
-                            <label for="loan-start-date">Start Date *</label>
-                            <input type="date" id="loan-start-date" required aria-required="true">
-                            <span class="error-message" id="loan-start-date-error" role="alert"></span>
-                        </div>
-                        <div class="form-group" id="loan-duration-group">
-                            <label for="loan-duration">Duration (days)</label>
-                            <input type="number" id="loan-duration" min="1" max="999" value="100" placeholder="Duration in days">
-                            <span class="error-message" id="loan-duration-error" role="alert"></span>
-                        </div>
-                        <div class="form-group" id="loan-rate-group" hidden>
-                            <label for="loan-interest-rate">Monthly Interest Rate (%)</label>
-                            <input type="number" id="loan-interest-rate" min="0.01" max="100" step="0.01" placeholder="e.g., 3">
-                            <span class="error-message" id="loan-interest-rate-error" role="alert"></span>
-                        </div>
-                        <div class="form-group">
-                            <label for="loan-emi">EMI</label>
-                            <input type="number" id="loan-emi" readonly placeholder="Auto-calculated" aria-describedby="loan-emi-help">
-                            <small id="loan-emi-help">Auto-calculated based on loan type</small>
-                        </div>
-                        <div class="form-group">
-                            <label for="loan-end-date">End Date</label>
-                            <input type="date" id="loan-end-date" readonly aria-describedby="loan-end-date-help">
-                            <small id="loan-end-date-help">Auto-calculated: Start Date + Duration</small>
-                        </div>
-                        <div class="form-group">
-                            <label for="loan-notes">Notes</label>
-                            <textarea id="loan-notes" rows="3" maxlength="500" placeholder="Optional notes..."></textarea>
-                        </div>
-                        <div class="form-actions">
-                            <button type="submit" class="btn-primary">Save Loan</button>
-                            <button type="button" id="loan-cancel-btn" class="btn-secondary">Cancel</button>
-                        </div>
-                    </form>
+                <!-- Loan Form Modal -->
+                <div id="loan-form-container" class="modal-overlay" hidden aria-modal="true" role="dialog" aria-label="Loan form">
+                    <div class="modal-content">
+                        <h3 class="section-heading" id="loan-form-title">Add Loan</h3>
+                        <form id="loan-form" novalidate aria-label="Loan form">
+                            <div class="form-group">
+                                <label for="loan-type">Loan Type *</label>
+                                <select id="loan-type" required aria-required="true">
+                                    <option value="daily_emi">Daily EMI</option>
+                                    <option value="interest_only">Interest Only</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="loan-amount">Total Amount *</label>
+                                <input type="number" id="loan-amount" min="0.01" max="9999999.99" step="0.01" placeholder="Enter total amount" required aria-required="true">
+                                <span class="error-message" id="loan-amount-error" role="alert"></span>
+                            </div>
+                            <div class="form-group">
+                                <label for="loan-start-date">Start Date *</label>
+                                <input type="date" id="loan-start-date" required aria-required="true">
+                                <span class="error-message" id="loan-start-date-error" role="alert"></span>
+                            </div>
+                            <div class="form-group" id="loan-duration-group">
+                                <label for="loan-duration">Duration (days)</label>
+                                <input type="number" id="loan-duration" min="1" max="999" value="100" placeholder="Duration in days">
+                                <span class="error-message" id="loan-duration-error" role="alert"></span>
+                            </div>
+                            <div class="form-group" id="loan-rate-group" hidden>
+                                <label for="loan-interest-rate">Monthly Interest Rate (%)</label>
+                                <input type="number" id="loan-interest-rate" min="0.01" max="100" step="0.01" placeholder="e.g., 3">
+                                <span class="error-message" id="loan-interest-rate-error" role="alert"></span>
+                            </div>
+                            <div class="form-group">
+                                <label for="loan-emi">EMI</label>
+                                <input type="number" id="loan-emi" readonly placeholder="Auto-calculated" aria-describedby="loan-emi-help">
+                                <small id="loan-emi-help">Auto-calculated based on loan type</small>
+                            </div>
+                            <div class="form-group">
+                                <label for="loan-end-date">End Date</label>
+                                <input type="date" id="loan-end-date" readonly aria-describedby="loan-end-date-help">
+                                <small id="loan-end-date-help">Auto-calculated: Start Date + Duration</small>
+                            </div>
+                            <div class="form-group">
+                                <label for="loan-notes">Notes</label>
+                                <textarea id="loan-notes" rows="3" maxlength="500" placeholder="Optional notes..."></textarea>
+                            </div>
+                            <div class="form-actions">
+                                <button type="submit" class="btn-primary">Save Loan</button>
+                                <button type="button" id="loan-cancel-btn" class="btn-secondary">Cancel</button>
+                            </div>
+                        </form>
+                    </div>
                 </div>
 
                 <!-- Principal Payment Modal -->
@@ -234,6 +236,21 @@
                         <div class="form-actions">
                             <button id="principal-confirm-btn" class="btn-primary">Confirm Payment</button>
                             <button id="principal-cancel-btn" class="btn-secondary">Cancel</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Loan Closure Confirmation Modal -->
+                <div id="closure-modal" class="modal-overlay" hidden aria-modal="true" role="dialog" aria-label="Loan closure confirmation">
+                    <div class="modal-content">
+                        <h2>Close Loan</h2>
+                        <p id="closure-client-name" class="payment-client-name"></p>
+                        <div id="closure-loan-details" class="closure-details"></div>
+                        <div id="closure-outstanding" class="closure-outstanding"></div>
+                        <span id="closure-error" class="error-message" role="alert"></span>
+                        <div class="form-actions">
+                            <button id="closure-confirm-btn" class="btn-primary">Confirm Closure</button>
+                            <button id="closure-cancel-btn" class="btn-secondary">Cancel</button>
                         </div>
                     </div>
                 </div>

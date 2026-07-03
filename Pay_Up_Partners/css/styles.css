@@ -488,7 +488,6 @@ body {
 }
 
 /* --- Form Containers --- */
-#loan-form-container,
 #client-form-container {
   background-color: var(--color-card-bg);
   border-radius: var(--radius-md);
@@ -497,7 +496,6 @@ body {
   margin-top: var(--spacing-md);
 }
 
-#loan-form-container[hidden],
 #client-form-container[hidden] {
   display: none;
 }
@@ -1781,4 +1779,49 @@ body {
     height: 50px;
     font-size: 24px;
   }
+}
+
+/* ============================================
+   Loan Closure Confirmation Modal Styles
+   ============================================ */
+
+/* --- Closure Details (loan detail rows) --- */
+.closure-details {
+  margin-bottom: var(--spacing-md);
+  padding: var(--spacing-sm) 0;
+}
+
+.closure-details .detail-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--color-border);
+  font-size: 0.8125rem;
+}
+
+.closure-details .detail-row:last-child {
+  border-bottom: none;
+}
+
+.closure-details .detail-row .detail-label {
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.closure-details .detail-row .detail-value {
+  color: var(--color-text);
+  text-align: right;
+}
+
+/* --- Closure Outstanding Amount --- */
+.closure-outstanding {
+  background-color: var(--color-surface);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-md);
+  margin-bottom: var(--spacing-md);
+  text-align: center;
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: var(--color-primary);
 }

@@ -3,6 +3,7 @@ const Loans = (function() {
 
   var currentClientId = null;
   var editingLoanId = null;
+  var _closingLoanId = null;
 
   function calculateEMI(amount, duration) {
     if (!amount || !duration || duration <= 0) return 0;
@@ -21,6 +22,72 @@ const Loans = (function() {
     return Math.round((amount * rate / 100) * 100) / 100;
   }
 
+  function _calculateOutstanding(loan, payments) {
+    if (loan.loanType === 'daily_emi') {
+      return Math.max(0, Math.round((loan.totalAmount - payments.reduce(function(s, p) { return s + p.amount; }, 0)) * 100) / 100);
+    } else {
+      return Math.max(0, loan.principalBalance || 0);
+    }
+  }
+
+  function formatCurrency(amount) {
+    return '₹' + Math.max(0, amount).toFixed(2);
+  }
+
+  function _renderClosureModal(loan, client, outstanding) {
+    var clientNameEl = document.getElementById('closure-client-name');
+    var detailsEl = document.getElementById('closure-loan-details');
+    var outstandingEl = document.getElementById('closure-outstanding');
+    var errorEl = document.getElementById('closure-error');
+    var modalEl = document.getElementById('closure-modal');
+
+    if (clientNameEl) clientNameEl.textContent = (client && client.name) ? client.name : 'Unknown';
+
+    var html = '';
+    var typeLabel = loan.loanType === 'daily_emi' ? 'Daily EMI' : 'Interest Only';
+    html += '<div class="detail-row"><span class="detail-label">Loan Type</span><span class="detail-value">' + typeLabel + '</span></div>';
+    html += '<div class="detail-row"><span class="detail-label">Total Amount</span><span class="detail-value">' + formatCurrency(loan.totalAmount) + '</span></div>';
+    html += '<div class="detail-row"><span class="detail-label">Start Date</span><span class="detail-value">' + (loan.startDate || '-') + '</span></div>';
+    html += '<div class="detail-row"><span class="detail-label">EMI</span><span class="detail-value">' + formatCurrency(loan.emi || 0) + '</span></div>';
+
+    if (loan.loanType === 'daily_emi') {
+      html += '<div class="detail-row"><span class="detail-label">Duration</span><span class="detail-value">' + (loan.duration || '-') + ' days</span></div>';
+      html += '<div class="detail-row"><span class="detail-label">End Date</span><span class="detail-value">' + (loan.endDate || '-') + '</span></div>';
+    } else {
+      html += '<div class="detail-row"><span class="detail-label">Interest Rate</span><span class="detail-value">' + (loan.interestRate || 0) + '%</span></div>';
+    }
+
+    if (loan.notes && loan.notes.trim()) {
+      html += '<div class="detail-row"><span class="detail-label">Notes</span><span class="detail-value">' + loan.notes + '</span></div>';
+    }
+
+    if (detailsEl) detailsEl.innerHTML = html;
+    if (outstandingEl) outstandingEl.innerHTML = 'Outstanding Amount: ' + formatCurrency(outstanding);
+    if (errorEl) errorEl.textContent = '';
+    if (modalEl) modalEl.removeAttribute('hidden');
+  }
+
+  function _dismissClosureModal() {
+    var modalEl = document.getElementById('closure-modal');
+    if (modalEl) modalEl.setAttribute('hidden', '');
+    _closingLoanId = null;
+  }
+
+  async function _confirmClosure() {
+    if (!_closingLoanId) return;
+    try {
+      var loan = await DB.getLoan(_closingLoanId);
+      if (!loan) { alert('Loan not found.'); _dismissClosureModal(); return; }
+      loan.status = 'closed';
+      await DB.updateLoan(loan);
+      _dismissClosureModal();
+      if (typeof ClientMaster !== 'undefined' && ClientMaster.renderClientList) ClientMaster.renderClientList();
+    } catch(e) {
+      var errorEl = document.getElementById('closure-error');
+      if (errorEl) errorEl.textContent = 'Could not close loan: ' + e.message;
+    }
+  }
+
   function init() {
     var loanForm = document.getElementById('loan-form');
     var loanTypeSelect = document.getElementById('loan-type');
@@ -37,6 +104,11 @@ const Loans = (function() {
     if (loanDurationInput) loanDurationInput.addEventListener('input', autoRecalc);
     if (loanRateInput) loanRateInput.addEventListener('input', autoRecalc);
     if (loanStartInput) loanStartInput.addEventListener('input', autoRecalc);
+
+    var closureConfirmBtn = document.getElementById('closure-confirm-btn');
+    var closureCancelBtn = document.getElementById('closure-cancel-btn');
+    if (closureConfirmBtn) closureConfirmBtn.addEventListener('click', _confirmClosure);
+    if (closureCancelBtn) closureCancelBtn.addEventListener('click', _dismissClosureModal);
   }
 
   function toggleLoanTypeFields(type) {
@@ -167,12 +239,16 @@ const Loans = (function() {
   }
 
   async function closeLoan(loanId) {
-    if (!confirm('Close this loan? It will no longer appear in collection.')) return;
     try {
       var loan = await DB.getLoan(loanId);
-      if (loan) { loan.status = 'closed'; await DB.updateLoan(loan); }
-      if (typeof ClientMaster !== 'undefined' && ClientMaster.renderClientList) ClientMaster.renderClientList();
-    } catch(e) { alert('Could not close loan: ' + e.message); }
+      if (!loan) { alert('Loan not found.'); return; }
+      var client = null;
+      try { client = await DB.getClient(loan.clientId); } catch(e) { client = null; }
+      var payments = await DB.getPaymentsByLoan(loanId);
+      var outstanding = _calculateOutstanding(loan, payments);
+      _closingLoanId = loanId;
+      _renderClosureModal(loan, client, outstanding);
+    } catch(e) { alert('Could not open closure modal: ' + e.message); }
   }
 
   function hideLoanForm() {
@@ -193,5 +269,5 @@ const Loans = (function() {
     });
   }
 
-  return { init, showAddLoanForm, showEditLoanForm, handleLoanFormSubmit, deleteLoan, closeLoan, hideLoanForm, calculateEMI, calculateEndDate, calculateInterestEMI, toggleLoanTypeFields };
+  return { init, showAddLoanForm, showEditLoanForm, handleLoanFormSubmit, deleteLoan, closeLoan, hideLoanForm, calculateEMI, calculateEndDate, calculateInterestEMI, toggleLoanTypeFields, formatCurrency, _calculateOutstanding };
 })();
