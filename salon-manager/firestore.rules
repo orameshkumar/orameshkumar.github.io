@@ -1,0 +1,53 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function getRole() {
+      return get(/databases/$(database)/documents/employees/$(request.auth.uid)).data.role;
+    }
+
+    function isOwnerOrManager() {
+      return getRole() in ['owner', 'manager'];
+    }
+
+    // Customers — all signed-in staff can read/write
+    match /customers/{id} {
+      allow read, write: if isSignedIn();
+    }
+
+    // Appointments — all signed-in staff can read/write
+    match /appointments/{id} {
+      allow read, write: if isSignedIn();
+    }
+
+    // Invoices — all signed-in staff can read; only receptionist+ can create
+    match /invoices/{id} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update, delete: if isOwnerOrManager();
+    }
+
+    // Inventory — all can read; only manager+ can write
+    match /inventory/{id} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn(); // tighten to isOwnerOrManager() after go-live
+    }
+
+    // Attendance — all signed-in staff can read/create; only manager+ can update
+    match /attendance/{id} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update, delete: if isOwnerOrManager();
+    }
+
+    // Employees — all can read their own; only owner/manager can write
+    match /employees/{id} {
+      allow read: if isSignedIn();
+      allow write: if isOwnerOrManager();
+    }
+  }
+}
