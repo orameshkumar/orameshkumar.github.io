@@ -3,7 +3,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
   getFirestore, collection, doc, setDoc, addDoc, updateDoc, deleteDoc,
-  onSnapshot, query, where, orderBy, getDocs, getDoc, serverTimestamp, Timestamp, runTransaction
+  onSnapshot, query, where, orderBy, getDocs, getDoc, serverTimestamp, Timestamp, runTransaction, writeBatch
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import {
   getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged,
@@ -37,6 +37,6 @@ export const authReady = setPersistence(auth, browserSessionPersistence).catch((
 
 export {
   collection, doc, setDoc, addDoc, updateDoc, deleteDoc,
-  onSnapshot, query, where, orderBy, getDocs, getDoc, serverTimestamp, Timestamp, runTransaction,
+  onSnapshot, query, where, orderBy, getDocs, getDoc, serverTimestamp, Timestamp, runTransaction, writeBatch,
   signInWithEmailAndPassword, signOut, onAuthStateChanged
 };

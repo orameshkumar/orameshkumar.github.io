@@ -85,6 +85,10 @@
           clinic settings, and counters. Prescription images (base64) are included.
           Store the file in a safe location — Google Drive, email, or an external drive.
         </p>
+        <div class="helper" style="background:var(--teal-100);border-left:3px solid var(--teal-700);padding:0.6rem 0.75rem;border-radius:0 6px 6px 0;margin-bottom:1rem;font-size:0.85rem;">
+          <strong>What IS backed up:</strong> all Firestore data — patients, visits, doctors, roles, settings, token counters, prescription images.<br>
+          <strong>What is NOT backed up:</strong> Firebase Authentication credentials (email/password hashes). Passwords cannot be exported from Firebase by design — they are never exposed to client-side code. Staff login passwords are unaffected by restore operations on the same Firebase project. If migrating to a new project, staff accounts must be recreated manually in the Firebase Console.
+        </div>
         <div id="backup-status" class="helper" style="margin-bottom:0.75rem;"></div>
         <div id="backup-progress" style="display:none;margin-bottom:0.75rem;">
           <div style="background:var(--line);border-radius:999px;height:6px;overflow:hidden;">
@@ -155,7 +159,7 @@
 <script type="module">
 import {
   auth, authReady, db, onAuthStateChanged, signOut,
-  collection, doc, setDoc, getDocs, query, orderBy
+  collection, doc, setDoc, getDocs, query, orderBy, Timestamp, writeBatch
 } from "./js/firebase-config.js";
 import { applyClinicBranding } from "./js/queue-logic.js";
 import { attachThemeToggle } from "./js/theme.js";
@@ -170,268 +174,299 @@ onAuthStateChanged(auth, (user) => {
 });
 document.getElementById("logout-btn").onclick = () => signOut(auth);
 
-// Collections to back up — order matters for restore (settings before visits etc.)
-const COLLECTIONS = [
-  "clinicSettings",
-  "counters",
-  "doctors",
-  "users",
-  "patients",
-  "visits",
-];
-
+const BACKUP_VERSION = 2;
+const COLLECTIONS = ["clinicSettings","counters","doctors","users","patients","visits"];
+const LAST_BACKUP_KEY = "clinic-queue-last-backup";
+const REMINDER_KEY    = "clinic-queue-backup-reminder-days";
 const backupLog = [];
 
-// ---- BACKUP ----
-document.getElementById("backup-btn").addEventListener("click", async () => {
-  const btn = document.getElementById("backup-btn");
-  const statusEl = document.getElementById("backup-status");
-  const progressWrap = document.getElementById("backup-progress");
-  const bar = document.getElementById("backup-bar");
-  const progressLabel = document.getElementById("backup-progress-label");
+// ── Timestamp serialisation ────────────────────────────────────────────────
+// Firestore Timestamps become {seconds,nanoseconds} plain objects via d.data().
+// We tag them so restore can recreate real Timestamps.
+const TIMESTAMP_TAG = "__TS__";
 
-  btn.disabled = true;
-  btn.textContent = "Backing up…";
-  statusEl.textContent = "";
-  progressWrap.style.display = "block";
+function serializeDoc(data) {
+  if (data instanceof Timestamp)
+    return { [TIMESTAMP_TAG]: true, s: data.seconds, n: data.nanoseconds };
+  if (Array.isArray(data)) return data.map(serializeDoc);
+  if (data && typeof data === "object") {
+    // Plain object that looks like an unwrapped Timestamp
+    if (typeof data.seconds === "number" && typeof data.nanoseconds === "number" && Object.keys(data).length === 2)
+      return { [TIMESTAMP_TAG]: true, s: data.seconds, n: data.nanoseconds };
+    const out = {};
+    for (const k of Object.keys(data)) out[k] = serializeDoc(data[k]);
+    return out;
+  }
+  return data;
+}
+
+function deserializeDoc(data) {
+  if (data && typeof data === "object" && data[TIMESTAMP_TAG])
+    return new Timestamp(data.s, data.n);
+  if (Array.isArray(data)) return data.map(deserializeDoc);
+  if (data && typeof data === "object") {
+    const out = {};
+    for (const k of Object.keys(data)) out[k] = deserializeDoc(data[k]);
+    return out;
+  }
+  return data;
+}
+
+// ── Progress helper ────────────────────────────────────────────────────────
+function setProgress(barId, labelId, pct, text) {
+  const bar = document.getElementById(barId);
+  const lbl = document.getElementById(labelId);
+  if (bar) bar.style.width = Math.min(100, pct) + "%";
+  if (lbl) lbl.textContent = text;
+}
+
+// ── BACKUP ─────────────────────────────────────────────────────────────────
+document.getElementById("backup-btn").addEventListener("click", async () => {
+  const btn      = document.getElementById("backup-btn");
+  const statusEl = document.getElementById("backup-status");
+  const progressW= document.getElementById("backup-progress");
+  btn.disabled = true; btn.textContent = "Backing up…";
+  statusEl.textContent = ""; progressW.style.display = "block";
 
   try {
     const backup = {
-      version: 1,
+      version: BACKUP_VERSION,
       createdAt: new Date().toISOString(),
-      projectId: "clinic-queue-system-3f663",
+      projectId: db.app.options.projectId,
       collections: {}
     };
-
+    let totalDocs = 0;
     for (let i = 0; i < COLLECTIONS.length; i++) {
       const name = COLLECTIONS[i];
-      bar.style.width = `${Math.round((i / COLLECTIONS.length) * 100)}%`;
-      progressLabel.textContent = `Reading ${name}…`;
-
+      setProgress("backup-bar","backup-progress-label",
+        Math.round((i / COLLECTIONS.length) * 90), `Reading ${name}…`);
       const snap = await getDocs(collection(db, name));
       backup.collections[name] = {};
-      snap.forEach(d => { backup.collections[name][d.id] = d.data(); });
-      progressLabel.textContent = `✓ ${name} — ${snap.size} document(s)`;
+      snap.forEach(d => {
+        backup.collections[name][d.id] = serializeDoc(d.data());
+      });
+      totalDocs += snap.size;
     }
-
-    bar.style.width = "100%";
-    progressLabel.textContent = "Preparing download…";
-
-    const json = JSON.stringify(backup, null, 2);
-    const blob = new Blob([json], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const dateStr = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+    setProgress("backup-bar","backup-progress-label", 95, "Serialising…");
+    const json   = JSON.stringify(backup, null, 2);
+    const sizeMB = (new Blob([json]).size / 1048576).toFixed(1);
+    setProgress("backup-bar","backup-progress-label", 98, "Triggering download…");
+    const dateStr  = new Date().toISOString().replace(/[:.]/g,"-").slice(0,19);
     const filename = `clinic-queue-backup-${dateStr}.json`;
-    const a = document.createElement("a");
-    a.href = url; a.download = filename; a.click();
-    URL.revokeObjectURL(url);
-
-    const totalDocs = Object.values(backup.collections).reduce((s, c) => s + Object.keys(c).length, 0);
-    const entry = { filename, createdAt: backup.createdAt, totalDocs };
+    triggerDownload(json, filename);
+    setProgress("backup-bar","backup-progress-label", 100,
+      `✓ Done — ${totalDocs} documents, ${sizeMB} MB`);
+    const entry = { filename, createdAt: backup.createdAt, totalDocs, sizeMB };
     backupLog.unshift(entry);
-    localStorage.setItem(LAST_BACKUP_KEY, backup.createdAt); // record for reminder
-    renderBackupLog();
-    updateReminderStatus();
-
-    statusEl.textContent = `✓ Backup downloaded: ${filename} (${totalDocs} documents)`;
+    localStorage.setItem(LAST_BACKUP_KEY, backup.createdAt);
+    renderBackupLog(); updateReminderStatus();
     statusEl.style.color = "var(--sage-700)";
-    progressLabel.textContent = `Done — ${totalDocs} documents across ${COLLECTIONS.length} collections.`;
-
+    statusEl.textContent = `✓ ${filename} — ${totalDocs} documents, ${sizeMB} MB`;
+    if (Number(sizeMB) > 10)
+      statusEl.textContent += " ⚠ Large file — prescription images contribute most of the size.";
   } catch (err) {
     statusEl.textContent = `Backup failed: ${err.message}`;
     statusEl.style.color = "var(--clay-500)";
+    console.error(err);
   } finally {
-    btn.disabled = false;
-    btn.textContent = "Download full backup";
+    btn.disabled = false; btn.textContent = "Download full backup";
   }
 });
 
-// ---- RESTORE ----
+// ── RESTORE ────────────────────────────────────────────────────────────────
 let parsedBackup = null;
 
 document.getElementById("restore-file").addEventListener("change", async (e) => {
-  const file = e.target.files[0];
-  const validateEl = document.getElementById("restore-validate");
-  const restoreBtn = document.getElementById("restore-btn");
-  parsedBackup = null;
-  restoreBtn.disabled = true;
-  validateEl.style.display = "none";
-
+  const file    = e.target.files[0];
+  const valEl   = document.getElementById("restore-validate");
+  const restBtn = document.getElementById("restore-btn");
+  parsedBackup = null; restBtn.disabled = true;
+  valEl.style.display = "none";
   if (!file) return;
-  validateEl.style.display = "block";
-  validateEl.textContent = "Validating file…";
-  validateEl.style.color = "var(--ink-soft)";
-
+  valEl.style.display = "block";
+  valEl.textContent = "Validating…"; valEl.style.color = "var(--ink-soft)";
   try {
     const text = await file.text();
     const data = JSON.parse(text);
-
-    // Validate structure
-    if (!data.version || !data.collections || !data.createdAt) {
-      throw new Error("Not a valid Clinic Queue backup file — missing required fields.");
-    }
-    if (data.version !== 1) {
-      throw new Error(`Unknown backup version ${data.version}. This tool supports version 1.`);
-    }
-    const found = Object.keys(data.collections);
-    const totalDocs = found.reduce((s, c) => s + Object.keys(data.collections[c]).length, 0);
-    parsedBackup = data;
-    restoreBtn.disabled = false;
-    validateEl.textContent = `✓ Valid backup from ${fmtDate(data.createdAt)} — ${totalDocs} documents across: ${found.join(", ")}`;
-    validateEl.style.color = "var(--sage-700)";
+    if (!data.version || !data.collections || !data.createdAt)
+      throw new Error("Not a valid Clinic Queue backup — missing required fields.");
+    if (![1,2].includes(data.version))
+      throw new Error(`Unsupported backup version ${data.version}.`);
+    const colNames  = Object.keys(data.collections);
+    const totalDocs = colNames.reduce((s,c)=>s+Object.keys(data.collections[c]).length,0);
+    const sizeMB    = (new Blob([text]).size/1048576).toFixed(1);
+    const hasTags   = text.includes(TIMESTAMP_TAG);
+    const tsNote    = data.version===1
+      ? "⚠ v1 backup — date/time fields restored as plain strings, not Firestore Timestamps."
+      : hasTags ? "✓ Timestamps will be restored as native Firestore Timestamps." : "";
+    parsedBackup = data; restBtn.disabled = false;
+    valEl.style.color = "var(--sage-700)";
+    valEl.innerHTML =
+      `✓ Valid backup (v${data.version}) from <strong>${fmtDate(data.createdAt)}</strong><br>` +
+      `${totalDocs} documents in: ${colNames.join(", ")}<br>` +
+      `File: ${sizeMB} MB` +
+      (tsNote ? `<br><span style="color:var(--amber-700)">${tsNote}</span>` : "");
   } catch (err) {
-    validateEl.textContent = `✕ ${err.message}`;
-    validateEl.style.color = "var(--clay-500)";
+    valEl.textContent = `✕ ${err.message}`; valEl.style.color = "var(--clay-500)";
   }
 });
 
 document.getElementById("restore-btn").addEventListener("click", async () => {
   if (!parsedBackup) return;
-  const totalDocs = Object.values(parsedBackup.collections).reduce((s, c) => s + Object.keys(c).length, 0);
-  if (!confirm(`Restore ${totalDocs} documents from backup dated ${fmtDate(parsedBackup.createdAt)}?\n\nExisting documents with matching IDs will be overwritten. This cannot be undone.`)) return;
+  const totalDocs = Object.values(parsedBackup.collections)
+    .reduce((s,c)=>s+Object.keys(c).length,0);
 
-  const btn = document.getElementById("restore-btn");
-  const progressWrap = document.getElementById("restore-progress");
-  const bar = document.getElementById("restore-bar");
-  const label = document.getElementById("restore-progress-label");
-  const validateEl = document.getElementById("restore-validate");
+  if (!confirm(
+    `RESTORE FROM BACKUP\n\n` +
+    `Date: ${fmtDate(parsedBackup.createdAt)}\n` +
+    `Documents: ${totalDocs}\n` +
+    `Collections: ${Object.keys(parsedBackup.collections).join(", ")}\n\n` +
+    `⚠ Existing documents with matching IDs will be OVERWRITTEN.\n` +
+    `Documents not in this backup will NOT be deleted.\n\n` +
+    `A safety backup of the current data will be downloaded first.\n\n` +
+    `Continue?`)) return;
 
-  btn.disabled = true;
-  btn.textContent = "Restoring…";
-  progressWrap.style.display = "block";
-  bar.style.width = "0%";
-
-  let done = 0;
-  const errors = [];
+  const btn   = document.getElementById("restore-btn");
+  const progW = document.getElementById("restore-progress");
+  const lbl   = document.getElementById("restore-progress-label");
+  const valEl = document.getElementById("restore-validate");
+  btn.disabled = true; btn.textContent = "Restoring…";
+  progW.style.display = "block";
 
   try {
-    const colNames = Object.keys(parsedBackup.collections);
-    for (let ci = 0; ci < colNames.length; ci++) {
-      const colName = colNames[ci];
-      const docs = parsedBackup.collections[colName];
-      const docIds = Object.keys(docs);
-      label.textContent = `Restoring ${colName} (${docIds.length} documents)…`;
+    // Step 1: auto-backup current state
+    setProgress("restore-bar","restore-progress-label",2,"Downloading pre-restore safety backup…");
+    await triggerAutoBackup();
 
-      for (const docId of docIds) {
-        try {
-          await setDoc(doc(db, colName, docId), docs[docId]);
-        } catch (err) {
-          errors.push(`${colName}/${docId}: ${err.message}`);
+    // Step 2: batched writes (Firestore limit: 500 ops per batch)
+    setProgress("restore-bar","restore-progress-label",10,"Writing to Firestore…");
+    const colNames  = Object.keys(parsedBackup.collections);
+    const BATCH_SZ  = 400;
+    let done = 0, errors = [];
+
+    for (const colName of colNames) {
+      const docsMap = parsedBackup.collections[colName];
+      const docIds  = Object.keys(docsMap);
+      for (let i = 0; i < docIds.length; i += BATCH_SZ) {
+        const batch = writeBatch(db);
+        const slice = docIds.slice(i, i + BATCH_SZ);
+        for (const docId of slice) {
+          try {
+            batch.set(doc(db, colName, docId), deserializeDoc(docsMap[docId]));
+          } catch (err) {
+            errors.push(`${colName}/${docId}: ${err.message}`);
+          }
         }
-        done++;
-        bar.style.width = `${Math.round((done / totalDocs) * 100)}%`;
+        try { await batch.commit(); }
+        catch (err) { errors.push(`Batch ${colName}[${i}]: ${err.message}`); }
+        done += slice.length;
+        setProgress("restore-bar","restore-progress-label",
+          10 + Math.round((done/totalDocs)*88),
+          `${colName}: ${Math.min(i+BATCH_SZ,docIds.length)}/${docIds.length}…`);
       }
     }
 
-    bar.style.width = "100%";
+    setProgress("restore-bar","restore-progress-label",100,
+      `✓ Restore complete — ${done} documents written${errors.length?`, ${errors.length} error(s)`:""}.`);
+
     if (errors.length === 0) {
-      label.textContent = `✓ Restore complete — ${done} documents written.`;
-      validateEl.textContent = `✓ Restored ${done} documents successfully.`;
-      validateEl.style.color = "var(--sage-700)";
+      valEl.style.color = "var(--sage-700)";
+      valEl.textContent = `✓ Restored ${done} documents. Reload the app to see restored data.`;
     } else {
-      label.textContent = `Restore finished with ${errors.length} error(s) — ${done - errors.length} of ${done} documents written.`;
-      validateEl.textContent = `⚠ Restored with errors:\n${errors.slice(0, 5).join("\n")}${errors.length > 5 ? `\n…and ${errors.length - 5} more` : ""}`;
-      validateEl.style.color = "var(--clay-500)";
+      valEl.style.color = "var(--clay-500)";
+      valEl.innerHTML   = `⚠ ${done-errors.length}/${done} documents restored.<br>` +
+        errors.slice(0,5).map(e=>`<code>${e}</code>`).join("<br>") +
+        (errors.length>5 ? `<br>…and ${errors.length-5} more` : "");
     }
   } catch (err) {
-    label.textContent = `Restore failed: ${err.message}`;
-    validateEl.style.color = "var(--clay-500)";
+    lbl.textContent   = `Restore failed: ${err.message}`;
+    valEl.style.color = "var(--clay-500)";
+    valEl.textContent = `✕ Restore failed: ${err.message}`;
+    console.error(err);
   } finally {
-    btn.disabled = false;
-    btn.textContent = "Restore from file";
+    btn.disabled = false; btn.textContent = "Restore from file";
   }
 });
 
+// Auto-backup before restore — safety net
+async function triggerAutoBackup() {
+  const backup = {
+    version: BACKUP_VERSION,
+    createdAt: new Date().toISOString(),
+    projectId: db.app.options.projectId,
+    note: "Auto-backup before restore",
+    collections: {}
+  };
+  for (const name of COLLECTIONS) {
+    const snap = await getDocs(collection(db, name));
+    backup.collections[name] = {};
+    snap.forEach(d => { backup.collections[name][d.id] = serializeDoc(d.data()); });
+  }
+  const json     = JSON.stringify(backup, null, 2);
+  const dateStr  = new Date().toISOString().replace(/[:.]/g,"-").slice(0,19);
+  const filename = `clinic-queue-PRE-RESTORE-${dateStr}.json`;
+  triggerDownload(json, filename);
+  const totalDocs = Object.values(backup.collections).reduce((s,c)=>s+Object.keys(c).length,0);
+  localStorage.setItem(LAST_BACKUP_KEY, backup.createdAt);
+  backupLog.unshift({ filename, createdAt: backup.createdAt, totalDocs, note: "Pre-restore auto-backup" });
+  renderBackupLog();
+}
+
+function triggerDownload(json, filename) {
+  const a = Object.assign(document.createElement("a"), {
+    href: URL.createObjectURL(new Blob([json],{type:"application/json"})),
+    download: filename
+  });
+  document.body.appendChild(a); a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(a.href); document.body.removeChild(a); }, 1000);
+}
+
+// ── Backup log ─────────────────────────────────────────────────────────────
 function renderBackupLog() {
   const el = document.getElementById("backup-log");
   if (backupLog.length === 0) {
-    el.innerHTML = '<p class="small muted">No backups taken in this browser session.</p>';
-    return;
+    el.innerHTML = '<p class="small muted">No backups taken in this browser session.</p>'; return;
   }
-  el.innerHTML = backupLog.map(b => `
-    <div style="padding:0.5rem 0;border-bottom:1px solid var(--line);">
-      <div class="small"><strong>${b.filename}</strong></div>
-      <div class="small muted">${fmtDate(b.createdAt)} · ${b.totalDocs} documents</div>
+  el.innerHTML = backupLog.map(b =>
+    `<div style="padding:0.5rem 0;border-bottom:1px solid var(--line);">
+      <div class="small"><strong>${b.filename}</strong>${b.note?` <span class="muted">(${b.note})</span>`:""}</div>
+      <div class="small muted">${fmtDate(b.createdAt)} · ${b.totalDocs} docs${b.sizeMB&&b.sizeMB!=="—"?` · ${b.sizeMB} MB`:""}</div>
     </div>`).join("");
 }
 
-// ---- Backup reminders ----
-const REMINDER_KEY = "clinic-queue-backup-reminder-days";
-const LAST_BACKUP_KEY = "clinic-queue-last-backup";
-
+// ── Reminders ──────────────────────────────────────────────────────────────
 function loadReminderSettings() {
   const days = localStorage.getItem(REMINDER_KEY);
   if (days !== null) document.getElementById("reminder-interval").value = days;
   updateReminderStatus();
 }
-
 function updateReminderStatus() {
-  const statusEl = document.getElementById("reminder-status");
-  const days = Number(localStorage.getItem(REMINDER_KEY) || 0);
-  const lastBackup = localStorage.getItem(LAST_BACKUP_KEY);
-
-  if (days === 0) {
-    statusEl.textContent = "Reminders are off.";
-    statusEl.style.color = "var(--ink-soft)";
-    return;
-  }
-
-  if (!lastBackup) {
-    statusEl.textContent = `Reminders set to every ${days} day(s). No backup recorded yet in this browser.`;
-    statusEl.style.color = "var(--amber-700)";
-    return;
-  }
-
-  const lastDate = new Date(lastBackup);
-  const daysAgo = Math.floor((Date.now() - lastDate.getTime()) / (1000 * 60 * 60 * 24));
-  const overdue = daysAgo >= days;
-
-  if (overdue) {
-    statusEl.textContent = `⚠ Backup overdue — last backup was ${daysAgo} day(s) ago (${fmtDate(lastBackup)}). Reminder interval: every ${days} day(s).`;
-    statusEl.style.color = "var(--clay-500)";
-  } else {
-    const daysLeft = days - daysAgo;
-    statusEl.textContent = `✓ Next backup reminder in ${daysLeft} day(s). Last backup: ${fmtDate(lastBackup)}.`;
-    statusEl.style.color = "var(--sage-700)";
-  }
+  const el   = document.getElementById("reminder-status");
+  const days = Number(localStorage.getItem(REMINDER_KEY)||0);
+  const last = localStorage.getItem(LAST_BACKUP_KEY);
+  if (days===0){ el.textContent="Reminders are off."; el.style.color="var(--ink-soft)"; return; }
+  if (!last){ el.textContent=`Reminder every ${days} day(s). No backup recorded yet.`; el.style.color="var(--amber-700)"; return; }
+  const daysAgo = Math.floor((Date.now()-new Date(last).getTime())/86400000);
+  el.style.color   = daysAgo>=days ? "var(--clay-500)" : "var(--sage-700)";
+  el.textContent   = daysAgo>=days
+    ? `⚠ Backup overdue — last was ${daysAgo} day(s) ago (${fmtDate(last)}).`
+    : `✓ Next reminder in ${days-daysAgo} day(s). Last backup: ${fmtDate(last)}.`;
 }
-
 document.getElementById("save-reminder-btn").addEventListener("click", () => {
-  const days = document.getElementById("reminder-interval").value;
-  localStorage.setItem(REMINDER_KEY, days);
+  localStorage.setItem(REMINDER_KEY, document.getElementById("reminder-interval").value);
   updateReminderStatus();
   const btn = document.getElementById("save-reminder-btn");
-  btn.textContent = "Saved ✓";
-  setTimeout(() => btn.textContent = "Save reminder", 1500);
+  btn.textContent="Saved ✓"; setTimeout(()=>btn.textContent="Save reminder",1500);
 });
-
-// Record last backup timestamp whenever a backup is downloaded
-// (patch into the existing backup button success path)
-const _origRenderLog = renderBackupLog;
-function recordBackupAndRender() {
-  if (backupLog.length > 0) {
-    localStorage.setItem(LAST_BACKUP_KEY, backupLog[0].createdAt);
-    updateReminderStatus();
-  }
-  _origRenderLog();
-}
-
-// Override renderBackupLog to also update the timestamp
-window.__backupLogHook = () => {
-  localStorage.setItem(LAST_BACKUP_KEY, new Date().toISOString());
-  updateReminderStatus();
-};
-
 loadReminderSettings();
 
+// ── Utility ────────────────────────────────────────────────────────────────
 function fmtDate(val) {
   if (!val) return "—";
-  const d = (typeof val === "string" && /^\d{4}-\d{2}-\d{2}$/.test(val))
-    ? new Date(val + "T00:00:00") : new Date(val);
+  const d = (typeof val==="string"&&/^\d{4}-\d{2}-\d{2}$/.test(val))
+    ? new Date(val+"T00:00:00") : new Date(val);
   if (isNaN(d)) return "—";
-  const day = String(d.getDate()).padStart(2,"0");
-  const month = d.toLocaleString([], { month: "short" });
-  return `${day}-${month}-${d.getFullYear()}`;
+  return `${String(d.getDate()).padStart(2,"0")}-${d.toLocaleString([],{month:"short"})}-${d.getFullYear()}`;
 }
 </script>
 <script>if("serviceWorker" in navigator){navigator.serviceWorker.register("sw.js").catch(()=>{});}</script>
