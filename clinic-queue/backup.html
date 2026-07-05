@@ -159,7 +159,7 @@
 <script type="module">
 import {
   auth, authReady, db, onAuthStateChanged, signOut,
-  collection, doc, setDoc, getDocs, query, orderBy, Timestamp, writeBatch
+  collection, doc, setDoc, getDocs, query, orderBy, Timestamp, writeBatch, runTransaction
 } from "./js/firebase-config.js";
 import { applyClinicBranding } from "./js/queue-logic.js";
 import { attachThemeToggle } from "./js/theme.js";
@@ -361,13 +361,27 @@ document.getElementById("restore-btn").addEventListener("click", async () => {
         catch (err) { errors.push(`Batch ${colName}[${i}]: ${err.message}`); }
         done += slice.length;
         setProgress("restore-bar","restore-progress-label",
-          10 + Math.round((done/totalDocs)*88),
+          10 + Math.round((done/totalDocs)*80),
           `${colName}: ${Math.min(i+BATCH_SZ,docIds.length)}/${docIds.length}…`);
       }
     }
 
+    // Step 3: Advance counters past any values already in Firestore.
+    // The backup contains counter values from the backup date. If data existed
+    // after the backup (new patients, tokens issued today), those documents are
+    // still in Firestore. Restoring the old counter value would cause the next
+    // issuance to generate an ID already assigned — creating a logical duplicate.
+    // We scan all restored collections and set each counter to at least the max
+    // value found in the actual data, so future IDs are always genuinely new.
+    setProgress("restore-bar","restore-progress-label",92,"Verifying counters…");
+    try {
+      await advanceCountersAfterRestore();
+    } catch (err) {
+      errors.push(`Counter advance: ${err.message}`);
+    }
+
     setProgress("restore-bar","restore-progress-label",100,
-      `✓ Restore complete — ${done} documents written${errors.length?`, ${errors.length} error(s)`:""}.`);
+      `✓ Restore complete — ${done} documents written, counters verified${errors.length?`, ${errors.length} error(s)`:""}.`);
 
     if (errors.length === 0) {
       valEl.style.color = "var(--sage-700)";
@@ -387,6 +401,51 @@ document.getElementById("restore-btn").addEventListener("click", async () => {
     btn.disabled = false; btn.textContent = "Restore from file";
   }
 });
+
+// Advance all counters to be >= the maximum IDs found in actual Firestore data.
+// This prevents the next token/patient issuance from colliding with an existing record.
+async function advanceCountersAfterRestore() {
+  // 1. Patient ID counter — scan patients collection for max numeric ID
+  const patSnap = await getDocs(collection(db, "patients"));
+  let maxPatientNum = 0;
+  patSnap.forEach(d => {
+    const code = d.data().patientCode || "";
+    const match = code.match(/(\d+)$/);
+    if (match) maxPatientNum = Math.max(maxPatientNum, parseInt(match[1], 10));
+  });
+  // Advance patientId counter if needed
+  const patCounterRef = doc(db, "counters", "patientId");
+  await runTransaction(db, async txn => {
+    const snap = await txn.get(patCounterRef);
+    const current = snap.exists() ? (snap.data().value || 0) : 0;
+    if (maxPatientNum > current) {
+      txn.set(patCounterRef, { value: maxPatientNum });
+    }
+  });
+
+  // 2. Token counters — scan visits for each unique visitDate and find max tokenNumber
+  const visitSnap = await getDocs(collection(db, "visits"));
+  const maxByDate = {};
+  visitSnap.forEach(d => {
+    const v = d.data();
+    if (v.visitDate && v.tokenNumber) {
+      const key = `tokens-${v.visitDate}`;
+      maxByDate[key] = Math.max(maxByDate[key] || 0, v.tokenNumber);
+    }
+  });
+  // Advance each day's token counter if needed
+  for (const [counterDocId, maxToken] of Object.entries(maxByDate)) {
+    const tokenCounterRef = doc(db, "counters", counterDocId);
+    await runTransaction(db, async txn => {
+      const snap = await txn.get(tokenCounterRef);
+      const current = snap.exists() ? (snap.data().value || 0) : 0;
+      if (maxToken > current) {
+        const visitDate = counterDocId.replace("tokens-", "");
+        txn.set(tokenCounterRef, { value: maxToken, date: visitDate });
+      }
+    });
+  }
+}
 
 // Auto-backup before restore — safety net
 async function triggerAutoBackup() {
