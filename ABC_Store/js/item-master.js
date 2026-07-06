@@ -234,8 +234,11 @@ const ItemMaster = (function () {
             '<span id="item-name-error" style="color:#ea4335;font-size:0.75rem;display:none;margin-top:4px;">Item name is required</span>' +
           '</div>' +
           '<div class="form-group">' +
-            '<label for="item-code-input">Item Code (unique, auto-generated)</label>' +
-            '<input type="text" id="item-code-input" placeholder="e.g., ITM001" value="' + itemCodeVal + '" autocomplete="off">' +
+            '<label for="item-code-input">Item Code (unique)</label>' +
+            '<div style="display:flex;gap:4px;align-items:center;">' +
+              '<input type="text" id="item-code-input" placeholder="e.g., ITM001 or scan barcode" value="' + itemCodeVal + '" autocomplete="off" style="flex:1;">' +
+              '<button type="button" class="scan-field-btn" id="scan-item-code-btn" aria-label="Scan barcode for item code">📷</button>' +
+            '</div>' +
             '<span id="item-code-error" style="color:#ea4335;font-size:0.75rem;display:none;margin-top:4px;"></span>' +
           '</div>' +
           '<div class="form-group">' +
@@ -259,7 +262,10 @@ const ItemMaster = (function () {
           '</div>' +
           '<div class="form-group">' +
             '<label for="item-voicetag-input">Voice Tag</label>' +
-            '<input type="text" id="item-voicetag-input" placeholder="Enter voice tag (e.g., rice)" value="' + voiceTagVal + '" autocomplete="off">' +
+            '<div style="display:flex;gap:4px;align-items:center;">' +
+              '<input type="text" id="item-voicetag-input" placeholder="Enter voice tag or scan barcode" value="' + voiceTagVal + '" autocomplete="off" style="flex:1;">' +
+              '<button type="button" class="scan-field-btn" id="scan-voicetag-btn" aria-label="Scan barcode for voice tag">📷</button>' +
+            '</div>' +
           '</div>' +
           '<div class="form-group">' +
             '<label>Item Image</label>' +
@@ -285,6 +291,14 @@ const ItemMaster = (function () {
     requestAnimationFrame(function () {
       modalOverlay.classList.add('active');
     });
+
+    // Feature detect BarcodeDetector - hide scan buttons if unavailable
+    if (!('BarcodeDetector' in window)) {
+      var scanBtns = document.querySelectorAll('.scan-field-btn');
+      scanBtns.forEach(function(btn) {
+        btn.style.display = 'none';
+      });
+    }
 
     // Attach modal event listeners
     _setupModalListeners();
@@ -349,6 +363,21 @@ const ItemMaster = (function () {
         if (e.target === modalOverlay) {
           closeModal();
         }
+      });
+    }
+
+    // Wire scan buttons to field scanner
+    var scanCodeBtn = document.getElementById('scan-item-code-btn');
+    var scanVoiceBtn = document.getElementById('scan-voicetag-btn');
+
+    if (scanCodeBtn) {
+      scanCodeBtn.addEventListener('click', function() {
+        _startFieldScan('item-code-input', 'Scan barcode for Item Code...');
+      });
+    }
+    if (scanVoiceBtn) {
+      scanVoiceBtn.addEventListener('click', function() {
+        _startFieldScan('item-voicetag-input', 'Scan barcode for Voice Tag...');
       });
     }
   }
@@ -828,6 +857,86 @@ const ItemMaster = (function () {
       .replace(/'/g, '&#039;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;');
+  }
+
+  // ─── Field Barcode Scanner ──────────────────────────────────────────────────
+
+  var _scannerStream = null;
+  var _scannerOverlay = null;
+  var _scannerInterval = null;
+  var _scannerTargetFieldId = null;
+
+  function _createScannerOverlay(statusMessage) {
+    var overlay = document.createElement('div');
+    overlay.id = 'field-scanner-overlay';
+    overlay.className = 'scanner-overlay';
+    overlay.innerHTML =
+      '<div class="scan-status">' + statusMessage + '</div>' +
+      '<video id="field-scanner-video" autoplay playsinline muted style="width:100%;height:100%;object-fit:cover;"></video>' +
+      '<div class="scan-line"></div>' +
+      '<button class="scan-close-btn" id="field-scanner-close" aria-label="Close scanner">&times;</button>';
+    document.body.appendChild(overlay);
+
+    document.getElementById('field-scanner-close').addEventListener('click', _stopFieldScan);
+    overlay.addEventListener('click', function(e) {
+      if (e.target === overlay) _stopFieldScan();
+    });
+
+    return overlay;
+  }
+
+  async function _startFieldScan(targetFieldId, statusMessage) {
+    if (_scannerStream) _stopFieldScan();
+    _scannerTargetFieldId = targetFieldId;
+
+    try {
+      _scannerStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
+      });
+    } catch (e) {
+      alert('Camera access denied or unavailable.');
+      return;
+    }
+
+    _scannerOverlay = _createScannerOverlay(statusMessage);
+    var video = document.getElementById('field-scanner-video');
+    video.srcObject = _scannerStream;
+
+    var detector = new BarcodeDetector({ formats: ['ean_13', 'ean_8', 'upc_a', 'code_128', 'code_39'] });
+
+    _scannerInterval = setInterval(async function () {
+      if (!video || video.readyState < 2) return;
+      try {
+        var barcodes = await detector.detect(video);
+        if (barcodes.length > 0 && barcodes[0].rawValue) {
+          _onBarcodeDetected(barcodes[0].rawValue, _scannerTargetFieldId);
+        }
+      } catch (e) { /* detection error, continue */ }
+    }, 250);
+  }
+
+  function _onBarcodeDetected(rawValue, targetFieldId) {
+    if (!rawValue) return;
+    var field = document.getElementById(targetFieldId);
+    if (field) field.value = rawValue;
+    if (navigator.vibrate) navigator.vibrate(200);
+    _stopFieldScan();
+  }
+
+  function _stopFieldScan() {
+    if (_scannerInterval) {
+      clearInterval(_scannerInterval);
+      _scannerInterval = null;
+    }
+    if (_scannerStream) {
+      _scannerStream.getTracks().forEach(function(t) { t.stop(); });
+      _scannerStream = null;
+    }
+    if (_scannerOverlay && _scannerOverlay.parentNode) {
+      _scannerOverlay.parentNode.removeChild(_scannerOverlay);
+      _scannerOverlay = null;
+    }
+    _scannerTargetFieldId = null;
   }
 
   // ─── Public API ─────────────────────────────────────────────────────────────

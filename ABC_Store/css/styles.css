@@ -1967,3 +1967,75 @@ select {
   .receipt-savings { color: #0d904f; }
   .receipt-footer { text-align: center; margin-top: 8px; font-size: 0.85em; }
 }
+
+/* ─── Field Barcode Scanner ─────────────────────────────────────────────── */
+.scan-field-btn {
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  border: 1.5px solid #dadce0;
+  border-radius: 8px;
+  background: #fff;
+  font-size: 1.2rem;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.scan-field-btn:active {
+  background: #e8eaed;
+}
+
+.scanner-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 10000;
+  background: #000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+.scanner-overlay .scan-status {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  padding: 12px 16px;
+  background: rgba(0,0,0,0.7);
+  color: #fff;
+  font-size: 0.875rem;
+  text-align: center;
+  z-index: 2;
+}
+.scanner-overlay .scan-close-btn {
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  width: 44px;
+  height: 44px;
+  border: none;
+  background: rgba(255,255,255,0.2);
+  color: #fff;
+  font-size: 1.5rem;
+  border-radius: 50%;
+  cursor: pointer;
+  z-index: 3;
+}
+.scanner-overlay .scan-line {
+  position: absolute;
+  top: 50%;
+  left: 10%;
+  right: 10%;
+  height: 2px;
+  background: #ea4335;
+  animation: scanLineAnim 2s ease-in-out infinite;
+  z-index: 2;
+}
+@keyframes scanLineAnim {
+  0%, 100% { transform: translateY(-40px); }
+  50% { transform: translateY(40px); }
+}
