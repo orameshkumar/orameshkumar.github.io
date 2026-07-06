@@ -292,12 +292,11 @@ const ItemMaster = (function () {
       modalOverlay.classList.add('active');
     });
 
-    // Feature detect BarcodeDetector - show warning tooltip if unavailable
+    // Feature detect BarcodeDetector - show warning tooltip if unavailable but keep buttons visible
     if (!('BarcodeDetector' in window)) {
       var scanBtns = document.querySelectorAll('.scan-field-btn');
       scanBtns.forEach(function(btn) {
-        btn.title = 'Barcode scanning not supported in this browser (requires Chrome on Android)';
-        btn.style.opacity = '0.5';
+        btn.title = 'Barcode scanning uses camera - may require ZXing polyfill on desktop';
       });
     }
 
@@ -890,18 +889,12 @@ const ItemMaster = (function () {
     if (_scannerStream) _stopFieldScan();
     _scannerTargetFieldId = targetFieldId;
 
-    // Check BarcodeDetector availability
-    if (!('BarcodeDetector' in window)) {
-      alert('Barcode scanning is not supported in this browser.\n\nPlease use Chrome on Android for barcode scanning, or enter the code manually.');
-      return;
-    }
-
     try {
       _scannerStream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
       });
     } catch (e) {
-      alert('Camera access denied or unavailable.');
+      alert('Camera access denied or unavailable.\n\nPlease allow camera permission and try again.');
       return;
     }
 
@@ -909,17 +902,51 @@ const ItemMaster = (function () {
     var video = document.getElementById('field-scanner-video');
     video.srcObject = _scannerStream;
 
-    var detector = new BarcodeDetector({ formats: ['ean_13', 'ean_8', 'upc_a', 'code_128', 'code_39'] });
+    // Use BarcodeDetector if available, otherwise use manual input fallback
+    if ('BarcodeDetector' in window) {
+      var detector = new BarcodeDetector({ formats: ['ean_13', 'ean_8', 'upc_a', 'code_128', 'code_39'] });
 
-    _scannerInterval = setInterval(async function () {
-      if (!video || video.readyState < 2) return;
-      try {
-        var barcodes = await detector.detect(video);
-        if (barcodes.length > 0 && barcodes[0].rawValue) {
-          _onBarcodeDetected(barcodes[0].rawValue, _scannerTargetFieldId);
-        }
-      } catch (e) { /* detection error, continue */ }
-    }, 250);
+      _scannerInterval = setInterval(async function () {
+        if (!video || video.readyState < 2) return;
+        try {
+          var barcodes = await detector.detect(video);
+          if (barcodes.length > 0 && barcodes[0].rawValue) {
+            _onBarcodeDetected(barcodes[0].rawValue, _scannerTargetFieldId);
+          }
+        } catch (e) { /* detection error, continue */ }
+      }, 250);
+    } else {
+      // Fallback for desktop browsers without BarcodeDetector:
+      // Show a manual entry prompt within the overlay
+      var fallbackDiv = document.createElement('div');
+      fallbackDiv.style.cssText = 'position:absolute;bottom:60px;left:16px;right:16px;z-index:4;background:rgba(0,0,0,0.85);padding:16px;border-radius:8px;text-align:center;';
+      fallbackDiv.innerHTML =
+        '<p style="color:#fff;font-size:0.8rem;margin-bottom:8px;">Auto-detection unavailable on this browser.<br>Type or paste the barcode value:</p>' +
+        '<div style="display:flex;gap:8px;">' +
+          '<input type="text" id="field-scanner-manual-input" placeholder="Enter barcode" style="flex:1;padding:10px;border:none;border-radius:4px;font-size:0.9rem;">' +
+          '<button id="field-scanner-manual-ok" style="padding:10px 16px;background:#1a73e8;color:#fff;border:none;border-radius:4px;font-weight:600;cursor:pointer;">OK</button>' +
+        '</div>';
+      _scannerOverlay.appendChild(fallbackDiv);
+
+      var manualInput = document.getElementById('field-scanner-manual-input');
+      var manualOk = document.getElementById('field-scanner-manual-ok');
+
+      if (manualInput) manualInput.focus();
+      if (manualOk) {
+        manualOk.addEventListener('click', function() {
+          var val = manualInput ? manualInput.value.trim() : '';
+          if (val) _onBarcodeDetected(val, _scannerTargetFieldId);
+        });
+      }
+      if (manualInput) {
+        manualInput.addEventListener('keydown', function(e) {
+          if (e.key === 'Enter') {
+            var val = manualInput.value.trim();
+            if (val) _onBarcodeDetected(val, _scannerTargetFieldId);
+          }
+        });
+      }
+    }
   }
 
   function _onBarcodeDetected(rawValue, targetFieldId) {
