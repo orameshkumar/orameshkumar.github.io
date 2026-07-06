@@ -1942,3 +1942,28 @@ select {
 .favorite-btn:not(.active) {
   color: #999;
 }
+
+/* --- Hardware Status Indicators --- */
+.hw-status-bar { display:flex; gap:12px; padding:8px; align-items:center; }
+.hw-indicator { display:flex; align-items:center; gap:4px; font-size:0.75rem; cursor:pointer; }
+.hw-dot { width:8px; height:8px; border-radius:50%; display:inline-block; }
+.hw-dot-green { background:#0d904f; }
+.hw-dot-red { background:#ea4335; }
+.hw-dot-grey { background:#9e9e9e; }
+.weight-display { font-size:1.2rem; font-weight:700; color:#202124; padding:4px 8px; }
+.weight-label { font-size:0.7rem; color:#5f6368; }
+
+/* --- Print styles for thermal receipt --- */
+@media print {
+  body * { visibility: hidden; }
+  #print-container, #print-container * { visibility: visible; }
+  #print-container { position: absolute; left: 0; top: 0; width: 100%; }
+  .receipt-58mm { width: 48mm; font-size: 10px; font-family: monospace; }
+  .receipt-80mm { width: 72mm; font-size: 12px; font-family: monospace; }
+  .receipt-header { text-align: center; font-weight: bold; margin-bottom: 4px; }
+  .receipt-separator { border-top: 1px dashed #000; margin: 4px 0; }
+  .receipt-item { display: flex; justify-content: space-between; }
+  .receipt-total { font-weight: bold; border-top: 1px solid #000; padding-top: 4px; margin-top: 4px; }
+  .receipt-savings { color: #0d904f; }
+  .receipt-footer { text-align: center; margin-top: 8px; font-size: 0.85em; }
+}

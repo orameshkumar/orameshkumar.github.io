@@ -58,6 +58,156 @@ const Billing = (function () {
 
     // Reset state
     resetBillState();
+
+    // ─── Hardware Integration (Scale + Printer) ───────────────────────────────
+    _initHardwareStatusBar();
+  }
+
+  // ─── Hardware Status Bar ────────────────────────────────────────────────────
+
+  /**
+   * Create and inject the hardware status bar into the billing screen.
+   * Registers callbacks for Scale and Printer connection/weight events.
+   */
+  function _initHardwareStatusBar() {
+    var billingScreen = document.getElementById('billing-screen');
+    if (!billingScreen) return;
+
+    var screenContent = billingScreen.querySelector('.screen-content');
+    if (!screenContent) return;
+
+    // Create hardware status bar
+    var statusBar = document.createElement('div');
+    statusBar.id = 'hardware-status-bar';
+    statusBar.className = 'hw-status-bar';
+
+    // Scale indicator
+    var scaleIndicator = document.createElement('div');
+    scaleIndicator.id = 'hw-scale-indicator';
+    scaleIndicator.className = 'hw-indicator';
+    scaleIndicator.title = 'Tap to connect/disconnect scale';
+    scaleIndicator.innerHTML = '⚖️ <span id="hw-scale-dot" class="hw-dot hw-dot-grey"></span><span id="hw-scale-label" class="weight-label">Scale</span>';
+
+    // Printer indicator
+    var printerIndicator = document.createElement('div');
+    printerIndicator.id = 'hw-printer-indicator';
+    printerIndicator.className = 'hw-indicator';
+    printerIndicator.innerHTML = '🖨️ <span id="hw-printer-dot" class="hw-dot hw-dot-grey"></span><span id="hw-printer-label" class="weight-label">Printer</span>';
+
+    // Weight display
+    var weightDisplay = document.createElement('div');
+    weightDisplay.id = 'hw-weight-display';
+    weightDisplay.className = 'hw-indicator';
+    weightDisplay.innerHTML = '<span class="weight-display" id="hw-weight-value">--</span><span class="weight-label" id="hw-weight-status"></span>';
+    weightDisplay.style.display = 'none';
+
+    statusBar.appendChild(scaleIndicator);
+    statusBar.appendChild(printerIndicator);
+    statusBar.appendChild(weightDisplay);
+
+    // Insert at top of billing screen content
+    screenContent.insertBefore(statusBar, screenContent.firstChild);
+
+    // ─── Feature detection: hide connect actions if Web Serial not available
+    if (!navigator.serial) {
+      scaleIndicator.title = 'Not supported in this browser';
+      printerIndicator.title = 'Not supported in this browser';
+      var scaleDot = document.getElementById('hw-scale-dot');
+      var printerDot = document.getElementById('hw-printer-dot');
+      if (scaleDot) scaleDot.className = 'hw-dot hw-dot-grey';
+      if (printerDot) printerDot.className = 'hw-dot hw-dot-grey';
+      var scaleLabel = document.getElementById('hw-scale-label');
+      var printerLabel = document.getElementById('hw-printer-label');
+      if (scaleLabel) scaleLabel.textContent = 'Not supported';
+      if (printerLabel) printerLabel.textContent = 'Not supported';
+      return; // Don't wire up callbacks if API unavailable
+    }
+
+    // ─── Scale: tappable to toggle connection (Task 6.7, 12.5)
+    scaleIndicator.addEventListener('click', function () {
+      if (typeof Scale === 'undefined') return;
+      if (Scale.isConnected()) {
+        Scale.disconnect();
+      } else {
+        Scale.connect();
+      }
+    });
+
+    // ─── Scale: register onConnectionChange callback (Task 6.1, 12.3)
+    if (typeof Scale !== 'undefined' && Scale.onConnectionChange) {
+      Scale.onConnectionChange(function (connected) {
+        var dot = document.getElementById('hw-scale-dot');
+        var label = document.getElementById('hw-scale-label');
+        var weightEl = document.getElementById('hw-weight-display');
+        if (dot) dot.className = 'hw-dot ' + (connected ? 'hw-dot-green' : 'hw-dot-red');
+        if (label) label.textContent = connected ? 'Connected' : 'Disconnected';
+        if (weightEl) weightEl.style.display = connected ? 'flex' : 'none';
+        if (!connected) {
+          var wVal = document.getElementById('hw-weight-value');
+          var wStatus = document.getElementById('hw-weight-status');
+          if (wVal) wVal.textContent = '--';
+          if (wStatus) wStatus.textContent = '';
+        }
+      });
+    }
+
+    // ─── Scale: register onWeightUpdate to display current reading (Task 6.2)
+    if (typeof Scale !== 'undefined' && Scale.onWeightUpdate) {
+      Scale.onWeightUpdate(function (grams) {
+        var wVal = document.getElementById('hw-weight-value');
+        var wStatus = document.getElementById('hw-weight-status');
+        if (wVal) {
+          if (grams >= 1000) {
+            wVal.textContent = (grams / 1000).toFixed(3) + ' kg';
+          } else {
+            wVal.textContent = grams + ' g';
+          }
+        }
+        if (wStatus) wStatus.textContent = 'Unstable';
+      });
+    }
+
+    // ─── Scale: register onStableWeight for auto-fill (Task 6.4, 6.5)
+    if (typeof Scale !== 'undefined' && Scale.onStableWeight) {
+      Scale.onStableWeight(function (grams) {
+        // Update weight status to Stable
+        var wStatus = document.getElementById('hw-weight-status');
+        if (wStatus) wStatus.textContent = 'Stable ✓';
+
+        // Auto-fill only for kg/litre items (not count) — Task 6.5
+        if (selectedItemId) {
+          var item = allItems.find(function (i) { return i.id === selectedItemId; });
+          if (item && (item.baseUnit === 'kg' || item.baseUnit === 'litre')) {
+            addLineItem(item, grams);
+            resetSelection();
+          }
+        }
+      });
+    }
+
+    // ─── Printer: connection state indicator (Task 11.4, 12.4)
+    if (typeof Printer !== 'undefined' && Printer.onConnectionChange) {
+      Printer.onConnectionChange(function (connected) {
+        var dot = document.getElementById('hw-printer-dot');
+        var label = document.getElementById('hw-printer-label');
+        if (dot) dot.className = 'hw-dot ' + (connected ? 'hw-dot-green' : 'hw-dot-red');
+        if (label) label.textContent = connected ? 'Connected' : 'Disconnected';
+      });
+
+      // Set initial printer state
+      var printerDotInit = document.getElementById('hw-printer-dot');
+      var printerLabelInit = document.getElementById('hw-printer-label');
+      if (Printer.getMode() === 'browser') {
+        if (printerDotInit) printerDotInit.className = 'hw-dot hw-dot-grey';
+        if (printerLabelInit) printerLabelInit.textContent = 'Browser Print';
+      } else if (Printer.isConnected()) {
+        if (printerDotInit) printerDotInit.className = 'hw-dot hw-dot-green';
+        if (printerLabelInit) printerLabelInit.textContent = 'Connected';
+      } else {
+        if (printerDotInit) printerDotInit.className = 'hw-dot hw-dot-red';
+        if (printerLabelInit) printerLabelInit.textContent = 'Disconnected';
+      }
+    }
   }
 
   /**
@@ -706,6 +856,15 @@ const Billing = (function () {
       // Show UPI payment QR if configured
       if (typeof Settings !== 'undefined' && Settings.showPaymentQR) {
         Settings.showPaymentQR(total, billNumber);
+      }
+
+      // Offer print after finalization (Task 11.1, 11.3)
+      if (typeof Printer !== 'undefined' && Printer.printBill) {
+        try {
+          Printer.printBill(bill);
+        } catch (printErr) {
+          console.warn('Billing: Print failed after finalization', printErr);
+        }
       }
 
       resetBillState();

@@ -198,6 +198,16 @@ async function initApp() {
   if (typeof Backup !== 'undefined' && Backup.init) {
     Backup.init();
   }
+
+  // Initialize hardware modules (Scale + Printer) — Task 13.2
+  // Scale and Printer modules are self-contained IIFEs that don't need explicit init,
+  // but we ensure they are available after settings/billing init.
+  if (typeof Scale !== 'undefined') {
+    console.log('Scale module loaded');
+  }
+  if (typeof Printer !== 'undefined') {
+    console.log('Printer module loaded');
+  }
 }
 
 // Register service worker and initialize app on DOM ready

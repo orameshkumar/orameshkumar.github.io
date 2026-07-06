@@ -178,6 +178,7 @@ const BillHistory = (function () {
       html += '<div class="bill-detail-savings" style="color:#0d904f;font-weight:600;text-align:right;font-size:0.85rem;margin-top:4px;">You Saved: ' + escapeHtml(Utils.formatCurrency(bill.totalSavings)) + '</div>';
     }
     html += '<button class="btn-whatsapp-share" data-bill-id="' + bill.id + '">Share via WhatsApp</button>';
+    html += '<button class="btn-print-bill" data-bill-id="' + bill.id + '" style="width:100%;padding:10px 16px;border:none;border-radius:8px;background-color:#1a73e8;color:#fff;font-size:0.8125rem;font-weight:600;cursor:pointer;min-height:44px;margin-top:8px;">🖨️ Print</button>';
     html += '</div>';
 
     return html;
@@ -235,6 +236,18 @@ const BillHistory = (function () {
         var billId = btn.getAttribute('data-bill-id');
         if (billId) {
           handleDeleteBill(billId);
+        }
+      });
+    });
+
+    // Print buttons (Task 11.2, 11.3)
+    var printBtns = historyListEl.querySelectorAll('.btn-print-bill');
+    printBtns.forEach(function (btn) {
+      btn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var billId = btn.getAttribute('data-bill-id');
+        if (billId) {
+          handlePrintBill(billId);
         }
       });
     });
@@ -370,6 +383,31 @@ const BillHistory = (function () {
         toast.remove();
       }
     }, 2500);
+  }
+
+  // ─── Print Bill (Task 11.2, 11.3) ──────────────────────────────────────────
+
+  /**
+   * Print a bill from history using the Printer module.
+   * @param {string} billId - The bill ID to print
+   */
+  async function handlePrintBill(billId) {
+    if (typeof Printer === 'undefined' || !Printer.printBill) {
+      alert('Printer module not available.');
+      return;
+    }
+
+    try {
+      var bill = await DB.getBill(billId);
+      if (!bill) {
+        console.error('Bill not found for printing:', billId);
+        return;
+      }
+      Printer.printBill(bill);
+    } catch (err) {
+      console.error('Error printing bill:', err);
+      alert('Failed to print bill.');
+    }
   }
 
   // ─── Helpers ────────────────────────────────────────────────────────────────

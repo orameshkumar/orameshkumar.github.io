@@ -242,3 +242,81 @@ When UPI is configured, a QR code is shown after each bill finalization. Custome
 | Bill number resets | Bill counter resets daily (001 each day) — by design |
 | Quick buttons don't match item | Select the item first — buttons switch to match unit type |
 | Barcode printed but won't scan | Ensure print quality is good; hold phone steady |
+
+---
+
+## Hardware Integration
+
+ABC Store supports digital weighing machines and thermal printers via the Web Serial API. This enables automatic weight capture during billing and direct receipt printing.
+
+### Supported Weighing Scales
+
+| Model | Interface | Default Baud Rate | Data Format |
+|-------|-----------|-------------------|-------------|
+| Essae DS-252 | USB-to-Serial | 9600 | 8N1 |
+| Phoenix PCS-10 | USB-to-Serial | 9600 | 8N1 |
+| TVS Achiever | USB-to-Serial | 9600 | 8N1 |
+| Any RS-232 scale | USB-to-Serial adapter | Configurable | Configurable |
+
+> **Note:** Most scales that output continuous ASCII weight readings (format: `+  1.250 kg`) are compatible.
+
+### Supported Thermal Printers
+
+| Model | Interface | Paper Width | Protocol |
+|-------|-----------|-------------|----------|
+| TVS RP 3160 | USB | 80mm | ESC/POS |
+| Generic 58mm Thermal | USB | 58mm | ESC/POS |
+| Generic 80mm Thermal | USB | 80mm | ESC/POS |
+| Any ESC/POS Printer | USB-to-Serial | 58mm/80mm | ESC/POS |
+| Any System Printer | USB/WiFi/Bluetooth | Any | Browser Print |
+
+### Weighing Scale Setup
+
+1. Connect scale to computer via USB cable (or USB-to-Serial adapter)
+2. Open ABC Store in Chrome/Edge browser
+3. Go to Settings → Weighing Scale section
+4. Set baud rate to match your scale (default: 9600)
+5. Set data bits (default: 8), stop bits (default: 1), parity (default: none)
+6. Save settings
+7. On Billing screen, tap the scale icon (⚖️) to connect
+8. Chrome will show a port selection dialog — select your scale
+9. Green dot indicates successful connection
+10. Place item on scale — weight auto-fills when stable (±2g for 0.5 seconds)
+
+### Thermal Printer Setup
+
+**Browser Print mode:**
+
+1. Connect printer to your computer
+2. Set it as the default system printer
+3. Go to Settings → Printer → Mode: "Browser Print"
+4. Select paper width (58mm or 80mm)
+5. After finalizing a bill, the browser print dialog will appear
+
+**ESC/POS Direct mode:**
+
+1. Connect USB thermal printer to your computer
+2. Go to Settings → Printer → Mode: "ESC/POS (Direct)"
+3. Select paper width
+4. Tap "Connect Printer" and select the printer port
+5. Bills will print silently without a dialog
+
+### Hardware Troubleshooting
+
+| Problem | Solution |
+|---------|----------|
+| Scale not detected | Ensure USB cable is connected. Try a different USB port. Check if another app is using the port. |
+| Weight not reading | Verify baud rate matches scale settings. Common: 9600. Check data format (8N1). |
+| Weight readings fluctuate | Normal — the app waits for stable readings (±2g for 0.5s). Keep items still. |
+| Printer not printing (ESC/POS) | Check USB connection. Try reconnecting the printer port. Verify the printer is powered on. |
+| Garbled printer output | Check paper width setting matches your printer (58mm vs 80mm). |
+| "Not supported" message | Web Serial requires Chrome 89+ or Edge 89+. Firefox and Safari are not supported. |
+| Scale icon shows red dot | Connection lost. Tap to reconnect. Check USB cable. |
+| Connect button not visible | Your browser doesn't support Web Serial API. Use Chrome or Edge. |
+
+### Browser Requirements
+
+- **Supported**: Google Chrome 89+, Microsoft Edge 89+
+- **Not Supported**: Firefox, Safari, Opera (Web Serial API not available)
+- **Mobile**: Android Chrome supports Web Serial with OTG USB adapters
+- **Note**: Manual weight entry and browser print work in all browsers

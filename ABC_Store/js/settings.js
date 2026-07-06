@@ -141,6 +141,142 @@ const Settings = (function () {
     return div.innerHTML;
   }
 
+  // ─── Hardware Configuration Section ────────────────────────────────────────
+
+  /**
+   * Render the "Hardware" configuration section in the Settings screen.
+   * Includes Weighing Scale settings (baud rate, data bits, stop bits, parity)
+   * and Printer settings (mode, paper width, connect button).
+   */
+  function _renderHardwareSection() {
+    var settingsScreen = document.getElementById('settings-screen');
+    if (!settingsScreen) return;
+
+    var screenContent = settingsScreen.querySelector('.screen-content');
+    if (!screenContent) return;
+
+    // Remove existing hardware section if present
+    var existing = document.getElementById('hardware-section');
+    if (existing) existing.remove();
+
+    var section = document.createElement('div');
+    section.id = 'hardware-section';
+    section.style.cssText = 'margin-top:24px;';
+
+    section.innerHTML =
+      // ── Weighing Scale ──
+      '<h2 class="section-heading" style="margin-bottom:12px;">Weighing Scale</h2>' +
+      '<div class="form-group">' +
+        '<label for="scale-baud-rate">Baud Rate</label>' +
+        '<select id="scale-baud-rate">' +
+          '<option value="1200">1200</option>' +
+          '<option value="2400">2400</option>' +
+          '<option value="4800">4800</option>' +
+          '<option value="9600" selected>9600</option>' +
+          '<option value="19200">19200</option>' +
+          '<option value="38400">38400</option>' +
+        '</select>' +
+      '</div>' +
+      '<div class="form-group">' +
+        '<label for="scale-data-bits">Data Bits</label>' +
+        '<select id="scale-data-bits">' +
+          '<option value="7">7</option>' +
+          '<option value="8" selected>8</option>' +
+        '</select>' +
+      '</div>' +
+      '<div class="form-group">' +
+        '<label for="scale-stop-bits">Stop Bits</label>' +
+        '<select id="scale-stop-bits">' +
+          '<option value="1" selected>1</option>' +
+          '<option value="2">2</option>' +
+        '</select>' +
+      '</div>' +
+      '<div class="form-group">' +
+        '<label for="scale-parity">Parity</label>' +
+        '<select id="scale-parity">' +
+          '<option value="none" selected>none</option>' +
+          '<option value="even">even</option>' +
+          '<option value="odd">odd</option>' +
+        '</select>' +
+      '</div>' +
+
+      // ── Printer ──
+      '<h2 class="section-heading" style="margin-bottom:12px;margin-top:24px;">Printer</h2>' +
+      '<div class="form-group">' +
+        '<label for="printer-mode">Printer Mode</label>' +
+        '<select id="printer-mode">' +
+          '<option value="browser" selected>Browser Print</option>' +
+          '<option value="escpos">ESC/POS (Direct)</option>' +
+        '</select>' +
+      '</div>' +
+      '<div class="form-group">' +
+        '<label for="printer-paper-width">Paper Width</label>' +
+        '<select id="printer-paper-width">' +
+          '<option value="58">58mm</option>' +
+          '<option value="80" selected>80mm</option>' +
+        '</select>' +
+      '</div>' +
+      '<button id="connect-printer-btn" class="btn-secondary" style="width:100%;margin-top:8px;display:none;">Connect Printer</button>';
+
+    // Append to settings form area
+    var settingsForm = screenContent.querySelector('.settings-form');
+    if (settingsForm) {
+      settingsForm.appendChild(section);
+    } else {
+      screenContent.appendChild(section);
+    }
+
+    // Wire printer mode change to toggle Connect Printer button visibility
+    var printerModeSelect = document.getElementById('printer-mode');
+    var connectPrinterBtn = document.getElementById('connect-printer-btn');
+
+    if (printerModeSelect && connectPrinterBtn) {
+      printerModeSelect.addEventListener('change', function () {
+        connectPrinterBtn.style.display = (printerModeSelect.value === 'escpos') ? 'block' : 'none';
+      });
+    }
+
+    // Wire Connect Printer button
+    if (connectPrinterBtn) {
+      connectPrinterBtn.addEventListener('click', function () {
+        if (typeof Printer !== 'undefined' && Printer.connectPrinter) {
+          Printer.connectPrinter();
+        }
+      });
+    }
+
+    // Load saved hardware settings into the newly rendered dropdowns
+    _loadHardwareSettings();
+  }
+
+  /**
+   * Load saved hardware settings from localStorage into the hardware form fields.
+   */
+  function _loadHardwareSettings() {
+    var settings = getSettings();
+    if (!settings) return;
+
+    var baudRate = document.getElementById('scale-baud-rate');
+    var dataBits = document.getElementById('scale-data-bits');
+    var stopBits = document.getElementById('scale-stop-bits');
+    var parity = document.getElementById('scale-parity');
+    var printerMode = document.getElementById('printer-mode');
+    var paperWidth = document.getElementById('printer-paper-width');
+    var connectPrinterBtn = document.getElementById('connect-printer-btn');
+
+    if (baudRate && settings.scaleBaudRate) baudRate.value = String(settings.scaleBaudRate);
+    if (dataBits && settings.scaleDataBits) dataBits.value = String(settings.scaleDataBits);
+    if (stopBits && settings.scaleStopBits) stopBits.value = String(settings.scaleStopBits);
+    if (parity && settings.scaleParity) parity.value = settings.scaleParity;
+    if (printerMode && settings.printerMode) printerMode.value = settings.printerMode;
+    if (paperWidth && settings.printerPaperWidth) paperWidth.value = settings.printerPaperWidth;
+
+    // Show Connect Printer button if ESC/POS mode is active
+    if (connectPrinterBtn && printerMode) {
+      connectPrinterBtn.style.display = (printerMode.value === 'escpos') ? 'block' : 'none';
+    }
+  }
+
   // ─── Initialization ─────────────────────────────────────────────────────────
 
   /**
@@ -162,6 +298,9 @@ const Settings = (function () {
 
     // Render license section at the top of settings
     _renderLicenseSection();
+
+    // Render hardware configuration section (scale + printer)
+    _renderHardwareSection();
 
     // Register listener for license state changes to update UI dynamically
     License.onStateChange(function () {
@@ -226,11 +365,29 @@ const Settings = (function () {
     var merchantCode = document.getElementById('upi-merchant-code-input');
     var msg = document.getElementById('upi-save-msg');
 
+    // Hardware - Scale fields
+    var scaleBaudRate = document.getElementById('scale-baud-rate');
+    var scaleDataBits = document.getElementById('scale-data-bits');
+    var scaleStopBits = document.getElementById('scale-stop-bits');
+    var scaleParity = document.getElementById('scale-parity');
+
+    // Hardware - Printer fields
+    var printerMode = document.getElementById('printer-mode');
+    var printerPaperWidth = document.getElementById('printer-paper-width');
+
     var settings = {
       storeName: storeName ? storeName.value.trim() : DEFAULT_STORE_NAME,
       upiId: upiId ? upiId.value.trim() : '',
       payeeName: payeeName ? payeeName.value.trim() : '',
-      merchantCode: merchantCode ? merchantCode.value.trim() : ''
+      merchantCode: merchantCode ? merchantCode.value.trim() : '',
+      // Scale settings
+      scaleBaudRate: scaleBaudRate ? parseInt(scaleBaudRate.value, 10) : 9600,
+      scaleDataBits: scaleDataBits ? parseInt(scaleDataBits.value, 10) : 8,
+      scaleStopBits: scaleStopBits ? parseInt(scaleStopBits.value, 10) : 1,
+      scaleParity: scaleParity ? scaleParity.value : 'none',
+      // Printer settings
+      printerMode: printerMode ? printerMode.value : 'browser',
+      printerPaperWidth: printerPaperWidth ? printerPaperWidth.value : '80'
     };
 
     // Store name defaults if left empty
@@ -269,6 +426,8 @@ const Settings = (function () {
     if (upiId) upiId.value = (settings && settings.upiId) ? settings.upiId : '';
     if (payeeName) payeeName.value = (settings && settings.payeeName) ? settings.payeeName : '';
     if (merchantCode) merchantCode.value = (settings && settings.merchantCode) ? settings.merchantCode : '';
+
+    // Hardware fields are loaded via _loadHardwareSettings() after section is rendered
   }
 
   // ─── UPI QR Code Generation ─────────────────────────────────────────────────
