@@ -292,11 +292,12 @@ const ItemMaster = (function () {
       modalOverlay.classList.add('active');
     });
 
-    // Feature detect BarcodeDetector - hide scan buttons if unavailable
+    // Feature detect BarcodeDetector - show warning tooltip if unavailable
     if (!('BarcodeDetector' in window)) {
       var scanBtns = document.querySelectorAll('.scan-field-btn');
       scanBtns.forEach(function(btn) {
-        btn.style.display = 'none';
+        btn.title = 'Barcode scanning not supported in this browser (requires Chrome on Android)';
+        btn.style.opacity = '0.5';
       });
     }
 
@@ -888,6 +889,12 @@ const ItemMaster = (function () {
   async function _startFieldScan(targetFieldId, statusMessage) {
     if (_scannerStream) _stopFieldScan();
     _scannerTargetFieldId = targetFieldId;
+
+    // Check BarcodeDetector availability
+    if (!('BarcodeDetector' in window)) {
+      alert('Barcode scanning is not supported in this browser.\n\nPlease use Chrome on Android for barcode scanning, or enter the code manually.');
+      return;
+    }
 
     try {
       _scannerStream = await navigator.mediaDevices.getUserMedia({
