@@ -5,6 +5,7 @@ class BadmintonScoreSheet {
         this.match = null;
         this.STORAGE_KEY = 'badminton-player-names';
         this.HISTORY_KEY = 'badminton-match-history';
+        this.ACTIVE_MATCH_KEY = 'badminton-active-match';
         this.THEME_KEY = 'badminton-theme';
         this.servingTeam = 'A';
         this.lastFaultType = 'net';
@@ -14,6 +15,7 @@ class BadmintonScoreSheet {
         this.initEventListeners();
         this.loadPlayerNames();
         this.initSounds();
+        this.restoreActiveMatch();
     }
 
     // --- Theme ---
@@ -489,6 +491,51 @@ class BadmintonScoreSheet {
         }
     }
 
+    // --- Active Match Persistence ---
+    saveActiveMatch() {
+        if (!this.match) return;
+        const state = {
+            match: this.match,
+            servingTeam: this.servingTeam,
+            lastFaultType: this.lastFaultType
+        };
+        try {
+            localStorage.setItem(this.ACTIVE_MATCH_KEY, JSON.stringify(state));
+        } catch (e) {}
+    }
+
+    clearActiveMatch() {
+        localStorage.removeItem(this.ACTIVE_MATCH_KEY);
+    }
+
+    restoreActiveMatch() {
+        try {
+            const data = localStorage.getItem(this.ACTIVE_MATCH_KEY);
+            if (!data) return;
+            const state = JSON.parse(data);
+            if (!state.match || state.match.isFinished) {
+                this.clearActiveMatch();
+                return;
+            }
+            this.match = state.match;
+            this.servingTeam = state.servingTeam || 'A';
+            this.lastFaultType = state.lastFaultType || 'net';
+            // Restore dates as Date objects
+            this.match.startTime = new Date(this.match.startTime);
+            // Restore UI
+            this.updateErrorPlayerOptions();
+            this.updateQuickErrorLabels();
+            const faultTypeSelect = document.getElementById('fault-type-select');
+            if (faultTypeSelect) faultTypeSelect.value = this.lastFaultType;
+            this.updateServiceDisplay();
+            this.showSection('scoreboard-section');
+            this.updateDisplay();
+            requestAnimationFrame(() => this.updateStickyHeaderHeight());
+        } catch (e) {
+            this.clearActiveMatch();
+        }
+    }
+
     // --- Sticky Header Height ---
     updateStickyHeaderHeight() {
         const stickyHeader = document.getElementById('sticky-header');
@@ -623,6 +670,7 @@ class BadmintonScoreSheet {
         this.animateScore(team);
         this.updateDisplay();
         this.checkSetEnd();
+        this.saveActiveMatch();
     }
 
     animateScore(team) {
@@ -673,6 +721,7 @@ class BadmintonScoreSheet {
 
         this.updateDisplay();
         this.checkSetEnd();
+        this.saveActiveMatch();
     }
 
     // --- Voice Announcement (Text-to-Speech) ---
@@ -699,6 +748,7 @@ class BadmintonScoreSheet {
             set.scoreA = prev.scoreA; set.scoreB = prev.scoreB;
         } else { set.scoreA = 0; set.scoreB = 0; }
         this.updateDisplay();
+        this.saveActiveMatch();
     }
 
     checkSetEnd() {
@@ -719,6 +769,7 @@ class BadmintonScoreSheet {
                 this.match.endTime = new Date();
                 this.playWinSound();
                 this.saveMatchToHistory();
+                this.clearActiveMatch();
                 setTimeout(() => this.showSummary(), 500);
             } else {
                 this.match.currentSet++;
@@ -798,6 +849,7 @@ class BadmintonScoreSheet {
                 this.match.winner = set.scoreA >= set.scoreB ? 'A' : 'B';
             }
             this.saveMatchToHistory();
+            this.clearActiveMatch();
             this.showSummary();
         }
     }
@@ -1173,6 +1225,7 @@ class BadmintonScoreSheet {
     // --- Utilities ---
     newMatch() {
         this.match = null;
+        this.clearActiveMatch();
         document.getElementById('teamA-player1').value = '';
         document.getElementById('teamA-player2').value = '';
         document.getElementById('teamB-player1').value = '';
