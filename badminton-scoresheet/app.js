@@ -16,6 +16,7 @@ class BadmintonScoreSheet {
         this.loadPlayerNames();
         this.initSounds();
         this.restoreActiveMatch();
+        this.sync = typeof FirebaseSync !== 'undefined' ? new FirebaseSync(this) : null;
     }
 
     // --- Theme ---
@@ -336,6 +337,7 @@ class BadmintonScoreSheet {
         const updated = [...new Set([...existing, ...names])].filter(n => n && n.trim());
         updated.sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
         localStorage.setItem(this.STORAGE_KEY, JSON.stringify(updated));
+        this.sync?.savePlayerRegistry(updated);
         this.loadPlayerNames();
     }
 
@@ -370,6 +372,7 @@ class BadmintonScoreSheet {
         // Keep last 100 matches
         if (history.length > 100) history.pop();
         localStorage.setItem(this.HISTORY_KEY, JSON.stringify(history));
+        this.sync?.saveMatch(record);
     }
 
     // --- Event Listeners ---
@@ -501,11 +504,13 @@ class BadmintonScoreSheet {
         };
         try {
             localStorage.setItem(this.ACTIVE_MATCH_KEY, JSON.stringify(state));
+            this.sync?.saveActiveMatch(state);
         } catch (e) {}
     }
 
     clearActiveMatch() {
         localStorage.removeItem(this.ACTIVE_MATCH_KEY);
+        this.sync?.clearActiveMatch();
     }
 
     restoreActiveMatch() {

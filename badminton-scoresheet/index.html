@@ -20,6 +20,10 @@
                 <button class="btn btn-icon" id="btn-theme-toggle" title="Toggle Theme">🌙</button>
                 <button class="btn btn-icon" id="btn-show-history" title="Match History">📜</button>
                 <button class="btn btn-icon" id="btn-show-leaderboard" title="Leaderboard">🏆</button>
+                <span id="sync-status" class="sync-indicator sync-offline" title="Offline">
+                    <span class="sync-dot"></span>
+                    <span class="sync-label">Offline</span>
+                </span>
             </div>
         </header>
 
@@ -259,6 +263,9 @@
         </section>
     </div>
 
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+    <script src="firebase-sync.js"></script>
     <script src="app.js"></script>
 </body>
 </html>

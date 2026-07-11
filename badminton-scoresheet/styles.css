@@ -1345,6 +1345,57 @@ h3 {
 
 /* === End Scoreboard Redesign === */
 
+/* === Firebase Sync Status Indicator === */
+.sync-indicator {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    border: 1px solid var(--border-color);
+    background: var(--bg-card);
+}
+
+.sync-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #78909c;
+}
+
+.sync-label {
+    color: var(--text-muted);
+}
+
+.sync-synced .sync-dot {
+    background: #4caf50;
+}
+.sync-synced .sync-label {
+    color: #4caf50;
+}
+
+.sync-syncing .sync-dot {
+    background: #ffab40;
+    animation: syncPulse 1.2s infinite;
+}
+.sync-syncing .sync-label {
+    color: #ffab40;
+}
+
+@keyframes syncPulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(0.8); }
+}
+
+.sync-offline .sync-dot {
+    background: #78909c;
+}
+.sync-offline .sync-label {
+    color: #78909c;
+}
+
 /* Print */
 @media print {
     body {
