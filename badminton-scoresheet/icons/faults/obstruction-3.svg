@@ -1,0 +1,8 @@
+<svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+  <!-- Obstruction: Person blocking path -->
+  <circle cx="16" cy="8" r="4" fill="#FFAB91" stroke="#E64A19" stroke-width="1.5"/>
+  <path d="M16 12 L16 22" stroke="#E64A19" stroke-width="2.5"/>
+  <path d="M8 16 L24 16" stroke="#E64A19" stroke-width="2.5"/>
+  <path d="M12 22 L16 22 L20 22" stroke="#E64A19" stroke-width="2.5"/>
+  <line x1="12" y1="28" x2="20" y2="28" stroke="#BF360C" stroke-width="2"/>
+</svg>

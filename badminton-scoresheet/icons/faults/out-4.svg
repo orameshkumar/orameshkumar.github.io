@@ -1,0 +1,7 @@
+<svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+  <!-- Out: Shuttle with motion lines going outside -->
+  <rect x="3" y="10" width="26" height="16" rx="2" fill="none" stroke="#EF5350" stroke-width="2"/>
+  <circle cx="22" cy="6" r="3" fill="#FF8A80" stroke="#D32F2F" stroke-width="1.5"/>
+  <path d="M19 8 L15 12" stroke="#D32F2F" stroke-width="1.5" stroke-dasharray="2,1"/>
+  <text x="22" y="8" text-anchor="middle" font-size="5" font-weight="bold" fill="#D32F2F">!</text>
+</svg>

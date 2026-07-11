@@ -1,0 +1,7 @@
+<svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+  <!-- Out: Arrow pointing outside boundary -->
+  <rect x="6" y="6" width="20" height="20" rx="2" fill="none" stroke="#EF5350" stroke-width="2"/>
+  <path d="M16 16 L26 6" stroke="#FF1744" stroke-width="2.5" stroke-linecap="round"/>
+  <path d="M22 6 L27 5 L26 10" fill="none" stroke="#FF1744" stroke-width="2"/>
+  <circle cx="16" cy="16" r="2" fill="#FFCDD2" stroke="#EF5350" stroke-width="1"/>
+</svg>

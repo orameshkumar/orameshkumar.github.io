@@ -1,0 +1,5 @@
+<svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+  <!-- Obstruction: No-entry sign (circle with line) -->
+  <circle cx="16" cy="16" r="12" fill="#FFCCBC" opacity="0.3" stroke="#FF5722" stroke-width="2.5"/>
+  <line x1="6" y1="16" x2="26" y2="16" stroke="#FF5722" stroke-width="3" stroke-linecap="round"/>
+</svg>

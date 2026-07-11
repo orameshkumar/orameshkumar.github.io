@@ -1,0 +1,9 @@
+<svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+  <!-- Service: Racket serving with error flash -->
+  <ellipse cx="10" cy="12" rx="6" ry="8" fill="none" stroke="#FF9800" stroke-width="2"/>
+  <line x1="10" y1="20" x2="10" y2="28" stroke="#FF9800" stroke-width="2.5"/>
+  <circle cx="22" cy="10" r="3" fill="#FFCC80" stroke="#E65100" stroke-width="1.5"/>
+  <path d="M25 7 L28 4" stroke="#E65100" stroke-width="1.5"/>
+  <path d="M25 10 L29 10" stroke="#E65100" stroke-width="1.5"/>
+  <path d="M25 13 L28 16" stroke="#E65100" stroke-width="1.5"/>
+</svg>

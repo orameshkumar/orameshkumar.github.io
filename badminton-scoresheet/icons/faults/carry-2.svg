@@ -1,0 +1,6 @@
+<svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+  <!-- Carry: Hand holding ball too long -->
+  <path d="M8 28 Q8 16 16 12 Q24 8 24 4" fill="none" stroke="#A1887F" stroke-width="2.5"/>
+  <circle cx="16" cy="14" r="4" fill="#BCAAA4" stroke="#5D4037" stroke-width="2"/>
+  <path d="M12 18 L10 24 M20 10 L22 6" stroke="#8D6E63" stroke-width="1.5"/>
+</svg>

@@ -1,0 +1,8 @@
+<svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+  <!-- Out: Court boundary with shuttle flying out -->
+  <rect x="4" y="8" width="24" height="18" rx="2" fill="none" stroke="#EF5350" stroke-width="2"/>
+  <line x1="4" y1="17" x2="28" y2="17" stroke="#EF5350" stroke-width="1" stroke-dasharray="3,2"/>
+  <circle cx="14" cy="4" r="2.5" fill="#FFCDD2" stroke="#EF5350" stroke-width="1.5"/>
+  <path d="M16 7 L20 3" stroke="#EF5350" stroke-width="2" stroke-linecap="round"/>
+  <path d="M18 2 L20 3 L19 5" fill="none" stroke="#EF5350" stroke-width="1.5"/>
+</svg>

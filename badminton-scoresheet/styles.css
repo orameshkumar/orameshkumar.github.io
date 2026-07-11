@@ -1250,27 +1250,55 @@ h3 {
     width: 18px;
     height: 18px;
     pointer-events: none;
+    color: inherit;
 }
 
-.error-icon-btn[data-error="net"] { color: #fdd835; }
-.error-icon-btn[data-error="out"] { color: #ef5350; }
-.error-icon-btn[data-error="service"] { color: #ff9800; }
-.error-icon-btn[data-error="double-hit"] { color: #ab47bc; }
-.error-icon-btn[data-error="carry"] { color: #8d6e63; }
-.error-icon-btn[data-error="obstruction"] { color: #78909c; }
-.error-icon-btn[data-error="unforced"] { color: #42a5f5; }
-.error-icon-btn[data-error="other"] { color: #bdbdbd; }
+.error-icon-btn[data-error="net"] { color: #FFD54F; }
+.error-icon-btn[data-error="out"] { color: #EF5350; }
+.error-icon-btn[data-error="service"] { color: #FF9800; }
+.error-icon-btn[data-error="double-hit"] { color: #AB47BC; }
+.error-icon-btn[data-error="carry"] { color: #A1887F; }
+.error-icon-btn[data-error="obstruction"] { color: #FF7043; }
+.error-icon-btn[data-error="unforced"] { color: #42A5F5; }
+.error-icon-btn[data-error="other"] { color: #B0BEC5; }
+
+/* Force SVG elements to use the button's color */
+.error-icon-btn svg line,
+.error-icon-btn svg path,
+.error-icon-btn svg rect,
+.error-icon-btn svg circle,
+.error-icon-btn svg polyline {
+    stroke: currentColor !important;
+}
+.error-icon-btn svg text {
+    fill: currentColor !important;
+}
+.error-icon-btn svg circle[fill]:not([fill="none"]) {
+    fill: currentColor !important;
+    opacity: 0.6;
+}
 
 .error-icon-btn:hover {
     transform: scale(1.15);
-    border-color: var(--accent-primary);
-    background: var(--bg-card-hover);
+    border-color: currentColor;
+    background: rgba(255, 255, 255, 0.1);
 }
 
 .error-icon-btn:active {
     transform: scale(0.9);
-    background: rgba(255, 82, 82, 0.2);
+    background: rgba(255, 255, 255, 0.2);
+    border-color: currentColor;
 }
+
+/* Subtle colored border to help identify icons */
+.error-icon-btn[data-error="net"] { border-color: rgba(255, 213, 79, 0.4); }
+.error-icon-btn[data-error="out"] { border-color: rgba(239, 83, 80, 0.4); }
+.error-icon-btn[data-error="service"] { border-color: rgba(255, 152, 0, 0.4); }
+.error-icon-btn[data-error="double-hit"] { border-color: rgba(171, 71, 188, 0.4); }
+.error-icon-btn[data-error="carry"] { border-color: rgba(161, 136, 127, 0.4); }
+.error-icon-btn[data-error="obstruction"] { border-color: rgba(255, 112, 67, 0.4); }
+.error-icon-btn[data-error="unforced"] { border-color: rgba(66, 165, 245, 0.4); }
+.error-icon-btn[data-error="other"] { border-color: rgba(176, 190, 197, 0.4); }
 
 @media (max-width: 480px) {
     .error-icon-btn {

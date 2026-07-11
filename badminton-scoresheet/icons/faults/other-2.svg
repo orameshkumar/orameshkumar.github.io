@@ -1,0 +1,6 @@
+<svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+  <!-- Other: Exclamation triangle -->
+  <polygon points="16,4 30,28 2,28" fill="#CFD8DC" opacity="0.3" stroke="#90A4AE" stroke-width="2"/>
+  <line x1="16" y1="12" x2="16" y2="20" stroke="#546E7A" stroke-width="2.5" stroke-linecap="round"/>
+  <circle cx="16" cy="24" r="1.5" fill="#546E7A"/>
+</svg>

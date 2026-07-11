@@ -1,0 +1,5 @@
+<svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+  <!-- Obstruction: Hand blocking / stop sign -->
+  <polygon points="16,2 26,8 26,22 16,28 6,22 6,8" fill="#FFCCBC" opacity="0.4" stroke="#FF5722" stroke-width="2"/>
+  <path d="M10 10 L10 22 M22 10 L22 22 M10 16 L22 16" stroke="#BF360C" stroke-width="2"/>
+</svg>

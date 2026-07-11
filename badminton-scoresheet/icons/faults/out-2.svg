@@ -1,0 +1,8 @@
+<svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+  <!-- Out: Big X on court lines -->
+  <rect x="4" y="4" width="24" height="24" rx="3" fill="none" stroke="#EF5350" stroke-width="2"/>
+  <line x1="4" y1="16" x2="28" y2="16" stroke="#EF5350" stroke-width="1"/>
+  <line x1="16" y1="4" x2="16" y2="28" stroke="#EF5350" stroke-width="1"/>
+  <line x1="9" y1="9" x2="23" y2="23" stroke="#FF1744" stroke-width="3" stroke-linecap="round"/>
+  <line x1="23" y1="9" x2="9" y2="23" stroke="#FF1744" stroke-width="3" stroke-linecap="round"/>
+</svg>

@@ -1,0 +1,7 @@
+<svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+  <!-- Service: Upward arrow blocked -->
+  <path d="M16 28 L16 10" stroke="#FF9800" stroke-width="2.5"/>
+  <path d="M10 14 L16 8 L22 14" fill="none" stroke="#FF9800" stroke-width="2.5" stroke-linecap="round"/>
+  <line x1="6" y1="6" x2="26" y2="6" stroke="#D84315" stroke-width="3" stroke-linecap="round"/>
+  <circle cx="16" cy="3" r="2" fill="#FFAB40"/>
+</svg>

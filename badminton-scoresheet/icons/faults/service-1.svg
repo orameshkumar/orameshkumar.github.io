@@ -1,0 +1,9 @@
+<svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+  <!-- Service: Hand tossing shuttlecock with X -->
+  <circle cx="16" cy="8" r="4" fill="#FFE0B2" stroke="#FF9800" stroke-width="2"/>
+  <path d="M16 12 L16 22" stroke="#FF9800" stroke-width="2"/>
+  <path d="M11 17 L21 17" stroke="#FF9800" stroke-width="2"/>
+  <line x1="10" y1="25" x2="16" y2="30" stroke="#FF5722" stroke-width="2"/>
+  <line x1="22" y1="25" x2="16" y2="30" stroke="#FF5722" stroke-width="2"/>
+  <line x1="22" y1="25" x2="10" y2="25" stroke="#FF5722" stroke-width="2"/>
+</svg>

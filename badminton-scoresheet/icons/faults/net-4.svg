@@ -1,0 +1,9 @@
+<svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+  <!-- Net: Shuttlecock crashing into net -->
+  <line x1="16" y1="4" x2="16" y2="28" stroke="#FFD54F" stroke-width="3"/>
+  <line x1="4" y1="10" x2="28" y2="10" stroke="#FFD54F" stroke-width="1" stroke-dasharray="3,2"/>
+  <line x1="4" y1="16" x2="28" y2="16" stroke="#FFD54F" stroke-width="1" stroke-dasharray="3,2"/>
+  <line x1="4" y1="22" x2="28" y2="22" stroke="#FFD54F" stroke-width="1" stroke-dasharray="3,2"/>
+  <circle cx="8" cy="14" r="3" fill="#FFF176" stroke="#F57F17" stroke-width="1.5"/>
+  <path d="M5 14 L2 11 M5 14 L2 17 M5 14 L3 14" stroke="#F57F17" stroke-width="1"/>
+</svg>

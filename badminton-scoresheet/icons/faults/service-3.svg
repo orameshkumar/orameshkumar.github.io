@@ -1,0 +1,7 @@
+<svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+  <!-- Service: Shuttlecock with curved arc and X -->
+  <circle cx="8" cy="24" r="3" fill="#FFCC80" stroke="#FF9800" stroke-width="1.5"/>
+  <path d="M8 21 Q16 6 24 12" fill="none" stroke="#FF9800" stroke-width="2" stroke-dasharray="3,2"/>
+  <line x1="20" y1="4" x2="28" y2="12" stroke="#D32F2F" stroke-width="2.5" stroke-linecap="round"/>
+  <line x1="28" y1="4" x2="20" y2="12" stroke="#D32F2F" stroke-width="2.5" stroke-linecap="round"/>
+</svg>

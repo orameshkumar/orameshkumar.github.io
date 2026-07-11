@@ -1,0 +1,8 @@
+<svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+  <!-- Obstruction: Brick wall blocking -->
+  <rect x="6" y="10" width="20" height="4" rx="1" fill="#FF8A65" stroke="#BF360C" stroke-width="1"/>
+  <rect x="4" y="14" width="24" height="4" rx="1" fill="#FF8A65" stroke="#BF360C" stroke-width="1"/>
+  <rect x="6" y="18" width="20" height="4" rx="1" fill="#FF8A65" stroke="#BF360C" stroke-width="1"/>
+  <circle cx="16" cy="6" r="2.5" fill="#FFCC80" stroke="#E65100" stroke-width="1"/>
+  <path d="M16 9 L16 10" stroke="#E65100" stroke-width="1.5"/>
+</svg>

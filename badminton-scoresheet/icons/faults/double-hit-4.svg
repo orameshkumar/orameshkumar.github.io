@@ -1,0 +1,8 @@
+<svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+  <!-- Double Hit: Ball bouncing twice -->
+  <circle cx="10" cy="12" r="4" fill="#E1BEE7" stroke="#AB47BC" stroke-width="2"/>
+  <circle cx="22" cy="12" r="4" fill="#E1BEE7" stroke="#AB47BC" stroke-width="2"/>
+  <path d="M10 16 Q10 24 16 22 Q22 20 22 16" fill="none" stroke="#AB47BC" stroke-width="1.5" stroke-dasharray="2,2"/>
+  <path d="M8 8 L6 5 M12 8 L14 5" stroke="#9C27B0" stroke-width="1.5"/>
+  <path d="M20 8 L18 5 M24 8 L26 5" stroke="#9C27B0" stroke-width="1.5"/>
+</svg>

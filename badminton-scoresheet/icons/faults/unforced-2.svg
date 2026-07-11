@@ -1,0 +1,6 @@
+<svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+  <!-- Unforced: Oops! exclamation in circle -->
+  <circle cx="16" cy="16" r="12" fill="#BBDEFB" opacity="0.3" stroke="#42A5F5" stroke-width="2"/>
+  <line x1="16" y1="8" x2="16" y2="18" stroke="#1565C0" stroke-width="3" stroke-linecap="round"/>
+  <circle cx="16" cy="23" r="2" fill="#1565C0"/>
+</svg>

@@ -1,0 +1,7 @@
+<svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+  <!-- Other: Flag/signal -->
+  <line x1="8" y1="4" x2="8" y2="28" stroke="#78909C" stroke-width="2.5"/>
+  <polygon points="8,4 26,10 8,16" fill="#B0BEC5" stroke="#546E7A" stroke-width="1.5"/>
+  <circle cx="22" cy="22" r="4" fill="none" stroke="#78909C" stroke-width="1.5"/>
+  <text x="22" y="25" text-anchor="middle" font-size="7" fill="#546E7A">?</text>
+</svg>

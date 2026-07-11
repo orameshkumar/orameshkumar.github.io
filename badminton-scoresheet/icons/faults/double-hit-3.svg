@@ -1,0 +1,5 @@
+<svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+  <!-- Double Hit: Lightning bolt double strike -->
+  <path d="M10 4 L14 14 L10 14 L14 28" fill="#CE93D8" stroke="#7B1FA2" stroke-width="1.5"/>
+  <path d="M18 4 L22 14 L18 14 L22 28" fill="#CE93D8" stroke="#7B1FA2" stroke-width="1.5"/>
+</svg>

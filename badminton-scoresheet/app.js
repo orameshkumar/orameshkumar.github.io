@@ -664,12 +664,29 @@ class BadmintonScoreSheet {
         this.playErrorSound();
         this.animateScore(opposingTeam);
 
+        // Voice announcement for fault
+        this.announceFault(team, playerName, errorTypeLabel);
+
         // Service goes to the team that gained the point (opposing team)
         this.servingTeam = opposingTeam;
         this.updateServiceDisplay();
 
         this.updateDisplay();
         this.checkSetEnd();
+    }
+
+    // --- Voice Announcement (Text-to-Speech) ---
+    announceFault(team, playerName, errorTypeLabel) {
+        if (!window.speechSynthesis) return;
+        const teamLabel = team === 'A' ? 'Team A' : 'Team B';
+        const text = `${teamLabel}, ${playerName}, ${errorTypeLabel} fault`;
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.rate = 1.1;
+        utterance.pitch = 1.0;
+        utterance.volume = 0.8;
+        utterance.lang = 'en-US';
+        window.speechSynthesis.cancel(); // Cancel any pending speech
+        window.speechSynthesis.speak(utterance);
     }
 
     undoLast() {
