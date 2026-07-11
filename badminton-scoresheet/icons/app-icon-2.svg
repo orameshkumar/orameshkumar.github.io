@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bg2" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1a1a2e"/>
+      <stop offset="100%" stop-color="#0f3460"/>
+    </linearGradient>
+  </defs>
+  
+  <!-- Background -->
+  <rect x="0" y="0" width="512" height="512" rx="96" fill="url(#bg2)"/>
+  
+  <!-- Court lines (subtle) -->
+  <rect x="60" y="120" width="392" height="320" rx="8" fill="none" stroke="#64ffda" stroke-width="2" opacity="0.15"/>
+  <line x1="256" y1="120" x2="256" y2="440" stroke="#64ffda" stroke-width="2" opacity="0.15"/>
+  
+  <!-- Player body (smash pose) -->
+  <!-- Head -->
+  <circle cx="220" cy="140" r="30" fill="#FFE0B2" stroke="#F9A825" stroke-width="3"/>
+  
+  <!-- Torso -->
+  <path d="M220 170 L210 260 L230 260 Z" fill="#42A5F5" stroke="#1976D2" stroke-width="2"/>
+  
+  <!-- Left arm (holding racket, extended up-right) -->
+  <path d="M220 190 L290 120 L310 100" fill="none" stroke="#FFE0B2" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+  
+  <!-- Right arm (balance) -->
+  <path d="M220 200 L160 240" fill="none" stroke="#FFE0B2" stroke-width="10" stroke-linecap="round"/>
+  
+  <!-- Legs (lunge position) -->
+  <path d="M210 260 L170 360 L160 380" fill="none" stroke="#1565C0" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M230 260 L280 340 L300 370" fill="none" stroke="#1565C0" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+  
+  <!-- Shoes -->
+  <ellipse cx="155" cy="385" rx="18" ry="10" fill="#ffffff"/>
+  <ellipse cx="305" cy="375" rx="18" ry="10" fill="#ffffff"/>
+  
+  <!-- Racket handle -->
+  <line x1="310" y1="100" x2="340" y2="70" stroke="#8D6E63" stroke-width="8" stroke-linecap="round"/>
+  
+  <!-- Racket head (oval) -->
+  <ellipse cx="370" cy="50" rx="45" ry="55" fill="none" stroke="#64ffda" stroke-width="5"/>
+  
+  <!-- Racket strings -->
+  <line x1="370" y1="10" x2="370" y2="90" stroke="#64ffda" stroke-width="1.5" opacity="0.6"/>
+  <line x1="345" y1="15" x2="345" y2="85" stroke="#64ffda" stroke-width="1" opacity="0.4"/>
+  <line x1="395" y1="15" x2="395" y2="85" stroke="#64ffda" stroke-width="1" opacity="0.4"/>
+  <line x1="335" y1="35" x2="405" y2="35" stroke="#64ffda" stroke-width="1" opacity="0.4"/>
+  <line x1="330" y1="50" x2="410" y2="50" stroke="#64ffda" stroke-width="1.5" opacity="0.6"/>
+  <line x1="335" y1="65" x2="405" y2="65" stroke="#64ffda" stroke-width="1" opacity="0.4"/>
+  
+  <!-- Shuttlecock (being hit) -->
+  <ellipse cx="390" cy="140" rx="12" ry="12" fill="#FFF9C4" stroke="#F9A825" stroke-width="2"/>
+  <path d="M390 128 L380 95 Q390 85 400 95 Z" fill="#ffffff" stroke="#e0e0e0" stroke-width="1"/>
+  <path d="M383 125 L370 100 Q380 90 388 98 Z" fill="#f5f5f5" stroke="#e0e0e0" stroke-width="0.5"/>
+  <path d="M397 125 L410 100 Q400 90 392 98 Z" fill="#f5f5f5" stroke="#e0e0e0" stroke-width="0.5"/>
+  
+  <!-- Motion lines (smash effect) -->
+  <path d="M395 155 L410 180" stroke="#ffab40" stroke-width="3" stroke-linecap="round" opacity="0.8"/>
+  <path d="M405 145 L425 160" stroke="#ffab40" stroke-width="3" stroke-linecap="round" opacity="0.6"/>
+  <path d="M400 165 L420 195" stroke="#ffab40" stroke-width="2" stroke-linecap="round" opacity="0.5"/>
+  
+  <!-- SPARK text -->
+  <text x="256" y="470" text-anchor="middle" font-family="Arial, sans-serif" font-size="48" font-weight="bold" fill="#64ffda">SPARK</text>
+</svg>

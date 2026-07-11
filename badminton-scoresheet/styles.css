@@ -941,25 +941,22 @@ h3 {
 }
 
 .btn-service-toggle {
-    width: 32px;
-    height: 32px;
-    min-width: 44px;
-    min-height: 44px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 50%;
-    border: 1px solid var(--border-light);
-    background: var(--bg-card);
-    color: var(--text-primary);
-    font-size: 1rem;
+    display: block;
+    margin: 4px auto;
+    padding: 4px 14px;
+    min-height: 28px;
+    border-radius: 14px;
+    border: 1px solid var(--accent-secondary);
+    background: rgba(255, 171, 64, 0.08);
+    color: var(--accent-secondary);
+    font-size: 0.75rem;
+    font-weight: 600;
     cursor: pointer;
     transition: all 0.2s ease;
-    padding: 0;
 }
 
 .btn-service-toggle:hover {
-    background: var(--bg-card-hover);
+    background: rgba(255, 171, 64, 0.2);
     transform: scale(1.05);
 }
 
@@ -1246,6 +1243,13 @@ h3 {
     display: flex;
     gap: 4px;
     flex-wrap: wrap;
+    justify-content: flex-start;
+}
+
+.error-icons-row .error-icon-btn {
+    flex: 1 1 auto;
+    min-width: 32px;
+    max-width: 44px;
 }
 
 .error-icon-btn {

@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Background: rounded square with gradient -->
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1a1a2e"/>
+      <stop offset="50%" stop-color="#16213e"/>
+      <stop offset="100%" stop-color="#0f3460"/>
+    </linearGradient>
+    <linearGradient id="shuttle" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#e0e0e0"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#64ffda"/>
+      <stop offset="100%" stop-color="#00bfa5"/>
+    </linearGradient>
+  </defs>
+  
+  <!-- Background -->
+  <rect x="0" y="0" width="512" height="512" rx="96" fill="url(#bg)"/>
+  
+  <!-- Scoreboard lines (subtle) -->
+  <line x1="256" y1="80" x2="256" y2="432" stroke="#64ffda" stroke-width="2" opacity="0.2"/>
+  <line x1="80" y1="256" x2="432" y2="256" stroke="#64ffda" stroke-width="2" opacity="0.2"/>
+  
+  <!-- Shuttlecock body (cork) -->
+  <ellipse cx="256" cy="310" rx="28" ry="28" fill="#FFE0B2" stroke="#F9A825" stroke-width="4"/>
+  
+  <!-- Shuttlecock feathers -->
+  <path d="M256 282 L220 180 Q256 160 256 160 Q256 160 292 180 Z" fill="url(#shuttle)" stroke="#bdbdbd" stroke-width="2"/>
+  <path d="M232 270 L200 190 Q220 175 238 182 Z" fill="#f5f5f5" stroke="#bdbdbd" stroke-width="1.5"/>
+  <path d="M280 270 L312 190 Q292 175 274 182 Z" fill="#f5f5f5" stroke="#bdbdbd" stroke-width="1.5"/>
+  <path d="M244 276 L218 185 Q236 170 250 180 Z" fill="#fafafa" stroke="#e0e0e0" stroke-width="1"/>
+  <path d="M268 276 L294 185 Q276 170 262 180 Z" fill="#fafafa" stroke="#e0e0e0" stroke-width="1"/>
+  
+  <!-- Score numbers -->
+  <text x="140" y="410" text-anchor="middle" font-family="Arial, sans-serif" font-size="72" font-weight="bold" fill="#64ffda">21</text>
+  <text x="256" y="410" text-anchor="middle" font-family="Arial, sans-serif" font-size="48" font-weight="bold" fill="#78909c">-</text>
+  <text x="372" y="410" text-anchor="middle" font-family="Arial, sans-serif" font-size="72" font-weight="bold" fill="#ffab40">18</text>
+  
+  <!-- SPARK text -->
+  <text x="256" y="470" text-anchor="middle" font-family="Arial, sans-serif" font-size="32" font-weight="bold" fill="#64ffda" opacity="0.8">SPARK</text>
+</svg>

@@ -1,0 +1,18 @@
+{
+  "name": "SPARK Badminton Score Sheet",
+  "short_name": "SPARK",
+  "description": "Doubles badminton scoring with one-tap fault recording and voice announcements",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#1a1a2e",
+  "theme_color": "#64ffda",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "icons/app-icon-2.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
