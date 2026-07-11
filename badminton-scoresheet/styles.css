@@ -1242,8 +1242,24 @@ h3 {
     align-items: center;
     justify-content: center;
     transition: all 0.15s ease;
-    padding: 0;
+    padding: 4px;
+    color: var(--text-muted);
 }
+
+.error-icon-btn svg {
+    width: 18px;
+    height: 18px;
+    pointer-events: none;
+}
+
+.error-icon-btn[data-error="net"] { color: #fdd835; }
+.error-icon-btn[data-error="out"] { color: #ef5350; }
+.error-icon-btn[data-error="service"] { color: #ff9800; }
+.error-icon-btn[data-error="double-hit"] { color: #ab47bc; }
+.error-icon-btn[data-error="carry"] { color: #8d6e63; }
+.error-icon-btn[data-error="obstruction"] { color: #78909c; }
+.error-icon-btn[data-error="unforced"] { color: #42a5f5; }
+.error-icon-btn[data-error="other"] { color: #bdbdbd; }
 
 .error-icon-btn:hover {
     transform: scale(1.15);
