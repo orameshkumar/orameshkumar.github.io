@@ -1208,18 +1208,38 @@ h3 {
 .error-icons-team-a {
     border-left: 3px solid rgba(100, 255, 218, 0.5);
     padding-left: 6px;
+    background: rgba(100, 255, 218, 0.06);
+    border-radius: 8px;
+    padding: 8px;
+    margin-bottom: 6px;
 }
 
 .error-icons-team-b {
     border-left: 3px solid rgba(255, 171, 64, 0.5);
     padding-left: 6px;
+    background: rgba(255, 171, 64, 0.06);
+    border-radius: 8px;
+    padding: 8px;
 }
 
 .error-icons-player-name {
-    font-size: 0.75rem;
+    font-size: 0.8rem;
     font-weight: 700;
     color: var(--text-muted);
-    margin-bottom: 1px;
+    margin-bottom: 2px;
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+}
+
+.error-icons-team-a .error-icons-player-name {
+    color: #64ffda;
+    background: rgba(100, 255, 218, 0.1);
+}
+
+.error-icons-team-b .error-icons-player-name {
+    color: #ffab40;
+    background: rgba(255, 171, 64, 0.1);
 }
 
 .error-icons-row {
@@ -1251,6 +1271,12 @@ h3 {
     height: 18px;
     pointer-events: none;
     color: inherit;
+}
+
+.error-icon-btn img {
+    width: 22px;
+    height: 22px;
+    pointer-events: none;
 }
 
 .error-icon-btn[data-error="net"] { color: #FFD54F; }
