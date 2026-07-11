@@ -888,6 +888,310 @@ h3 {
     }
 }
 
+/* === Scoreboard Redesign - Sticky Header Layout === */
+
+/* --- Task 2.1: Sticky Header --- */
+:root {
+    --sticky-header-height: 200px;
+}
+
+.sticky-header {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 100;
+    background: var(--bg-primary);
+    border-bottom: 1px solid var(--border-color);
+    padding: 8px 12px;
+}
+
+/* --- Task 2.2: Service Row (compact ≤40px) --- */
+.service-row {
+    display: flex;
+    max-height: 40px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.service-team {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.service-team .shuttle-icon {
+    display: none;
+    font-size: 1rem;
+}
+
+.service-team.serving .shuttle-icon {
+    display: inline;
+}
+
+.set-info {
+    text-align: center;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    font-weight: 500;
+}
+
+.btn-service-toggle {
+    width: 32px;
+    height: 32px;
+    min-width: 44px;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    border: 1px solid var(--border-light);
+    background: var(--bg-card);
+    color: var(--text-primary);
+    font-size: 1rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    padding: 0;
+}
+
+.btn-service-toggle:hover {
+    background: var(--bg-card-hover);
+    transform: scale(1.05);
+}
+
+/* --- Task 2.3: Score Row and Score Buttons --- */
+.score-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    padding: 8px 0;
+}
+
+.btn-score-tap {
+    min-width: 44px;
+    min-height: 44px;
+    padding: 10px 18px;
+    border: none;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #7c4dff, #536dfe);
+    color: #fff;
+    font-size: 1.2rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.btn-score-tap:hover {
+    transform: scale(1.1);
+    box-shadow: 0 4px 12px rgba(124, 77, 255, 0.4);
+}
+
+.btn-score-tap:active {
+    transform: scale(0.95);
+}
+
+.score-display {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.score-row .score {
+    font-size: 3rem;
+    font-weight: 800;
+    color: var(--text-primary);
+}
+
+.score-divider {
+    color: var(--text-faint);
+    font-size: 1.5rem;
+    font-weight: 400;
+}
+
+/* --- Task 2.4: Fault Grid and Fault Row --- */
+.fault-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.fault-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+}
+
+.btn-fault {
+    min-width: 44px;
+    min-height: 44px;
+    padding: 10px 16px;
+    font-weight: 700;
+    font-size: 0.85rem;
+    border-radius: 8px;
+    cursor: pointer;
+    border: none;
+    transition: all 0.15s ease;
+}
+
+.btn-fault:hover {
+    transform: scale(1.05);
+}
+
+.btn-fault:active {
+    transform: scale(0.95);
+}
+
+.btn-fault-a {
+    background: linear-gradient(135deg, rgba(100, 255, 218, 0.3), rgba(0, 191, 165, 0.2));
+    color: var(--accent-primary);
+    border: 1px solid rgba(100, 255, 218, 0.5);
+}
+
+.btn-fault-b {
+    background: linear-gradient(135deg, rgba(255, 171, 64, 0.3), rgba(255, 171, 64, 0.15));
+    color: var(--accent-secondary);
+    border: 1px solid rgba(255, 171, 64, 0.5);
+}
+
+.fault-type-select {
+    padding: 8px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border-light);
+    background: var(--select-bg);
+    color: var(--text-primary);
+    font-size: 0.85rem;
+    min-height: 44px;
+}
+
+.fault-type-select option {
+    background: var(--select-bg);
+    color: var(--text-primary);
+}
+
+.btn-undo {
+    min-width: 44px;
+    min-height: 44px;
+    padding: 8px 14px;
+    border-radius: 8px;
+    border: 1px solid var(--border-light);
+    background: var(--bg-card);
+    color: var(--text-primary);
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.btn-undo:hover {
+    background: var(--bg-card-hover);
+    transform: scale(1.05);
+}
+
+.btn-undo:active {
+    transform: scale(0.95);
+}
+
+.btn-undo:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    transform: none;
+}
+
+/* --- Task 2.5: Scrollable Content --- */
+.scrollable-content {
+    margin-top: var(--sticky-header-height, 200px);
+    padding: 12px;
+    overflow-y: auto;
+}
+
+/* --- Task 2.6: Mobile Responsive (≤480px) --- */
+@media (max-width: 480px) {
+    .sticky-header {
+        padding: 6px 8px;
+    }
+
+    .service-row {
+        font-size: 0.8rem;
+        gap: 4px;
+    }
+
+    .service-team {
+        font-size: 0.8rem;
+    }
+
+    .set-info {
+        font-size: 0.75rem;
+    }
+
+    .score-row {
+        gap: 10px;
+        padding: 6px 0;
+    }
+
+    .score-row .score {
+        font-size: 2.5rem;
+    }
+
+    .btn-score-tap {
+        min-width: 44px;
+        min-height: 44px;
+        padding: 8px 14px;
+        font-size: 1rem;
+    }
+
+    .fault-grid {
+        grid-template-columns: 1fr 1fr;
+        gap: 6px;
+        width: 100%;
+    }
+
+    .btn-fault {
+        min-width: 44px;
+        min-height: 44px;
+        padding: 8px 12px;
+        font-size: 0.8rem;
+    }
+
+    .fault-row {
+        gap: 6px;
+    }
+
+    .fault-type-select {
+        flex: 1;
+        min-height: 44px;
+        font-size: 0.8rem;
+    }
+
+    .btn-undo {
+        min-width: 44px;
+        min-height: 44px;
+    }
+
+    .scrollable-content {
+        padding: 8px;
+    }
+}
+
+/* --- Task 6.2: Undo Visual Feedback --- */
+.btn-undo.undo-flash {
+    animation: undoFlash 0.2s ease;
+}
+
+@keyframes undoFlash {
+    0% { transform: scale(1); background: var(--bg-card); }
+    50% { transform: scale(0.92); background: rgba(255, 171, 64, 0.3); }
+    100% { transform: scale(1); background: var(--bg-card); }
+}
+
+/* === End Scoreboard Redesign === */
+
 /* Print */
 @media print {
     body {

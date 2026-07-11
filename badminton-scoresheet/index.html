@@ -60,64 +60,70 @@
 
         <!-- Scoreboard -->
         <section id="scoreboard-section" class="section hidden">
-            <div class="set-indicator">
-                <span id="current-set">Set 1</span>
-                <span id="set-scores"></span>
-            </div>
-
-            <!-- Service Indicator -->
-            <div class="service-indicator">
-                <div class="service-side" id="service-left">
-                    <span class="shuttle-icon">🏸</span>
-                    <span id="service-label-left">Team A</span>
+            <!-- STICKY HEADER -->
+            <div id="sticky-header" class="sticky-header">
+                <!-- Service Row (≤40px) -->
+                <div class="service-row">
+                    <span class="service-team" id="service-team-a">
+                        <span class="shuttle-icon">🏸</span> Team A
+                    </span>
+                    <span class="set-info" id="set-info">Set 1 (0-0)</span>
+                    <span class="service-team" id="service-team-b">
+                        Team B <span class="shuttle-icon">🏸</span>
+                    </span>
+                    <button class="btn-service-toggle" id="btn-service-toggle" title="Switch service">⇄</button>
                 </div>
-                <button class="btn btn-service" id="btn-switch-service">⇄ Switch Service</button>
-                <div class="service-side" id="service-right">
-                    <span class="shuttle-icon">🏸</span>
-                    <span id="service-label-right">Team B</span>
-                </div>
-            </div>
 
-            <div class="scoreboard">
-                <div class="team-score team-a-score">
-                    <div class="team-name" id="teamA-name">Team A</div>
-                    <div class="score" id="scoreA">0</div>
-                    <button class="btn btn-score" id="btn-scoreA">+1 Point</button>
-                </div>
-                <div class="vs">VS</div>
-                <div class="team-score team-b-score">
-                    <div class="team-name" id="teamB-name">Team B</div>
-                    <div class="score" id="scoreB">0</div>
-                    <button class="btn btn-score" id="btn-scoreB">+1 Point</button>
-                </div>
-            </div>
-
-            <!-- Error Capture -->
-            <div class="error-section">
-                <h3>Record Error / Fault</h3>
-
-                <!-- Quick Error Buttons (no mic needed) -->
-                <div class="quick-error-grid">
-                    <div class="quick-error-label">Quick Error:</div>
-                    <div class="quick-error-buttons">
-                        <select id="quick-error-type" class="quick-error-select">
-                            <option value="net">Net</option>
-                            <option value="out">Out</option>
-                            <option value="service">Service</option>
-                            <option value="double-hit">Double Hit</option>
-                            <option value="carry">Carry</option>
-                            <option value="obstruction">Obstruction</option>
-                            <option value="unforced">Unforced</option>
-                            <option value="other">Other</option>
-                        </select>
-                        <button class="btn btn-quick-error qa1" data-team="A" data-player="0">A1</button>
-                        <button class="btn btn-quick-error qa2" data-team="A" data-player="1">A2</button>
-                        <button class="btn btn-quick-error qb1" data-team="B" data-player="0">B1</button>
-                        <button class="btn btn-quick-error qb2" data-team="B" data-player="1">B2</button>
+                <!-- Score Row -->
+                <div class="score-row">
+                    <button class="btn btn-score-tap" id="btn-scoreA">+1</button>
+                    <div class="score-display">
+                        <span class="score" id="scoreA">0</span>
+                        <span class="score-divider">—</span>
+                        <span class="score" id="scoreB">0</span>
                     </div>
-                    <div class="quick-error-names" id="quick-error-names"></div>
+                    <button class="btn btn-score-tap" id="btn-scoreB">+1</button>
                 </div>
 
+                <!-- Fault Grid + Undo -->
+                <div class="fault-row">
+                    <div class="fault-grid">
+                        <button class="btn btn-fault btn-fault-a" data-team="A" data-player="0" id="fault-a1">A1</button>
+                        <button class="btn btn-fault btn-fault-a" data-team="A" data-player="1" id="fault-a2">A2</button>
+                        <button class="btn btn-fault btn-fault-b" data-team="B" data-player="0" id="fault-b1">B1</button>
+                        <button class="btn btn-fault btn-fault-b" data-team="B" data-player="1" id="fault-b2">B2</button>
+                    </div>
+                    <select id="fault-type-select" class="fault-type-select">
+                        <option value="net">Net</option>
+                        <option value="out">Out</option>
+                        <option value="service">Service</option>
+                        <option value="double-hit">Double Hit</option>
+                        <option value="carry">Carry</option>
+                        <option value="obstruction">Obstruction</option>
+                        <option value="unforced">Unforced</option>
+                        <option value="other">Other</option>
+                    </select>
+                    <button class="btn btn-undo" id="btn-undo">↩ Undo</button>
+                </div>
+            </div>
+
+            <!-- SCROLLABLE CONTENT -->
+            <div class="scrollable-content">
+                <div class="history-section">
+                    <h3>Point History</h3>
+                    <div id="point-history" class="point-history"></div>
+                </div>
+
+                <div class="voice-controls">
+                    <button class="btn btn-voice" id="btn-voice-error">🎤 Voice Command</button>
+                    <span id="voice-status" class="voice-status"></span>
+                    <div id="voice-help" class="voice-help hidden">
+                        <strong>Say:</strong> "A1 net", "B2 out", "[player name] [error]", "point A", "point B"<br>
+                        <em>Shortcodes: A1, A2, B1, B2 = Team + Player</em>
+                    </div>
+                </div>
+
+                <!-- Manual Error Entry (legacy, kept for backward compatibility) -->
                 <details class="error-details">
                     <summary>Manual Error Entry</summary>
                     <div class="error-controls">
@@ -143,25 +149,9 @@
                     </div>
                 </details>
 
-                <div class="voice-controls">
-                    <button class="btn btn-voice" id="btn-voice-error">🎤 Voice Command</button>
-                    <span id="voice-status" class="voice-status"></span>
-                    <div id="voice-help" class="voice-help hidden">
-                        <strong>Say:</strong> "A1 net", "B2 out", "[player name] [error]", "point A", "point B"<br>
-                        <em>Shortcodes: A1, A2, B1, B2 = Team + Player</em>
-                    </div>
+                <div class="action-buttons">
+                    <button class="btn btn-secondary" id="btn-end-match">End Match</button>
                 </div>
-            </div>
-
-            <!-- Point History -->
-            <div class="history-section">
-                <h3>Point History (Current Set)</h3>
-                <div id="point-history" class="point-history"></div>
-            </div>
-
-            <div class="action-buttons">
-                <button class="btn btn-secondary" id="btn-undo">↩ Undo Last</button>
-                <button class="btn btn-secondary" id="btn-end-match">End Match</button>
             </div>
         </section>
 
