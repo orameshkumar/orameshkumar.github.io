@@ -32,23 +32,28 @@
             <button class="nav-tab active" data-section="setup-section">New Match</button>
             <button class="nav-tab" data-section="history-page">History</button>
             <button class="nav-tab" data-section="leaderboard-page">Leaderboard</button>
+            <button class="nav-tab" data-section="events-page">Events</button>
         </nav>
 
         <!-- Match Setup -->
         <section id="setup-section" class="section">
             <h2>Match Setup</h2>
+            <div class="event-selector-container" id="event-selector-setup"></div>
             <div class="setup-grid">
                 <div class="team-setup">
                     <h3>Team A</h3>
-                    <input type="text" id="teamA-player1" placeholder="Player 1 Name" list="player-names" autocomplete="off">
-                    <input type="text" id="teamA-player2" placeholder="Player 2 Name" list="player-names" autocomplete="off">
+                    <select id="teamA-player1" class="member-picker"><option value="">Select Player...</option></select>
+                    <input type="text" id="teamA-player1-new" placeholder="Type new name..." class="member-new-input hidden">
+                    <select id="teamA-player2" class="member-picker"><option value="">Select Player...</option></select>
+                    <input type="text" id="teamA-player2-new" placeholder="Type new name..." class="member-new-input hidden">
                 </div>
                 <div class="team-setup">
                     <h3>Team B</h3>
-                    <input type="text" id="teamB-player1" placeholder="Player 1 Name" list="player-names" autocomplete="off">
-                    <input type="text" id="teamB-player2" placeholder="Player 2 Name" list="player-names" autocomplete="off">
+                    <select id="teamB-player1" class="member-picker"><option value="">Select Player...</option></select>
+                    <input type="text" id="teamB-player1-new" placeholder="Type new name..." class="member-new-input hidden">
+                    <select id="teamB-player2" class="member-picker"><option value="">Select Player...</option></select>
+                    <input type="text" id="teamB-player2-new" placeholder="Type new name..." class="member-new-input hidden">
                 </div>
-                <datalist id="player-names"></datalist>
             </div>
             <div class="match-options">
                 <label>Match Format:
@@ -233,6 +238,7 @@
         <!-- Match History Page -->
         <section id="history-page" class="section hidden">
             <h2>📜 Match History</h2>
+            <div class="event-selector-container" id="event-selector-history"></div>
             <div class="history-filters">
                 <input type="text" id="history-search" placeholder="Search by player name..." class="filter-input">
                 <input type="date" id="history-date" class="filter-input">
@@ -253,6 +259,7 @@
         <!-- Leaderboard Page -->
         <section id="leaderboard-page" class="section hidden">
             <h2>🏆 Player Leaderboard</h2>
+            <div class="event-selector-container" id="event-selector-leaderboard"></div>
             <div class="leaderboard-filters">
                 <label>From: <input type="date" id="leaderboard-from" class="filter-input"></label>
                 <label>To: <input type="date" id="leaderboard-to" class="filter-input"></label>
@@ -261,10 +268,35 @@
             </div>
             <div id="leaderboard-content" class="leaderboard-content"></div>
         </section>
+
+        <!-- Events Management Page -->
+        <section id="events-page" class="section hidden">
+            <h2>📅 Events</h2>
+            <div class="event-add-form">
+                <input type="text" id="event-name-input" placeholder="New event name..." class="filter-input">
+                <button class="btn btn-primary btn-sm" id="btn-add-event">+ Add Event</button>
+            </div>
+            <div id="event-list" class="event-list"></div>
+
+            <!-- Members Management -->
+            <div id="members-section" class="members-section hidden">
+                <div class="members-header">
+                    <button class="btn btn-secondary btn-sm" id="btn-back-to-events">← Back to Events</button>
+                    <h3 id="members-event-title">Members</h3>
+                </div>
+                <div class="member-add-form">
+                    <input type="text" id="member-name-input" placeholder="New member name..." class="filter-input">
+                    <button class="btn btn-primary btn-sm" id="btn-add-member">+ Add</button>
+                </div>
+                <div id="members-list" class="members-list"></div>
+            </div>
+        </section>
     </div>
 
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+    <script src="event-manager.js"></script>
+    <script src="member-manager.js"></script>
     <script src="firebase-sync.js"></script>
     <script src="app.js"></script>
 </body>

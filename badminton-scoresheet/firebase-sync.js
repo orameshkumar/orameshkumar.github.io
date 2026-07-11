@@ -213,13 +213,15 @@ class FirebaseSync {
 
     // ─── Task 6.1: saveMatch ──────────────────────────────────────────────────
 
-    async saveMatch(record) {
+    async saveMatch(record, eventId) {
         if (!this.available) return;
+        const eid = eventId || this.app?.eventManager?.getActiveEventId();
+        if (!eid) return;
 
         try {
             this.setSyncStatus('syncing');
             const data = { ...record, lastModified: Date.now() };
-            await this.db.collection('matches').doc(String(record.id)).set(data);
+            await this.db.collection('events').doc(eid).collection('matches').doc(String(record.id)).set(data);
             this.setSyncStatus('synced');
         } catch (error) {
             console.error('[FirebaseSync] Failed to save match:', error);
@@ -229,12 +231,14 @@ class FirebaseSync {
 
     // ─── Task 6.2: savePlayerRegistry ─────────────────────────────────────────
 
-    async savePlayerRegistry(names) {
+    async savePlayerRegistry(names, eventId) {
         if (!this.available) return;
+        const eid = eventId || this.app?.eventManager?.getActiveEventId();
+        if (!eid) return;
 
         try {
             this.setSyncStatus('syncing');
-            await this.db.collection('appData').doc('playerRegistry').set({
+            await this.db.collection('events').doc(eid).collection('playerRegistry').doc('data').set({
                 names: names,
                 lastModified: Date.now()
             });
@@ -266,9 +270,12 @@ class FirebaseSync {
     }
 
     async _writeActiveMatch(state) {
+        const eid = this.app?.eventManager?.getActiveEventId();
+        if (!eid) return;
+
         try {
             this.setSyncStatus('syncing');
-            await this.db.collection('appData').doc('activeMatch').set({
+            await this.db.collection('events').doc(eid).collection('appData').doc('activeMatch').set({
                 ...state,
                 lastModified: Date.now()
             });
@@ -283,12 +290,44 @@ class FirebaseSync {
 
     async clearActiveMatch() {
         if (!this.available) return;
+        const eid = this.app?.eventManager?.getActiveEventId();
+        if (!eid) return;
 
         try {
-            await this.db.collection('appData').doc('activeMatch').delete();
+            await this.db.collection('events').doc(eid).collection('appData').doc('activeMatch').delete();
             this.setSyncStatus('synced');
         } catch (error) {
             console.error('[FirebaseSync] Failed to clear active match:', error);
+        }
+    }
+
+    // ─── Member Sync Methods ──────────────────────────────────────────────────
+
+    async saveMember(eventId, member) {
+        if (!this.available || !eventId) return;
+        try {
+            await this.db.collection('events').doc(eventId).collection('members').doc(member.id).set({...member, lastModified: Date.now()});
+        } catch(e) { console.error('[FirebaseSync] Failed to save member:', e); }
+    }
+
+    async deleteMemberDoc(eventId, memberId) {
+        if (!this.available || !eventId) return;
+        try {
+            await this.db.collection('events').doc(eventId).collection('members').doc(memberId).delete();
+        } catch(e) { console.error('[FirebaseSync] Failed to delete member:', e); }
+    }
+
+    // ─── Save Event metadata ──────────────────────────────────────────────────
+
+    async saveEvent(event) {
+        if (!this.available) return;
+        try {
+            await this.db.collection('events').doc(event.id).set({
+                ...event,
+                lastModified: Date.now()
+            });
+        } catch (e) {
+            console.error('[FirebaseSync] Failed to save event:', e);
         }
     }
 
@@ -303,32 +342,41 @@ class FirebaseSync {
         this.setSyncStatus('syncing');
 
         try {
+            const eid = this.app?.eventManager?.getActiveEventId();
+            if (!eid) {
+                this.setSyncStatus('synced');
+                return;
+            }
+
             // Fetch all data from Firestore with a 3-second timeout
             const timeoutPromise = new Promise((_, reject) =>
                 setTimeout(() => reject(new Error('Firestore fetch timeout')), 3000)
             );
 
-            const fetchPromise = this._fetchFirestoreData();
+            const fetchPromise = this._fetchFirestoreData(eid);
             const remoteData = await Promise.race([fetchPromise, timeoutPromise]);
 
             // Check for first-sync / migration scenario
-            await this.migrateLocalData(remoteData.matches);
+            await this.migrateLocalData(remoteData.matches, eid);
 
             // Merge match history
             const localMatches = this._getLocalMatchHistory();
             const mergedMatches = this.mergeMatchHistory(localMatches, remoteData.matches);
-            localStorage.setItem('badminton-match-history', JSON.stringify(mergedMatches));
+            const matchHistoryKey = this.app?.eventManager?.getMatchHistoryKey() || 'badminton-match-history';
+            localStorage.setItem(matchHistoryKey, JSON.stringify(mergedMatches));
 
             // Merge player registry
             const localPlayers = this._getLocalPlayerRegistry();
             const mergedPlayers = this.mergePlayerRegistry(localPlayers, remoteData.players);
-            localStorage.setItem('badminton-player-names', JSON.stringify(mergedPlayers));
+            const playerNamesKey = this.app?.eventManager?.getPlayerNamesKey() || 'badminton-player-names';
+            localStorage.setItem(playerNamesKey, JSON.stringify(mergedPlayers));
 
             // Resolve active match
             const localActive = this._getLocalActiveMatch();
             const resolvedActive = this.resolveActiveMatch(localActive, remoteData.activeMatch);
             if (resolvedActive) {
-                localStorage.setItem('badminton-active-match', JSON.stringify(resolvedActive));
+                const activeMatchKey = this.app?.eventManager?.getActiveMatchKey() || 'badminton-active-match';
+                localStorage.setItem(activeMatchKey, JSON.stringify(resolvedActive));
             }
 
             // Update UI via app methods
@@ -351,20 +399,23 @@ class FirebaseSync {
         }
     }
 
-    async _fetchFirestoreData() {
-        // Fetch matches collection
-        const matchesSnapshot = await this.db.collection('matches').get();
+    async _fetchFirestoreData(eventId) {
+        const eid = eventId || this.app?.eventManager?.getActiveEventId();
+        if (!eid) return { matches: [], players: [], activeMatch: null };
+
+        // Fetch matches collection (event-scoped)
+        const matchesSnapshot = await this.db.collection('events').doc(eid).collection('matches').get();
         const matches = [];
         matchesSnapshot.forEach(doc => {
             matches.push(doc.data());
         });
 
-        // Fetch player registry
-        const playerDoc = await this.db.collection('appData').doc('playerRegistry').get();
+        // Fetch player registry (event-scoped)
+        const playerDoc = await this.db.collection('events').doc(eid).collection('playerRegistry').doc('data').get();
         const players = playerDoc.exists ? (playerDoc.data().names || []) : [];
 
-        // Fetch active match
-        const activeDoc = await this.db.collection('appData').doc('activeMatch').get();
+        // Fetch active match (event-scoped)
+        const activeDoc = await this.db.collection('events').doc(eid).collection('appData').doc('activeMatch').get();
         const activeMatch = activeDoc.exists ? activeDoc.data() : null;
 
         return { matches, players, activeMatch };
@@ -372,7 +423,7 @@ class FirebaseSync {
 
     // ─── Task 7.2: First-Sync Detection + Migration ──────────────────────────
 
-    async migrateLocalData(remoteMatches) {
+    async migrateLocalData(remoteMatches, eventId) {
         // Skip if migration already done
         if (localStorage.getItem('firebase-migration-done') === 'true') return;
 
@@ -382,10 +433,13 @@ class FirebaseSync {
         const localMatches = this._getLocalMatchHistory();
         if (!localMatches || localMatches.length === 0) return;
 
+        const eid = eventId || this.app?.eventManager?.getActiveEventId();
+        if (!eid) return;
+
         console.log(`[FirebaseSync] First-sync detected. Migrating ${localMatches.length} matches to Firestore...`);
 
         try {
-            // Upload matches in batches of 500
+            // Upload matches in batches of 500 (event-scoped)
             const batchSize = 500;
             for (let i = 0; i < localMatches.length; i += batchSize) {
                 const batch = this.db.batch();
@@ -393,26 +447,26 @@ class FirebaseSync {
 
                 for (const record of chunk) {
                     if (!record || record.id == null) continue;
-                    const docRef = this.db.collection('matches').doc(String(record.id));
+                    const docRef = this.db.collection('events').doc(eid).collection('matches').doc(String(record.id));
                     batch.set(docRef, { ...record, lastModified: Date.now() });
                 }
 
                 await batch.commit();
             }
 
-            // Upload player registry
+            // Upload player registry (event-scoped)
             const localPlayers = this._getLocalPlayerRegistry();
             if (localPlayers && localPlayers.length > 0) {
-                await this.db.collection('appData').doc('playerRegistry').set({
+                await this.db.collection('events').doc(eid).collection('playerRegistry').doc('data').set({
                     names: localPlayers,
                     lastModified: Date.now()
                 });
             }
 
-            // Upload active match if exists
+            // Upload active match if exists (event-scoped)
             const localActive = this._getLocalActiveMatch();
             if (localActive) {
-                await this.db.collection('appData').doc('activeMatch').set({
+                await this.db.collection('events').doc(eid).collection('appData').doc('activeMatch').set({
                     ...localActive,
                     lastModified: Date.now()
                 });
@@ -431,7 +485,8 @@ class FirebaseSync {
 
     _getLocalMatchHistory() {
         try {
-            const data = localStorage.getItem('badminton-match-history');
+            const key = this.app?.eventManager?.getMatchHistoryKey() || 'badminton-match-history';
+            const data = localStorage.getItem(key);
             return data ? JSON.parse(data) : [];
         } catch (e) {
             return [];
@@ -440,7 +495,8 @@ class FirebaseSync {
 
     _getLocalPlayerRegistry() {
         try {
-            const data = localStorage.getItem('badminton-player-names');
+            const key = this.app?.eventManager?.getPlayerNamesKey() || 'badminton-player-names';
+            const data = localStorage.getItem(key);
             return data ? JSON.parse(data) : [];
         } catch (e) {
             return [];
@@ -449,7 +505,8 @@ class FirebaseSync {
 
     _getLocalActiveMatch() {
         try {
-            const data = localStorage.getItem('badminton-active-match');
+            const key = this.app?.eventManager?.getActiveMatchKey() || 'badminton-active-match';
+            const data = localStorage.getItem(key);
             return data ? JSON.parse(data) : null;
         } catch (e) {
             return null;

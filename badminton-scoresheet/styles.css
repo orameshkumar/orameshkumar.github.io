@@ -1396,6 +1396,179 @@ h3 {
     color: #78909c;
 }
 
+/* === Event Management === */
+.event-add-form {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 20px;
+    align-items: center;
+}
+
+.event-add-form input {
+    flex: 1;
+}
+
+.event-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.event-card {
+    padding: 16px;
+    background: var(--history-bg);
+    border-radius: 12px;
+    border: 1px solid var(--border-color);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    transition: all 0.2s ease;
+}
+
+.event-card:hover {
+    border-color: var(--accent-primary);
+}
+
+.event-card.active-event {
+    border-color: var(--accent-primary);
+    background: rgba(100, 255, 218, 0.05);
+}
+
+.event-card-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.event-card-name {
+    font-weight: 600;
+    color: var(--text-primary);
+    font-size: 1rem;
+}
+
+.event-card-date {
+    font-size: 0.8rem;
+    color: var(--text-faint);
+}
+
+.event-card-badge {
+    font-size: 0.7rem;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: rgba(100, 255, 218, 0.15);
+    color: var(--accent-primary);
+    font-weight: 600;
+}
+
+.event-card-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.event-card-actions button {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: 1px solid var(--border-color);
+    background: var(--bg-card);
+    color: var(--text-muted);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.85rem;
+    transition: all 0.2s ease;
+}
+
+.event-card-actions button:hover {
+    transform: scale(1.1);
+    border-color: var(--accent-primary);
+}
+
+.event-card-actions .btn-delete-event:hover {
+    border-color: var(--accent-error);
+    color: var(--accent-error);
+}
+
+/* Event Selector */
+.event-selector-container {
+    margin-bottom: 16px;
+}
+
+.event-selector {
+    padding: 8px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--accent-primary);
+    background: var(--bg-input);
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    font-weight: 600;
+    min-width: 180px;
+    cursor: pointer;
+}
+
+.event-selector option {
+    background: var(--select-bg);
+    color: var(--text-primary);
+}
+
+/* Delete confirmation modal */
+.event-delete-modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.event-delete-modal.hidden {
+    display: none;
+}
+
+.event-delete-modal-content {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    padding: 24px;
+    max-width: 360px;
+    text-align: center;
+}
+
+.event-delete-modal-content h3 {
+    color: var(--accent-error);
+    margin-bottom: 12px;
+}
+
+.event-delete-modal-content p {
+    color: var(--text-muted);
+    margin-bottom: 20px;
+    font-size: 0.9rem;
+}
+
+.event-delete-modal-actions {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+}
+
+/* === Members Management === */
+.members-section { margin-top: 20px; }
+.members-header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+.member-add-form { display: flex; gap: 8px; margin-bottom: 16px; }
+.member-add-form input { flex: 1; }
+.members-list { display: flex; flex-direction: column; gap: 8px; }
+.member-item { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: var(--history-bg); border-radius: 8px; border: 1px solid var(--border-color); }
+.member-item-name { font-weight: 500; color: var(--text-primary); }
+.member-item-actions { display: flex; gap: 6px; }
+.member-item-actions button { width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-muted); cursor: pointer; font-size: 0.8rem; display: flex; align-items: center; justify-content: center; }
+.member-item-actions button:hover { border-color: var(--accent-primary); transform: scale(1.1); }
+.member-item-actions .btn-delete-member:hover { border-color: var(--accent-error); color: var(--accent-error); }
+.member-picker { width: 100%; padding: 10px 14px; margin-bottom: 10px; border: 1px solid var(--border-light); border-radius: 8px; background: var(--bg-input); color: var(--text-primary); font-size: 0.95rem; }
+.member-new-input { width: 100%; padding: 10px 14px; margin-bottom: 10px; border: 1px solid var(--accent-secondary); border-radius: 8px; background: var(--bg-input); color: var(--text-primary); font-size: 0.95rem; }
+.member-new-input.hidden { display: none; }
+
 /* Print */
 @media print {
     body {

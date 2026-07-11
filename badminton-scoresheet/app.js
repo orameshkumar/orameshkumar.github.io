@@ -10,6 +10,15 @@ class BadmintonScoreSheet {
         this.servingTeam = 'A';
         this.lastFaultType = 'net';
         this.soundEnabled = true;
+
+        // Initialize EventManager before other init calls
+        this.eventManager = new EventManager(this);
+        this.eventManager.init();
+
+        // Initialize MemberManager after EventManager
+        this.memberManager = new MemberManager(this);
+        this.memberManager.init();
+
         this.initTheme();
         this.initVoice();
         this.initEventListeners();
@@ -17,6 +26,130 @@ class BadmintonScoreSheet {
         this.initSounds();
         this.restoreActiveMatch();
         this.sync = typeof FirebaseSync !== 'undefined' ? new FirebaseSync(this) : null;
+
+        // Render event selectors after sync init
+        this.renderEventSelectors();
+        this.populateMemberPickers();
+    }
+
+    // --- Event Management Integration ---
+    onEventChanged() {
+        this.memberManager?.onEventChanged();
+        this.loadPlayerNames();
+        this.restoreActiveMatch();
+        this.renderEventSelectors();
+        this.populateMemberPickers();
+    }
+
+    onEventListChanged() {
+        this.renderEventSelectors();
+        this.populateMemberPickers();
+        this.renderEventsPage();
+    }
+
+    renderEventSelectors() {
+        this.eventManager.renderEventSelector('event-selector-setup');
+        this.eventManager.renderEventSelector('event-selector-history');
+        this.eventManager.renderEventSelector('event-selector-leaderboard');
+    }
+
+    populateMemberPickers() {
+        const names = this.memberManager ? this.memberManager.getMemberNames() : [];
+        ['teamA-player1', 'teamA-player2', 'teamB-player1', 'teamB-player2'].forEach(id => {
+            const select = document.getElementById(id);
+            if (!select || select.tagName !== 'SELECT') return;
+            const current = select.value;
+            select.innerHTML = '<option value="">Select Player...</option>' +
+                names.map(n => `<option value="${n}">${n}</option>`).join('') +
+                '<option value="__new__">+ Type new name...</option>';
+            if (current) select.value = current;
+        });
+    }
+
+    renderEventsPage() {
+        const events = this.eventManager.getEvents();
+        const activeId = this.eventManager.getActiveEventId();
+        const container = document.getElementById('event-list');
+        if (!container) return;
+
+        // Reset: show event list, hide members section
+        container.classList.remove('hidden');
+        document.querySelector('.event-add-form')?.classList.remove('hidden');
+        document.getElementById('members-section')?.classList.add('hidden');
+
+        container.innerHTML = events.map(event => {
+            const date = new Date(event.createdDate).toLocaleDateString();
+            const isActive = event.id === activeId;
+            const badge = event.isDefault ? '<span class="event-card-badge">Default</span>' : '';
+            return `<div class="event-card ${isActive ? 'active-event' : ''}" data-id="${event.id}">
+                <div class="event-card-info">
+                    <span class="event-card-name">${event.name}</span>
+                    <span class="event-card-date">Created: ${date} ${badge}</span>
+                </div>
+                <div class="event-card-actions">
+                    <button class="btn-members-event" data-id="${event.id}" title="Members">👥</button>
+                    <button class="btn-rename-event" data-id="${event.id}" title="Rename">✏️</button>
+                    <button class="btn-delete-event" data-id="${event.id}" title="Delete">🗑️</button>
+                </div>
+            </div>`;
+        }).join('');
+
+        // Attach event handlers
+        container.querySelectorAll('.btn-rename-event').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const id = e.currentTarget.dataset.id;
+                const event = this.eventManager.getEventById(id);
+                const newName = prompt('Rename event:', event.name);
+                if (newName && newName.trim()) {
+                    try {
+                        this.eventManager.renameEvent(id, newName);
+                    } catch(err) { alert(err.message); }
+                }
+            });
+        });
+
+        container.querySelectorAll('.btn-delete-event').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const id = e.currentTarget.dataset.id;
+                const event = this.eventManager.getEventById(id);
+                if (confirm(`Delete event "${event.name}"?\n\nAll matches, players, and scores under this event will be permanently removed.`)) {
+                    try {
+                        this.eventManager.deleteEvent(id);
+                        this.eventManager.deleteEventFromFirebase(id);
+                    } catch(err) { alert(err.message); }
+                }
+            });
+        });
+
+        // Members button handler
+        container.querySelectorAll('.btn-members-event').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const id = e.currentTarget.dataset.id;
+                const event = this.eventManager.getEventById(id);
+                this.showMembersSection(id, event?.name || 'Members');
+            });
+        });
+    }
+
+    showMembersSection(eventId, eventName) {
+        // Set this event as active if not already
+        if (eventId !== this.eventManager.getActiveEventId()) {
+            this.eventManager.setActiveEvent(eventId);
+        }
+        // Reload members for this event
+        this.memberManager.onEventChanged();
+
+        // Update title
+        const title = document.getElementById('members-event-title');
+        if (title) title.textContent = `Members - ${eventName}`;
+
+        // Hide event list and add form, show members section
+        document.getElementById('event-list').classList.add('hidden');
+        document.querySelector('.event-add-form')?.classList.add('hidden');
+        document.getElementById('members-section').classList.remove('hidden');
+
+        // Render members
+        this.memberManager.renderMembersPage();
     }
 
     // --- Theme ---
@@ -327,7 +460,7 @@ class BadmintonScoreSheet {
     // --- Player Name Autocomplete ---
     getSavedPlayerNames() {
         try {
-            const data = localStorage.getItem(this.STORAGE_KEY);
+            const data = localStorage.getItem(this.eventManager.getPlayerNamesKey());
             return data ? JSON.parse(data) : [];
         } catch (e) { return []; }
     }
@@ -336,7 +469,7 @@ class BadmintonScoreSheet {
         const existing = this.getSavedPlayerNames();
         const updated = [...new Set([...existing, ...names])].filter(n => n && n.trim());
         updated.sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
-        localStorage.setItem(this.STORAGE_KEY, JSON.stringify(updated));
+        localStorage.setItem(this.eventManager.getPlayerNamesKey(), JSON.stringify(updated));
         this.sync?.savePlayerRegistry(updated);
         this.loadPlayerNames();
     }
@@ -344,13 +477,15 @@ class BadmintonScoreSheet {
     loadPlayerNames() {
         const names = this.getSavedPlayerNames();
         const datalist = document.getElementById('player-names');
-        datalist.innerHTML = names.map(name => `<option value="${name}">`).join('');
+        if (datalist) {
+            datalist.innerHTML = names.map(name => `<option value="${name}">`).join('');
+        }
     }
 
     // --- Match History ---
     getMatchHistory() {
         try {
-            const data = localStorage.getItem(this.HISTORY_KEY);
+            const data = localStorage.getItem(this.eventManager.getMatchHistoryKey());
             return data ? JSON.parse(data) : [];
         } catch (e) { return []; }
     }
@@ -360,6 +495,7 @@ class BadmintonScoreSheet {
         const record = {
             id: Date.now(),
             date: new Date().toISOString(),
+            eventId: this.eventManager.getActiveEventId(),
             teamA: this.match.teamA,
             teamB: this.match.teamB,
             sets: this.match.sets.map(s => ({ scoreA: s.scoreA, scoreB: s.scoreB })),
@@ -371,7 +507,7 @@ class BadmintonScoreSheet {
         history.unshift(record);
         // Keep last 100 matches
         if (history.length > 100) history.pop();
-        localStorage.setItem(this.HISTORY_KEY, JSON.stringify(history));
+        localStorage.setItem(this.eventManager.getMatchHistoryKey(), JSON.stringify(history));
         this.sync?.saveMatch(record);
     }
 
@@ -470,8 +606,76 @@ class BadmintonScoreSheet {
                 this.showSection(section);
                 if (section === 'history-page') this.renderHistoryPage();
                 if (section === 'leaderboard-page') this.renderLeaderboard();
+                if (section === 'events-page') this.renderEventsPage();
             });
         });
+
+        // Add Event button
+        const btnAddEvent = document.getElementById('btn-add-event');
+        if (btnAddEvent) {
+            btnAddEvent.addEventListener('click', () => {
+                const input = document.getElementById('event-name-input');
+                const name = input.value.trim();
+                if (!name) { alert('Please enter an event name.'); return; }
+                try {
+                    this.eventManager.createEvent(name);
+                    input.value = '';
+                } catch(err) { alert(err.message); }
+            });
+        }
+
+        // Member picker toggle logic
+        ['teamA-player1', 'teamA-player2', 'teamB-player1', 'teamB-player2'].forEach(id => {
+            const select = document.getElementById(id);
+            const input = document.getElementById(id + '-new');
+            if (select && input) {
+                select.addEventListener('change', () => {
+                    if (select.value === '__new__') {
+                        input.classList.remove('hidden');
+                        input.focus();
+                    } else {
+                        input.classList.add('hidden');
+                        input.value = '';
+                    }
+                });
+            }
+        });
+
+        // Members section: Back button
+        const btnBackToEvents = document.getElementById('btn-back-to-events');
+        if (btnBackToEvents) {
+            btnBackToEvents.addEventListener('click', () => {
+                document.getElementById('members-section').classList.add('hidden');
+                document.getElementById('event-list').classList.remove('hidden');
+                document.querySelector('.event-add-form')?.classList.remove('hidden');
+            });
+        }
+
+        // Members section: Add member button
+        const btnAddMember = document.getElementById('btn-add-member');
+        if (btnAddMember) {
+            btnAddMember.addEventListener('click', () => {
+                const input = document.getElementById('member-name-input');
+                const name = input.value.trim();
+                if (!name) { alert('Please enter a member name.'); return; }
+                try {
+                    this.memberManager.addMember(name);
+                    input.value = '';
+                    this.memberManager.renderMembersPage();
+                    this.populateMemberPickers();
+                } catch(err) { alert(err.message); }
+            });
+        }
+
+        // Allow Enter key to add member
+        const memberNameInput = document.getElementById('member-name-input');
+        if (memberNameInput) {
+            memberNameInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    document.getElementById('btn-add-member')?.click();
+                }
+            });
+        }
     }
 
     // --- Service Tracking ---
@@ -503,19 +707,19 @@ class BadmintonScoreSheet {
             lastFaultType: this.lastFaultType
         };
         try {
-            localStorage.setItem(this.ACTIVE_MATCH_KEY, JSON.stringify(state));
+            localStorage.setItem(this.eventManager.getActiveMatchKey(), JSON.stringify(state));
             this.sync?.saveActiveMatch(state);
         } catch (e) {}
     }
 
     clearActiveMatch() {
-        localStorage.removeItem(this.ACTIVE_MATCH_KEY);
+        localStorage.removeItem(this.eventManager.getActiveMatchKey());
         this.sync?.clearActiveMatch();
     }
 
     restoreActiveMatch() {
         try {
-            const data = localStorage.getItem(this.ACTIVE_MATCH_KEY);
+            const data = localStorage.getItem(this.eventManager.getActiveMatchKey());
             if (!data) return;
             const state = JSON.parse(data);
             if (!state.match || state.match.isFinished) {
@@ -552,14 +756,27 @@ class BadmintonScoreSheet {
 
     // --- Match Start ---
     startMatch() {
-        const teamA1 = document.getElementById('teamA-player1').value.trim() || 'Player A1';
-        const teamA2 = document.getElementById('teamA-player2').value.trim() || 'Player A2';
-        const teamB1 = document.getElementById('teamB-player1').value.trim() || 'Player B1';
-        const teamB2 = document.getElementById('teamB-player2').value.trim() || 'Player B2';
+        const getPlayerName = (selectId) => {
+            const select = document.getElementById(selectId);
+            if (select && select.tagName === 'SELECT') {
+                if (select.value === '__new__') {
+                    const input = document.getElementById(selectId + '-new');
+                    return input ? input.value.trim() : '';
+                }
+                return select.value || '';
+            }
+            // Fallback for non-select (shouldn't happen but safe)
+            return select ? select.value.trim() : '';
+        };
+        const teamA1 = getPlayerName('teamA-player1') || 'Player A1';
+        const teamA2 = getPlayerName('teamA-player2') || 'Player A2';
+        const teamB1 = getPlayerName('teamB-player1') || 'Player B1';
+        const teamB2 = getPlayerName('teamB-player2') || 'Player B2';
         const format = parseInt(document.getElementById('match-format').value);
         const pointsPerSet = parseInt(document.getElementById('points-per-set').value);
 
-        this.savePlayerNames([teamA1, teamA2, teamB1, teamB2]);
+        this.memberManager?.autoAddMembers([teamA1, teamA2, teamB1, teamB2]);
+        this.populateMemberPickers();
 
         this.match = {
             teamA: { players: [teamA1, teamA2], name: `${teamA1} / ${teamA2}` },
@@ -1067,7 +1284,7 @@ class BadmintonScoreSheet {
         if (!confirm('Delete this match from history?')) return;
         let history = this.getMatchHistory();
         history = history.filter(m => m.id !== id);
-        localStorage.setItem(this.HISTORY_KEY, JSON.stringify(history));
+        localStorage.setItem(this.eventManager.getMatchHistoryKey(), JSON.stringify(history));
         this.renderHistoryPage();
     }
 
@@ -1079,7 +1296,7 @@ class BadmintonScoreSheet {
 
     clearHistory() {
         if (confirm('Delete all match history? This cannot be undone.')) {
-            localStorage.removeItem(this.HISTORY_KEY);
+            localStorage.removeItem(this.eventManager.getMatchHistoryKey());
             this.renderHistoryPage();
         }
     }
@@ -1140,7 +1357,7 @@ class BadmintonScoreSheet {
 
                 // Sort by date descending
                 history.sort((a, b) => new Date(b.date) - new Date(a.date));
-                localStorage.setItem(this.HISTORY_KEY, JSON.stringify(history));
+                localStorage.setItem(this.eventManager.getMatchHistoryKey(), JSON.stringify(history));
                 this.renderHistoryPage();
                 alert(`Imported ${added} new match(es). ${imported.length - added} duplicate(s) skipped.`);
             } catch (err) {
@@ -1231,10 +1448,21 @@ class BadmintonScoreSheet {
     newMatch() {
         this.match = null;
         this.clearActiveMatch();
-        document.getElementById('teamA-player1').value = '';
-        document.getElementById('teamA-player2').value = '';
-        document.getElementById('teamB-player1').value = '';
-        document.getElementById('teamB-player2').value = '';
+        // Reset player selects
+        ['teamA-player1', 'teamA-player2', 'teamB-player1', 'teamB-player2'].forEach(id => {
+            const select = document.getElementById(id);
+            if (select && select.tagName === 'SELECT') {
+                select.value = '';
+            } else if (select) {
+                select.value = '';
+            }
+            const input = document.getElementById(id + '-new');
+            if (input) {
+                input.value = '';
+                input.classList.add('hidden');
+            }
+        });
+        this.populateMemberPickers();
         document.getElementById('share-preview').classList.add('hidden');
         document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
         document.querySelector('[data-section="setup-section"]').classList.add('active');
