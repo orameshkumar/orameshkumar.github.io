@@ -85,24 +85,56 @@
                     <button class="btn btn-score-tap" id="btn-scoreB">+1</button>
                 </div>
 
-                <!-- Fault Grid + Undo -->
-                <div class="fault-row">
-                    <div class="fault-grid">
-                        <button class="btn btn-fault btn-fault-a" data-team="A" data-player="0" id="fault-a1">A1</button>
-                        <button class="btn btn-fault btn-fault-a" data-team="A" data-player="1" id="fault-a2">A2</button>
-                        <button class="btn btn-fault btn-fault-b" data-team="B" data-player="0" id="fault-b1">B1</button>
-                        <button class="btn btn-fault btn-fault-b" data-team="B" data-player="1" id="fault-b2">B2</button>
+                <!-- Per-Player Error Icons -->
+                <div class="error-icons-section">
+                    <div class="error-icons-team error-icons-team-a">
+                        <span class="error-icons-player-name" id="error-player-a1-name">A1</span>
+                        <div class="error-icons-row" data-team="A" data-player="0">
+                            <button class="error-icon-btn" data-error="net" title="Net">🟡</button>
+                            <button class="error-icon-btn" data-error="out" title="Out">🔴</button>
+                            <button class="error-icon-btn" data-error="service" title="Service">🟠</button>
+                            <button class="error-icon-btn" data-error="double-hit" title="Double Hit">🟣</button>
+                            <button class="error-icon-btn" data-error="carry" title="Carry">🟤</button>
+                            <button class="error-icon-btn" data-error="obstruction" title="Obstruction">⚫</button>
+                            <button class="error-icon-btn" data-error="unforced" title="Unforced">🔵</button>
+                            <button class="error-icon-btn" data-error="other" title="Other">⚪</button>
+                        </div>
+                        <span class="error-icons-player-name" id="error-player-a2-name">A2</span>
+                        <div class="error-icons-row" data-team="A" data-player="1">
+                            <button class="error-icon-btn" data-error="net" title="Net">🟡</button>
+                            <button class="error-icon-btn" data-error="out" title="Out">🔴</button>
+                            <button class="error-icon-btn" data-error="service" title="Service">🟠</button>
+                            <button class="error-icon-btn" data-error="double-hit" title="Double Hit">🟣</button>
+                            <button class="error-icon-btn" data-error="carry" title="Carry">🟤</button>
+                            <button class="error-icon-btn" data-error="obstruction" title="Obstruction">⚫</button>
+                            <button class="error-icon-btn" data-error="unforced" title="Unforced">🔵</button>
+                            <button class="error-icon-btn" data-error="other" title="Other">⚪</button>
+                        </div>
                     </div>
-                    <select id="fault-type-select" class="fault-type-select">
-                        <option value="net">Net</option>
-                        <option value="out">Out</option>
-                        <option value="service">Service</option>
-                        <option value="double-hit">Double Hit</option>
-                        <option value="carry">Carry</option>
-                        <option value="obstruction">Obstruction</option>
-                        <option value="unforced">Unforced</option>
-                        <option value="other">Other</option>
-                    </select>
+                    <div class="error-icons-team error-icons-team-b">
+                        <span class="error-icons-player-name" id="error-player-b1-name">B1</span>
+                        <div class="error-icons-row" data-team="B" data-player="0">
+                            <button class="error-icon-btn" data-error="net" title="Net">🟡</button>
+                            <button class="error-icon-btn" data-error="out" title="Out">🔴</button>
+                            <button class="error-icon-btn" data-error="service" title="Service">🟠</button>
+                            <button class="error-icon-btn" data-error="double-hit" title="Double Hit">🟣</button>
+                            <button class="error-icon-btn" data-error="carry" title="Carry">🟤</button>
+                            <button class="error-icon-btn" data-error="obstruction" title="Obstruction">⚫</button>
+                            <button class="error-icon-btn" data-error="unforced" title="Unforced">🔵</button>
+                            <button class="error-icon-btn" data-error="other" title="Other">⚪</button>
+                        </div>
+                        <span class="error-icons-player-name" id="error-player-b2-name">B2</span>
+                        <div class="error-icons-row" data-team="B" data-player="1">
+                            <button class="error-icon-btn" data-error="net" title="Net">🟡</button>
+                            <button class="error-icon-btn" data-error="out" title="Out">🔴</button>
+                            <button class="error-icon-btn" data-error="service" title="Service">🟠</button>
+                            <button class="error-icon-btn" data-error="double-hit" title="Double Hit">🟣</button>
+                            <button class="error-icon-btn" data-error="carry" title="Carry">🟤</button>
+                            <button class="error-icon-btn" data-error="obstruction" title="Obstruction">⚫</button>
+                            <button class="error-icon-btn" data-error="unforced" title="Unforced">🔵</button>
+                            <button class="error-icon-btn" data-error="other" title="Other">⚪</button>
+                        </div>
+                    </div>
                     <button class="btn btn-undo" id="btn-undo">↩ Undo</button>
                 </div>
             </div>

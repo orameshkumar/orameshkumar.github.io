@@ -379,18 +379,32 @@ class BadmintonScoreSheet {
         document.getElementById('btn-voice-error').addEventListener('click', () => this.toggleVoice());
 
         // New fault buttons (per-player, one-tap)
+        // Per-player error icon buttons (8 icons per player, one-tap fault recording)
+        document.querySelectorAll('.error-icon-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const row = e.currentTarget.closest('.error-icons-row');
+                const team = row.dataset.team;
+                const playerIdx = parseInt(row.dataset.player);
+                const errorType = e.currentTarget.dataset.error;
+                const errorTypeLabel = e.currentTarget.title;
+                this.recordErrorDirect(team, playerIdx, errorType, errorTypeLabel);
+            });
+        });
+
+        // Legacy fault buttons (guard in case still in DOM)
         document.querySelectorAll('.btn-fault').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 const team = e.currentTarget.dataset.team;
                 const playerIdx = parseInt(e.currentTarget.dataset.player);
                 const faultSelect = document.getElementById('fault-type-select');
+                if (!faultSelect) return;
                 const errorType = faultSelect.value;
                 const errorTypeLabel = faultSelect.selectedOptions[0].text;
                 this.recordErrorDirect(team, playerIdx, errorType, errorTypeLabel);
             });
         });
 
-        // Fault type selector — track last used fault type
+        // Fault type selector — track last used fault type (legacy, guard)
         const faultTypeSelect = document.getElementById('fault-type-select');
         if (faultTypeSelect) {
             faultTypeSelect.addEventListener('change', (e) => {
@@ -551,7 +565,7 @@ class BadmintonScoreSheet {
 
     updateQuickErrorLabels() {
         if (!this.match) return;
-        // Update new per-player fault button labels
+        // Update new per-player fault button labels (legacy)
         const faultA1 = document.getElementById('fault-a1');
         const faultA2 = document.getElementById('fault-a2');
         const faultB1 = document.getElementById('fault-b1');
@@ -561,6 +575,16 @@ class BadmintonScoreSheet {
         if (faultA2) faultA2.textContent = this.truncateLabel(this.match.teamA.players[1]);
         if (faultB1) faultB1.textContent = this.truncateLabel(this.match.teamB.players[0]);
         if (faultB2) faultB2.textContent = this.truncateLabel(this.match.teamB.players[1]);
+
+        // Update error icon player name labels
+        const eiA1 = document.getElementById('error-player-a1-name');
+        const eiA2 = document.getElementById('error-player-a2-name');
+        const eiB1 = document.getElementById('error-player-b1-name');
+        const eiB2 = document.getElementById('error-player-b2-name');
+        if (eiA1) eiA1.textContent = this.truncateLabel(this.match.teamA.players[0]);
+        if (eiA2) eiA2.textContent = this.truncateLabel(this.match.teamA.players[1]);
+        if (eiB1) eiB1.textContent = this.truncateLabel(this.match.teamB.players[0]);
+        if (eiB2) eiB2.textContent = this.truncateLabel(this.match.teamB.players[1]);
 
         // Also update old quick-error-names if still present (backward compatibility)
         const namesEl = document.getElementById('quick-error-names');

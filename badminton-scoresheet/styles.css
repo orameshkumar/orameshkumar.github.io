@@ -1190,6 +1190,86 @@ h3 {
     100% { transform: scale(1); background: var(--bg-card); }
 }
 
+/* --- Per-Player Error Icons --- */
+.error-icons-section {
+    margin-top: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    align-items: stretch;
+}
+
+.error-icons-team {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.error-icons-team-a {
+    border-left: 3px solid rgba(100, 255, 218, 0.5);
+    padding-left: 6px;
+}
+
+.error-icons-team-b {
+    border-left: 3px solid rgba(255, 171, 64, 0.5);
+    padding-left: 6px;
+}
+
+.error-icons-player-name {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--text-muted);
+    margin-bottom: 1px;
+}
+
+.error-icons-row {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+}
+
+.error-icon-btn {
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
+    min-height: 32px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    background: var(--bg-card);
+    cursor: pointer;
+    font-size: 0.9rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s ease;
+    padding: 0;
+}
+
+.error-icon-btn:hover {
+    transform: scale(1.15);
+    border-color: var(--accent-primary);
+    background: var(--bg-card-hover);
+}
+
+.error-icon-btn:active {
+    transform: scale(0.9);
+    background: rgba(255, 82, 82, 0.2);
+}
+
+@media (max-width: 480px) {
+    .error-icon-btn {
+        width: 28px;
+        height: 28px;
+        min-width: 28px;
+        min-height: 28px;
+        font-size: 0.8rem;
+    }
+
+    .error-icons-player-name {
+        font-size: 0.7rem;
+    }
+}
+
 /* === End Scoreboard Redesign === */
 
 /* Print */
