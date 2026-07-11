@@ -38,9 +38,24 @@ const WhatsApp = (function () {
     return d + ' ' + months[m] + ' ' + y;
   }
 
-  function openWA(mobile, message) {
+  function openWA(mobile, message, fromUserGesture) {
     var phone = '91' + mobile.replace(/\D/g, '');
     var url = 'https://api.whatsapp.com/send?phone=' + phone + '&text=' + encodeURIComponent(message);
+
+    // When called directly from a synchronous user gesture (button tap with no async
+    // gap), we can navigate immediately — iOS Safari allows it.
+    if (fromUserGesture) {
+      // Use a temporary <a> click to open WhatsApp — works reliably on iOS standalone PWA
+      var tempLink = document.createElement('a');
+      tempLink.href = url;
+      tempLink.target = '_blank';
+      tempLink.rel = 'noopener noreferrer';
+      tempLink.style.display = 'none';
+      document.body.appendChild(tempLink);
+      tempLink.click();
+      setTimeout(function () { document.body.removeChild(tempLink); }, 100);
+      return;
+    }
 
     // iOS Safari blocks programmatic navigation after any async gap (await/IndexedDB).
     // The only reliable fix is a real user tap — show a tappable toast instead.
@@ -107,7 +122,7 @@ const WhatsApp = (function () {
   function sendMonthlyReminder(mobile, name, balance, fee) {
     var tpl = lsGet(KEYS.TPL_MONTHLY_REMINDER, DEFAULTS.TPL_MONTHLY_REMINDER);
     var msg = processTemplate(tpl, { memberName: name, balance: balance.toFixed(2), fee: fee.toFixed(2) });
-    openWA(mobile, msg);
+    openWA(mobile, msg, true);
   }
 
   function sendGuestConfirmation(mobile, name, amount, date) {

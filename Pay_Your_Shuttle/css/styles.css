@@ -244,9 +244,16 @@ body { display: flex; flex-direction: column; max-width: 480px; margin: 0 auto; 
 
 /* ── Print ───────────────────────────────────────────── */
 @media print {
-  .nav-bar, .app-header, .filter-bar, .section-header .btn, .btn-icon { display: none !important; }
-  .screen { padding: 0; }
-  body { background: #fff; color: #000; }
+  .nav-bar, .app-header, .filter-bar, .section-header .btn, .btn-icon, .license-banner, #more-menu, #more-menu-backdrop, .report-tabs, .filter-row { display: none !important; }
+  html, body { height: auto !important; overflow: visible !important; max-width: none !important; }
+  body { display: block !important; box-shadow: none !important; background: #fff; color: #000; }
+  .screen { padding: 0; overflow: visible !important; height: auto !important; flex: none !important; }
+  #reports-screen { overflow: visible !important; height: auto !important; }
+  #reports-screen .report-tab-panel { overflow: visible !important; height: auto !important; flex: none !important; }
+  #monthly-list, #guest-list, #member-list, #contrib-list, #expense-list, #history-list { overflow: visible !important; height: auto !important; flex: none !important; }
+  .report-table { page-break-inside: auto; width: 100%; }
+  .report-table tr { page-break-inside: avoid; }
+  .client-card { page-break-inside: avoid; }
 }
 
 /* ── Scrollbars ──────────────────────────────────────── */
