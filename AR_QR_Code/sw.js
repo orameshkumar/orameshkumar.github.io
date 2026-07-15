@@ -3,7 +3,7 @@
  * Implements cache-first for app shell, network-first for animation assets.
  */
 
-const CACHE_VERSION = 'v1';
+const CACHE_VERSION = 'v4';
 const APP_SHELL_CACHE = `ar-qr-app-shell-${CACHE_VERSION}`;
 const ASSET_CACHE = `ar-qr-assets-${CACHE_VERSION}`;
 const MAX_ASSET_CACHE_SIZE = 50;
@@ -74,6 +74,12 @@ self.addEventListener('fetch', (event) => {
  * Serves from cache if available, falls back to network.
  */
 async function cacheFirstStrategy(request) {
+  // Safety guard: don't cache non-http requests
+  const reqUrl = new URL(request.url);
+  if (!reqUrl.protocol.startsWith('http')) {
+    return fetch(request);
+  }
+
   const cachedResponse = await caches.match(request);
   if (cachedResponse) {
     return cachedResponse;

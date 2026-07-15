@@ -4,7 +4,7 @@
  */
 // eslint-disable-next-line no-var
 var ServiceWorkerManager = (() => {
-  const CACHE_VERSION = 'v1';
+  const CACHE_VERSION = 'v2';
   const APP_SHELL_CACHE = `ar-qr-app-shell-${CACHE_VERSION}`;
   const ASSET_CACHE = `ar-qr-assets-${CACHE_VERSION}`;
 

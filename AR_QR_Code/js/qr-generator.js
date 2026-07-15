@@ -66,7 +66,8 @@ const QRGenerator = (() => {
             const svgContent = generateSVGWithBorder(experienceUrl, canvas);
 
             // Generate pattern file data for AR.js
-            const patternData = generateMarkerPattern(assetId);
+            // Generate pattern file data for AR.js from actual QR canvas pixels
+            const patternData = generateMarkerPattern(canvas);
 
             // Create a data URL for the pattern file
             const patternFileUrl = 'data:text/plain;base64,' + btoa(patternData);
@@ -226,93 +227,82 @@ const QRGenerator = (() => {
   }
 
   /**
-   * Generates AR.js pattern file data for marker recognition.
-   * Produces a simplified 16x16 pattern matrix (3 channels) that AR.js
-   * uses to identify the marker. The pattern is derived from the QR code's
-   * visual structure for the given asset ID.
+   * Generates AR.js pattern file data from a QR code canvas.
+   * Reads actual pixel values from the canvas and produces a 16×16 grid
+   * (3 channels × 4 rotations) that AR.js uses to identify the printed marker.
    *
-   * @param {string} assetId - The asset identifier to generate pattern for.
+   * @param {HTMLCanvasElement} qrCanvas - The rendered inner QR code canvas.
    * @returns {string} Pattern file content as a numeric matrix string.
    */
-  function generateMarkerPattern(assetId) {
-    // AR.js .patt files contain a 16x16 grid per channel (R, G, B)
-    // rotated 4 times (0°, 90°, 180°, 270°)
-    // Each value is 0-255 representing brightness
-    // We generate a deterministic pattern based on the assetId hash
+  function generateMarkerPattern(qrCanvas) {
+    const ctx = qrCanvas.getContext('2d');
+    const size = qrCanvas.width;
+    const imageData = ctx.getImageData(0, 0, size, size);
+    const pixels = imageData.data;
 
-    const hash = simpleHash(assetId);
+    // Sample a PATTERN_SIZE × PATTERN_SIZE grid from the canvas.
+    // Returns an array of PATTERN_SIZE*PATTERN_SIZE brightness values (0-255).
+    function sampleGrid(rotation) {
+      const values = [];
+      for (let row = 0; row < PATTERN_SIZE; row++) {
+        for (let col = 0; col < PATTERN_SIZE; col++) {
+          // Apply rotation by transforming source coordinates
+          let srcRow, srcCol;
+          switch (rotation) {
+            case 1: srcRow = PATTERN_SIZE - 1 - col; srcCol = row; break;
+            case 2: srcRow = PATTERN_SIZE - 1 - row; srcCol = PATTERN_SIZE - 1 - col; break;
+            case 3: srcRow = col; srcCol = PATTERN_SIZE - 1 - row; break;
+            default: srcRow = row; srcCol = col;
+          }
+
+          // Map grid cell to pixel region
+          const cellX = Math.floor(srcCol * size / PATTERN_SIZE);
+          const cellY = Math.floor(srcRow * size / PATTERN_SIZE);
+          const cellW = Math.max(1, Math.floor(size / PATTERN_SIZE));
+          const cellH = Math.max(1, Math.floor(size / PATTERN_SIZE));
+
+          // Average brightness over the region
+          let sum = 0, count = 0;
+          for (let py = cellY; py < Math.min(cellY + cellH, size); py++) {
+            for (let px = cellX; px < Math.min(cellX + cellW, size); px++) {
+              const idx = (py * size + px) * 4;
+              sum += (pixels[idx] + pixels[idx + 1] + pixels[idx + 2]) / 3;
+              count++;
+            }
+          }
+          values.push(count > 0 ? Math.round(sum / count) : 0);
+        }
+      }
+      return values;
+    }
+
     const lines = [];
-
-    // Generate 4 rotations
     for (let rotation = 0; rotation < 4; rotation++) {
-      // For each rotation, generate 3 channels (R, G, B) - since our marker is B&W they're identical
+      const grid = sampleGrid(rotation);
+      // Each of 3 channels is identical for B&W QR codes
       for (let channel = 0; channel < 3; channel++) {
         for (let row = 0; row < PATTERN_SIZE; row++) {
           const rowValues = [];
           for (let col = 0; col < PATTERN_SIZE; col++) {
-            // Generate a deterministic pixel value based on position and hash
-            // Simulate the QR pattern structure with border
-            const isOuterBorder = row < 2 || row >= PATTERN_SIZE - 2 || col < 2 || col >= PATTERN_SIZE - 2;
-            if (isOuterBorder) {
-              // Border area - always black (0)
-              rowValues.push('  0');
-            } else {
-              // Inner area - QR pattern based on hash
-              const innerRow = row - 2;
-              const innerCol = col - 2;
-              const rotatedRow = rotateCoord(innerRow, innerCol, PATTERN_SIZE - 4, rotation, true);
-              const rotatedCol = rotateCoord(innerRow, innerCol, PATTERN_SIZE - 4, rotation, false);
-              const seed = (hash + rotatedRow * (PATTERN_SIZE - 4) + rotatedCol + channel) & 0xFFFFFFFF;
-              const value = ((seed * 1103515245 + 12345) >>> 16) & 0xFF;
-              // Threshold to create a QR-like B&W pattern
-              const bwValue = value > 128 ? 255 : 0;
-              rowValues.push(String(bwValue).padStart(3, ' '));
-            }
+            rowValues.push(String(grid[row * PATTERN_SIZE + col]).padStart(3, ' '));
           }
           lines.push(rowValues.join(' '));
         }
       }
-      // Add blank line between rotations (except after last)
-      if (rotation < 3) {
-        lines.push('');
-      }
+      if (rotation < 3) lines.push('');
     }
 
     return lines.join('\n');
   }
 
   /**
-   * Computes a rotation coordinate transform.
-   * @param {number} row - Input row.
-   * @param {number} col - Input column.
-   * @param {number} size - Grid size.
-   * @param {number} rotation - Rotation index (0-3).
-   * @param {boolean} getRow - If true returns row, else returns col.
-   * @returns {number} Transformed coordinate.
+   * Generates a pattern data URL from a QR canvas for use as an AR.js marker pattern.
+   * @param {HTMLCanvasElement} qrCanvas - The inner QR code canvas (no border).
+   * @returns {string} Data URL of the .patt file content.
    */
-  function rotateCoord(row, col, size, rotation, getRow) {
-    switch (rotation) {
-      case 0: return getRow ? row : col;
-      case 1: return getRow ? col : (size - 1 - row);
-      case 2: return getRow ? (size - 1 - row) : (size - 1 - col);
-      case 3: return getRow ? (size - 1 - col) : row;
-      default: return getRow ? row : col;
-    }
-  }
-
-  /**
-   * Simple string hash function for deterministic pattern generation.
-   * @param {string} str - Input string to hash.
-   * @returns {number} A 32-bit integer hash.
-   */
-  function simpleHash(str) {
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-      const char = str.charCodeAt(i);
-      hash = ((hash << 5) - hash) + char;
-      hash = hash & hash; // Convert to 32-bit integer
-    }
-    return Math.abs(hash);
+  function generatePatternFromCanvas(qrCanvas) {
+    const patternData = generateMarkerPattern(qrCanvas);
+    return 'data:text/plain;base64,' + btoa(patternData);
   }
 
   /**
@@ -376,6 +366,7 @@ const QRGenerator = (() => {
     generate,
     addMarkerBorder,
     generateMarkerPattern,
+    generatePatternFromCanvas,
     downloadAsPNG,
     downloadAsSVG,
     // Expose constants for testing

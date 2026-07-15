@@ -7,7 +7,7 @@
       "name": "Dancing Robot",
       "type": "3d",
       "format": "glb",
-      "filePath": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/RobotExpressive/glTF-Binary/RobotExpressive.glb",
+      "filePath": "assets/models/BarramundiFish.glb",
       "thumbnailPath": "assets/thumbnails/dancing-robot.svg",
       "fileSize": 2457600,
       "metadata": {
@@ -23,7 +23,7 @@
       "name": "Spinning Cube",
       "type": "3d",
       "format": "glb",
-      "filePath": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/BoxAnimated/glTF-Binary/BoxAnimated.glb",
+      "filePath": "assets/models/BoxAnimated.glb",
       "thumbnailPath": "assets/thumbnails/spinning-cube.svg",
       "fileSize": 524288,
       "metadata": {
@@ -39,7 +39,7 @@
       "name": "Fox Run",
       "type": "3d",
       "format": "glb",
-      "filePath": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/Fox/glTF-Binary/Fox.glb",
+      "filePath": "assets/models/Fox.glb",
       "thumbnailPath": "assets/thumbnails/butterfly-flight.svg",
       "fileSize": 1843200,
       "metadata": {
@@ -55,7 +55,7 @@
       "name": "Animated Triangle",
       "type": "3d",
       "format": "glb",
-      "filePath": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/AnimatedTriangle/glTF-Binary/AnimatedTriangle.glb",
+      "filePath": "assets/models/AnimatedColorsCube.glb",
       "thumbnailPath": "assets/thumbnails/fireworks-burst.svg",
       "fileSize": 1048576,
       "metadata": {
@@ -71,7 +71,7 @@
       "name": "Cesium Man",
       "type": "3d",
       "format": "glb",
-      "filePath": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/CesiumMan/glTF-Binary/CesiumMan.glb",
+      "filePath": "assets/models/CesiumMan.glb",
       "thumbnailPath": "assets/thumbnails/heart-pulse.svg",
       "fileSize": 768000,
       "metadata": {
@@ -87,7 +87,7 @@
       "name": "Brain Stem",
       "type": "3d",
       "format": "glb",
-      "filePath": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/BrainStem/glTF-Binary/BrainStem.glb",
+      "filePath": "assets/models/BrainStem.glb",
       "thumbnailPath": "assets/thumbnails/dragon-fly.svg",
       "fileSize": 4194304,
       "metadata": {
@@ -103,7 +103,7 @@
       "name": "Interpolation Test",
       "type": "3d",
       "format": "glb",
-      "filePath": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/InterpolationTest/glTF-Binary/InterpolationTest.glb",
+      "filePath": "assets/models/InterpolationTest.glb",
       "thumbnailPath": "assets/thumbnails/neon-wave.svg",
       "fileSize": 409600,
       "metadata": {
@@ -119,7 +119,7 @@
       "name": "Animated Morph Cube",
       "type": "3d",
       "format": "glb",
-      "filePath": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/AnimatedMorphCube/glTF-Binary/AnimatedMorphCube.glb",
+      "filePath": "assets/models/Duck.glb",
       "thumbnailPath": "assets/thumbnails/rocket-launch.svg",
       "fileSize": 3145728,
       "metadata": {
@@ -135,7 +135,7 @@
       "name": "Rigged Simple",
       "type": "3d",
       "format": "glb",
-      "filePath": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/RiggedSimple/glTF-Binary/RiggedSimple.glb",
+      "filePath": "assets/models/spinning-cube.glb",
       "thumbnailPath": "assets/thumbnails/sparkle-star.svg",
       "fileSize": 512000,
       "metadata": {
@@ -151,7 +151,7 @@
       "name": "Rigged Figure",
       "type": "3d",
       "format": "glb",
-      "filePath": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/RiggedFigure/glTF-Binary/RiggedFigure.glb",
+      "filePath": "assets/models/BarramundiFish.glb",
       "thumbnailPath": "assets/thumbnails/galaxy-portal.svg",
       "fileSize": 3670016,
       "metadata": {
@@ -167,7 +167,7 @@
       "name": "Animated Morph Sphere",
       "type": "3d",
       "format": "glb",
-      "filePath": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/AnimatedMorphSphere/glTF-Binary/AnimatedMorphSphere.glb",
+      "filePath": "assets/models/AnimatedColorsCube.glb",
       "thumbnailPath": "assets/thumbnails/confetti-shower.svg",
       "fileSize": 1572864,
       "metadata": {

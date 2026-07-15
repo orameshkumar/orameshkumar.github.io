@@ -73,12 +73,16 @@
   <!-- Loading Indicator -->
   <div class="loading-overlay" id="loading-overlay">
     <div class="loading-spinner"></div>
-    <p>Loading AR experience...</p>
+    <p id="loading-text">Loading AR experience...</p>
+    <p id="camera-hint" style="display:none;font-size:0.85rem;opacity:0.75;margin-top:8px;text-align:center;padding:0 24px;">
+      📷 Allow camera access when prompted by your browser
+    </p>
   </div>
 
   <!-- Scripts -->
   <script src="js/utils.js"></script>
   <script src="js/animation-library.js"></script>
+  <script src="js/qr-generator.js"></script>
   <script src="js/camera-activator.js"></script>
   <script src="js/marker-tracker.js"></script>
   <script src="js/ar-renderer.js"></script>

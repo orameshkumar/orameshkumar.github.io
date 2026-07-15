@@ -80,9 +80,18 @@ var ViewerInterface = (() => {
       return;
     }
 
-    // Step 3: Request camera permission within 2 seconds of page interactive
+    // Step 3: Request camera permission — show a hint after 1.5s so users
+    // know to look for the browser's permission prompt in the address bar.
+    var cameraHintEl = document.getElementById('camera-hint');
+    var loadingTextEl = document.getElementById('loading-text');
+    var hintTimer = setTimeout(function() {
+      if (loadingTextEl) loadingTextEl.textContent = 'Waiting for camera permission...';
+      if (cameraHintEl) cameraHintEl.style.display = 'block';
+    }, 1500);
+
     try {
       await requestCameraWithDeadline();
+      clearTimeout(hintTimer);
       hideLoading();
       // Step 4: Show instruction overlay once camera is active
       showInstructionOverlay();
@@ -91,6 +100,7 @@ var ViewerInterface = (() => {
       // Step 5: Set up the AR scene and wire all components
       await setupARScene(currentAssetId);
     } catch (error) {
+      clearTimeout(hintTimer);
       hideLoading();
       handleCameraError(error);
     }
@@ -152,18 +162,57 @@ var ViewerInterface = (() => {
       return;
     }
 
-    // Step 2: Inject A-Frame AR scene into the container
-    // Determine marker configuration: use asset pattern file if available, else fallback to hiro preset
+    // Step 2: Generate the QR pattern from the same QR code the creator produced.
+    // Since the QR encodes a deterministic URL, regenerating it yields identical pixels,
+    // so the .patt file matches what was printed and AR.js can detect it.
+    var patternFileUrl = null;
+    if (typeof QRCode !== 'undefined' && typeof QRGenerator !== 'undefined') {
+      try {
+        var experienceUrl = (typeof Utils !== 'undefined' && Utils.buildExperienceUrl)
+          ? Utils.buildExperienceUrl(assetId)
+          : window.location.href;
+
+        var tempDiv = document.createElement('div');
+        tempDiv.style.display = 'none';
+        document.body.appendChild(tempDiv);
+
+        await new Promise(function(resolve) {
+          var innerSize = Math.ceil(QRGenerator.MIN_QR_SIZE * (1 - 2 * QRGenerator.BORDER_RATIO));
+          new QRCode(tempDiv, {
+            text: experienceUrl,
+            width: innerSize,
+            height: innerSize,
+            colorDark: '#000000',
+            colorLight: '#FFFFFF',
+            correctLevel: QRCode.CorrectLevel[QRGenerator.ERROR_CORRECTION]
+          });
+          // QRCode renders asynchronously; wait for it
+          setTimeout(function() {
+            var qrCanvas = tempDiv.querySelector('canvas');
+            if (qrCanvas) {
+              patternFileUrl = QRGenerator.generatePatternFromCanvas(qrCanvas);
+            }
+            document.body.removeChild(tempDiv);
+            resolve();
+          }, 200);
+        });
+      } catch (e) {
+        console.warn('ViewerInterface: Could not generate QR pattern, falling back to hiro preset', e);
+      }
+    }
+
+    // Step 3: Inject A-Frame AR scene with the correct marker type
     var markerHtml;
-    if (asset.patternPath) {
-      markerHtml = '<a-marker type="pattern" url="' + asset.patternPath + '" id="ar-marker"></a-marker>';
+    if (patternFileUrl) {
+      markerHtml = '<a-marker type="pattern" url="' + patternFileUrl + '" patternRatio="0.5" id="ar-marker"></a-marker>';
+    } else if (asset.patternPath) {
+      markerHtml = '<a-marker type="pattern" url="' + asset.patternPath + '" patternRatio="0.5" id="ar-marker"></a-marker>';
     } else {
-      // Fallback to hiro preset for testing when no custom pattern is available
       markerHtml = '<a-marker preset="hiro" id="ar-marker"></a-marker>';
     }
 
     var sceneHtml =
-      '<a-scene embedded arjs="sourceType: webcam; detectionMode: mono; debugUIEnabled: false;" ' +
+      '<a-scene embedded arjs="sourceType: webcam; detectionMode: mono; patternRatio: 0.5; debugUIEnabled: false;" ' +
       'vr-mode-ui="enabled: false" ' +
       'renderer="logarithmicDepthBuffer: true; alpha: true;" ' +
       'id="ar-scene">' +
@@ -171,9 +220,14 @@ var ViewerInterface = (() => {
       '<a-entity camera id="ar-camera"></a-entity>' +
       '</a-scene>';
 
+    // Release the permission-check stream so AR.js can acquire the camera freely.
+    // Some browsers/devices only allow one active camera stream per origin.
+    if (typeof CameraActivator !== 'undefined' && CameraActivator.stopCamera) {
+      CameraActivator.stopCamera();
+    }
+
     container.innerHTML = sceneHtml;
 
-    // Wait for the scene to initialize
     var sceneEl = document.getElementById('ar-scene');
     var markerEl = document.getElementById('ar-marker');
 
@@ -182,132 +236,116 @@ var ViewerInterface = (() => {
       return;
     }
 
-    // Step 3: Initialize ARRenderer with the scene and marker references
-    if (typeof ARRenderer !== 'undefined') {
-      ARRenderer.init(sceneEl, markerEl);
+    // Step 4: Wire all AR components only after A-Frame has fully initialized the scene.
+    // Appending entities or binding marker events before 'loaded' fires causes silent failures.
+    function onSceneReady() {
+      // Initialize ARRenderer with the scene and marker references
+      if (typeof ARRenderer !== 'undefined') {
+        ARRenderer.init(sceneEl, markerEl);
 
-      // Load the asset into the renderer (creates entity inside marker)
-      var loadSuccess = ARRenderer.loadAsset(asset);
-      if (!loadSuccess) {
-        // ARRenderer.showLoadError() is called internally on failure
-        return;
+        var loadSuccess = ARRenderer.loadAsset(asset);
+        if (!loadSuccess) {
+          return;
+        }
       }
-    }
 
-    // Step 4: Start marker tracking
-    if (typeof MarkerTracker !== 'undefined') {
-      MarkerTracker.startTracking();
-    }
+      // Start marker tracking
+      if (typeof MarkerTracker !== 'undefined') {
+        MarkerTracker.startTracking();
+      }
 
-    // Step 5: Wire marker found event
-    if (typeof MarkerTracker !== 'undefined') {
-      MarkerTracker.onMarkerFound(function(data) {
-        // Place asset at detected position and start animation
-        if (typeof ARRenderer !== 'undefined') {
-          ARRenderer.placeAsset(data.position, data.orientation);
-          ARRenderer.startAnimation();
-        }
-
-        // Hide instruction overlay and show zoom controls
-        hideInstructionOverlay();
-        showZoomControls();
-
-        // Notify MarkerLossHandler of marker found (for recovery from persist/fade)
-        if (typeof MarkerLossHandler !== 'undefined') {
-          var scale = (typeof ZoomController !== 'undefined') ? ZoomController.getCurrentScale() : 1.0;
-          MarkerLossHandler.onMarkerFound(data.position, data.orientation, scale);
-        }
-      });
-
-      // Step 6: Wire marker lost event
-      MarkerTracker.onMarkerLost(function(data) {
-        if (typeof MarkerLossHandler !== 'undefined') {
-          MarkerLossHandler.onMarkerLost();
-        }
-      });
-    }
-
-    // Step 7: Wire MarkerLossHandler callbacks
-    if (typeof MarkerLossHandler !== 'undefined') {
-      // When fade completes (asset fully invisible) → show instruction overlay, hide zoom
-      MarkerLossHandler.onFadeComplete(function() {
-        showInstructionOverlay();
-        hideZoomControls();
-
-        // Trigger the actual fade on the renderer during the FADING state
-        // (The fade animation is initiated when transitioning to FADING state)
-      });
-
-      // When marker is restored during persist/fade → restore asset visibility
-      MarkerLossHandler.onRestore(function(data) {
-        if (typeof ARRenderer !== 'undefined') {
-          ARRenderer.fadeIn();
-          ARRenderer.updatePosition(data.position, data.orientation);
-        }
-      });
-    }
-
-    // Step 8: Initiate fade-out on the renderer when MarkerLossHandler enters FADING state
-    // The MarkerLossHandler internally starts a fade timer. We hook into the state transition
-    // by wrapping the onMarkerLost flow: after persist timeout, the handler transitions to FADING.
-    // The fadeOut call is driven by MarkerLossHandler's internal timer firing startFade().
-    // We need ARRenderer.fadeOut() to run when the state transitions to FADING.
-    // Since MarkerLossHandler handles this via setTimeout internally, we patch it by
-    // observing state changes. However, the cleaner approach is to call fadeOut when
-    // the persist timer fires. We achieve this by checking state in a monitoring loop
-    // OR by modifying the marker lost callback to schedule the fade.
-    // 
-    // Best approach: Override the MarkerLossHandler's startFade behavior by checking state
-    // after the persist duration elapses.
-    if (typeof MarkerLossHandler !== 'undefined' && typeof ARRenderer !== 'undefined') {
-      // Store the original onMarkerLost to add fadeOut behavior
-      var originalMarkerLostCallbacks = [];
-      
-      // Monitor state transitions using a lightweight poll after marker loss
-      var fadeCheckInterval = null;
-      var lastKnownState = 'LOST';
-      
-      // We re-register a markerLost callback that triggers fade monitoring
-      MarkerTracker.onMarkerLost(function() {
-        // Start monitoring for FADING state transition
-        if (fadeCheckInterval) {
-          clearInterval(fadeCheckInterval);
-        }
-        lastKnownState = MarkerLossHandler.getState();
-        
-        fadeCheckInterval = setInterval(function() {
-          var currentState = MarkerLossHandler.getState();
-          
-          if (currentState === 'FADING' && lastKnownState !== 'FADING') {
-            // State just transitioned to FADING — trigger renderer fadeOut
-            ARRenderer.fadeOut(MarkerLossHandler.getFadeOutDuration());
+      // Wire marker found event
+      if (typeof MarkerTracker !== 'undefined') {
+        MarkerTracker.onMarkerFound(function(data) {
+          if (typeof ARRenderer !== 'undefined') {
+            ARRenderer.placeAsset(data.position, data.orientation);
+            ARRenderer.startAnimation();
           }
-          
-          if (currentState === 'LOST' || currentState === 'TRACKING') {
-            // Terminal states — stop monitoring
-            clearInterval(fadeCheckInterval);
-            fadeCheckInterval = null;
+
+          hideInstructionOverlay();
+          showZoomControls();
+
+          if (typeof MarkerLossHandler !== 'undefined') {
+            var scale = (typeof ZoomController !== 'undefined') ? ZoomController.getCurrentScale() : 1.0;
+            MarkerLossHandler.onMarkerFound(data.position, data.orientation, scale);
           }
-          
-          lastKnownState = currentState;
-        }, 50); // Check every 50ms for responsive state detection
+        });
+
+        MarkerTracker.onMarkerLost(function(data) {
+          if (typeof MarkerLossHandler !== 'undefined') {
+            MarkerLossHandler.onMarkerLost();
+          }
+        });
+      }
+
+      // Wire MarkerLossHandler callbacks
+      if (typeof MarkerLossHandler !== 'undefined') {
+        MarkerLossHandler.onFadeComplete(function() {
+          showInstructionOverlay();
+          hideZoomControls();
+        });
+
+        MarkerLossHandler.onRestore(function(data) {
+          if (typeof ARRenderer !== 'undefined') {
+            ARRenderer.fadeIn();
+            ARRenderer.updatePosition(data.position, data.orientation);
+          }
+        });
+      }
+
+      // Monitor MarkerLossHandler state to drive ARRenderer fadeOut
+      if (typeof MarkerLossHandler !== 'undefined' && typeof ARRenderer !== 'undefined') {
+        var fadeCheckInterval = null;
+        var lastKnownState = 'LOST';
+
+        MarkerTracker.onMarkerLost(function() {
+          if (fadeCheckInterval) clearInterval(fadeCheckInterval);
+          lastKnownState = MarkerLossHandler.getState();
+
+          fadeCheckInterval = setInterval(function() {
+            var currentState = MarkerLossHandler.getState();
+
+            if (currentState === 'FADING' && lastKnownState !== 'FADING') {
+              ARRenderer.fadeOut(MarkerLossHandler.getFadeOutDuration());
+            }
+
+            if (currentState === 'LOST' || currentState === 'TRACKING') {
+              clearInterval(fadeCheckInterval);
+              fadeCheckInterval = null;
+            }
+
+            lastKnownState = currentState;
+          }, 50);
+        });
+      }
+
+      // Wire ZoomController
+      if (typeof ZoomController !== 'undefined') {
+        ZoomController.enablePinchZoom();
+        ZoomController.enableButtonZoom();
+
+        ZoomController.onScaleChange(function(scale) {
+          if (typeof ARRenderer !== 'undefined') {
+            ARRenderer.setScale(scale);
+          }
+        });
+      }
+
+      console.log('ViewerInterface: AR scene ready for asset:', assetId);
+    }
+
+    // A-Frame fires 'loaded' once the scene and all components are initialized.
+    // Fall back to a timeout in case the event already fired before we registered.
+    if (sceneEl.hasLoaded) {
+      onSceneReady();
+    } else {
+      sceneEl.addEventListener('loaded', function handler() {
+        sceneEl.removeEventListener('loaded', handler);
+        onSceneReady();
       });
     }
 
-    // Step 9: Wire ZoomController
-    if (typeof ZoomController !== 'undefined') {
-      ZoomController.enablePinchZoom();
-      ZoomController.enableButtonZoom();
-
-      // Wire scale changes to ARRenderer
-      ZoomController.onScaleChange(function(scale) {
-        if (typeof ARRenderer !== 'undefined') {
-          ARRenderer.setScale(scale);
-        }
-      });
-    }
-
-    console.log('ViewerInterface: AR scene setup complete for asset:', assetId);
+    console.log('ViewerInterface: AR scene injected for asset:', assetId);
   }
 
   /**

@@ -78,8 +78,13 @@ const ARRenderer = (() => {
 
       // Listen for model load errors
       if (currentEntity) {
-        currentEntity.addEventListener('model-error', () => {
+        currentEntity.addEventListener('model-error', (evt) => {
+          const src = asset.filePath || 'unknown';
+          console.error('ARRenderer: model-error for', src, evt && evt.detail);
           showLoadError();
+        });
+        currentEntity.addEventListener('model-loaded', () => {
+          console.log('ARRenderer: model loaded successfully for', asset.filePath);
         });
       }
 
@@ -101,7 +106,6 @@ const ARRenderer = (() => {
     el.setAttribute('gltf-model', `url(${asset.filePath})`);
     el.setAttribute('class', 'ar-animation-entity');
     el.setAttribute('visible', 'true');
-    el.setAttribute('material', 'opacity: 1.0; transparent: true');
     return el;
   }
 
@@ -199,7 +203,7 @@ const ARRenderer = (() => {
     animationPlaying = true;
     if (currentEntity) {
       if (currentAsset && currentAsset.type === '3d') {
-        currentEntity.setAttribute('animation-mixer', 'loop: repeat; clampWhenFinished: false');
+        currentEntity.setAttribute('animation-mixer', 'clip: *; loop: repeat; clampWhenFinished: false');
       }
       // 2D animated images (GIF, APNG, WebP) loop natively in the browser
     }
