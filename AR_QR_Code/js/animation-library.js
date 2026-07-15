@@ -21,7 +21,7 @@ var AnimationLibrary = (() => {
    */
   async function loadManifest() {
     try {
-      const response = await fetch('/assets/animations.json');
+      const response = await fetch('assets/animations.json');
       if (!response.ok) {
         throw new Error(`Failed to load manifest: ${response.status}`);
       }

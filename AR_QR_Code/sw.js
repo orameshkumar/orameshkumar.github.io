@@ -9,22 +9,22 @@ const ASSET_CACHE = `ar-qr-assets-${CACHE_VERSION}`;
 const MAX_ASSET_CACHE_SIZE = 50;
 
 const APP_SHELL_FILES = [
-  '/',
-  '/index.html',
-  '/viewer.html',
-  '/css/styles.css',
-  '/js/animation-library.js',
-  '/js/creator-interface.js',
-  '/js/qr-generator.js',
-  '/js/viewer-interface.js',
-  '/js/camera-activator.js',
-  '/js/marker-tracker.js',
-  '/js/ar-renderer.js',
-  '/js/zoom-controller.js',
-  '/js/marker-loss-handler.js',
-  '/js/service-worker-manager.js',
-  '/js/utils.js',
-  '/manifest.json'
+  './',
+  './index.html',
+  './viewer.html',
+  './css/styles.css',
+  './js/animation-library.js',
+  './js/creator-interface.js',
+  './js/qr-generator.js',
+  './js/viewer-interface.js',
+  './js/camera-activator.js',
+  './js/marker-tracker.js',
+  './js/ar-renderer.js',
+  './js/zoom-controller.js',
+  './js/marker-loss-handler.js',
+  './js/service-worker-manager.js',
+  './js/utils.js',
+  './manifest.json'
 ];
 
 // Install event - cache app shell
@@ -56,7 +56,7 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
   // Animation assets use network-first strategy
-  if (url.pathname.startsWith('/assets/')) {
+  if (url.pathname.includes('/assets/')) {
     event.respondWith(networkFirstStrategy(event.request));
   } else {
     // App shell uses cache-first strategy

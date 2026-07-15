@@ -21,7 +21,10 @@ const Utils = (() => {
    * @returns {string} The full viewer URL with asset ID parameter.
    */
   function buildExperienceUrl(assetId) {
-    const baseUrl = `${window.location.origin}/viewer.html`;
+    // Use the current page's directory as base to support subdirectory deployment
+    const currentPath = window.location.pathname;
+    const basePath = currentPath.substring(0, currentPath.lastIndexOf('/') + 1);
+    const baseUrl = `${window.location.origin}${basePath}viewer.html`;
     const url = new URL(baseUrl);
     url.searchParams.set('id', assetId);
     return url.toString();

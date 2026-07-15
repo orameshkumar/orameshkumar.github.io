@@ -26,7 +26,7 @@ var ServiceWorkerManager = (() => {
     }
 
     try {
-      _registration = await navigator.serviceWorker.register('/sw.js');
+      _registration = await navigator.serviceWorker.register('./sw.js');
       console.log('ServiceWorkerManager: Registered with scope', _registration.scope);
       return _registration;
     } catch (error) {
@@ -46,22 +46,22 @@ var ServiceWorkerManager = (() => {
     }
 
     const appShellFiles = [
-      '/',
-      '/index.html',
-      '/viewer.html',
-      '/css/styles.css',
-      '/js/animation-library.js',
-      '/js/creator-interface.js',
-      '/js/qr-generator.js',
-      '/js/viewer-interface.js',
-      '/js/camera-activator.js',
-      '/js/marker-tracker.js',
-      '/js/ar-renderer.js',
-      '/js/zoom-controller.js',
-      '/js/marker-loss-handler.js',
-      '/js/service-worker-manager.js',
-      '/js/utils.js',
-      '/manifest.json'
+      './',
+      './index.html',
+      './viewer.html',
+      './css/styles.css',
+      './js/animation-library.js',
+      './js/creator-interface.js',
+      './js/qr-generator.js',
+      './js/viewer-interface.js',
+      './js/camera-activator.js',
+      './js/marker-tracker.js',
+      './js/ar-renderer.js',
+      './js/zoom-controller.js',
+      './js/marker-loss-handler.js',
+      './js/service-worker-manager.js',
+      './js/utils.js',
+      './manifest.json'
     ];
 
     try {

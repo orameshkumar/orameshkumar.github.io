@@ -2,7 +2,7 @@
   "name": "AR QR Code",
   "short_name": "AR QR",
   "description": "Create QR codes linked to augmented reality animations. Scan to experience AR content in your browser.",
-  "start_url": "/index.html",
+  "start_url": "./index.html",
   "display": "standalone",
   "orientation": "any",
   "theme_color": "#6200EE",
