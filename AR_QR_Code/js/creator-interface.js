@@ -58,6 +58,7 @@ var CreatorInterface = (() => {
   /**
    * Handles the Generate QR Code button click.
    * Uses QRGenerator to create a QR code for the selected asset.
+   * Wires the static download buttons, share link, and copy button in index.html.
    */
   async function handleGenerateQR() {
     if (!selectedAsset) {
@@ -65,8 +66,8 @@ var CreatorInterface = (() => {
       return;
     }
 
-    const qrOutputEl = document.getElementById('qr-container') || document.getElementById('qr-output');
-    if (!qrOutputEl) return;
+    const qrContainerEl = document.getElementById('qr-container');
+    if (!qrContainerEl) return;
 
     try {
       generateBtn.disabled = true;
@@ -74,33 +75,69 @@ var CreatorInterface = (() => {
 
       const result = await QRGenerator.generate(selectedAsset.id);
 
-      // Show the QR section
+      // Place only the QR image into qr-container
+      qrContainerEl.innerHTML =
+        '<img src="' + result.qrImageDataUrl + '" alt="AR QR Code for ' + selectedAsset.name + '" class="qr-image">' +
+        '<p class="qr-description">Scan this QR code to see <strong>' + selectedAsset.name + '</strong> in AR</p>';
+
+      // Unhide the QR section
       const qrSection = document.getElementById('qr-section');
       if (qrSection) qrSection.hidden = false;
 
-      // Display the QR code and download options
-      qrOutputEl.innerHTML =
-        '<div class="qr-result" style="text-align:center;padding:20px;">' +
-          '<h3 style="margin-bottom:12px;">Your AR QR Code</h3>' +
-          '<img src="' + result.qrImageDataUrl + '" alt="AR QR Code for ' + selectedAsset.name + '" style="width:300px;height:300px;border:2px solid #333;border-radius:8px;">' +
-          '<p style="margin:12px 0;font-size:14px;color:#666;">Scan this QR code to see <strong>' + selectedAsset.name + '</strong> in AR</p>' +
-          '<div class="qr-actions" style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">' +
-            '<button class="btn btn-primary" id="download-png-btn">Download PNG</button>' +
-            '<button class="btn btn-secondary" id="download-svg-btn">Download SVG</button>' +
-          '</div>' +
-          '<div class="qr-share" style="margin-top:16px;">' +
-            '<label style="font-size:12px;color:#888;">Shareable Link:</label>' +
-            '<input type="text" readonly value="' + result.experienceUrl + '" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:4px;margin-top:4px;font-size:12px;" onclick="this.select()">' +
-          '</div>' +
-        '</div>';
+      // Wire existing download buttons in index.html
+      const downloadPngBtn = document.getElementById('download-png-btn');
+      const downloadSvgBtn = document.getElementById('download-svg-btn');
 
-      // Wire download buttons
-      document.getElementById('download-png-btn').addEventListener('click', function() {
-        QRGenerator.downloadAsPNG(result);
-      });
-      document.getElementById('download-svg-btn').addEventListener('click', function() {
-        QRGenerator.downloadAsSVG(result);
-      });
+      if (downloadPngBtn) {
+        // Remove old listener by replacing with a clone
+        const newPngBtn = downloadPngBtn.cloneNode(true);
+        downloadPngBtn.parentNode.replaceChild(newPngBtn, downloadPngBtn);
+        newPngBtn.addEventListener('click', function () {
+          QRGenerator.downloadAsPNG(result);
+        });
+      }
+
+      if (downloadSvgBtn) {
+        const newSvgBtn = downloadSvgBtn.cloneNode(true);
+        downloadSvgBtn.parentNode.replaceChild(newSvgBtn, downloadSvgBtn);
+        newSvgBtn.addEventListener('click', function () {
+          QRGenerator.downloadAsSVG(result);
+        });
+      }
+
+      // Populate the shareable link input
+      const shareLinkInput = document.getElementById('share-link');
+      if (shareLinkInput) {
+        shareLinkInput.value = result.experienceUrl;
+      }
+
+      // Wire copy-link button
+      const copyLinkBtn = document.getElementById('copy-link-btn');
+      if (copyLinkBtn) {
+        const newCopyBtn = copyLinkBtn.cloneNode(true);
+        copyLinkBtn.parentNode.replaceChild(newCopyBtn, copyLinkBtn);
+        newCopyBtn.addEventListener('click', function () {
+          const linkInput = document.getElementById('share-link');
+          if (linkInput) {
+            linkInput.select();
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+              navigator.clipboard.writeText(linkInput.value).then(function () {
+                newCopyBtn.textContent = 'Copied!';
+                setTimeout(function () { newCopyBtn.textContent = 'Copy'; }, 2000);
+              }).catch(function () {
+                // Fallback for older browsers
+                document.execCommand('copy');
+                newCopyBtn.textContent = 'Copied!';
+                setTimeout(function () { newCopyBtn.textContent = 'Copy'; }, 2000);
+              });
+            } else {
+              document.execCommand('copy');
+              newCopyBtn.textContent = 'Copied!';
+              setTimeout(function () { newCopyBtn.textContent = 'Copy'; }, 2000);
+            }
+          }
+        });
+      }
 
       generateBtn.textContent = 'Generate QR Code';
       generateBtn.disabled = false;
