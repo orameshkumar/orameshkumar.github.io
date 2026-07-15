@@ -1,0 +1,15 @@
+{
+  "name": "ar-qr-code",
+  "version": "1.0.0",
+  "private": true,
+  "description": "AR QR Code Progressive Web App",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "vitest": "^3.2.1",
+    "fast-check": "^4.1.1",
+    "jsdom": "^26.1.0"
+  }
+}

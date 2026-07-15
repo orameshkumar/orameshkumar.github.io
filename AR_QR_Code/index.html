@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+  <meta name="description" content="Create QR codes linked to augmented reality animations">
+  <meta name="theme-color" content="#6200EE">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <title>AR QR Code - Creator</title>
+
+  <!-- PWA Manifest -->
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+
+  <!-- Stylesheets -->
+  <link rel="stylesheet" href="css/styles.css">
+
+  <!-- A-Frame (for 3D preview) -->
+  <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/donmccurdy/aframe-extras@v7.0.0/dist/aframe-extras.min.js"></script>
+
+  <!-- QR Code Generation -->
+  <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+</head>
+<body>
+  <header class="app-header">
+    <h1 class="app-title">AR QR Code Creator</h1>
+    <p class="app-subtitle">Select an animation and generate a QR code for AR experiences</p>
+  </header>
+
+  <main class="creator-main">
+    <!-- Animation Gallery -->
+    <section class="gallery-section" id="gallery-section">
+      <h2 class="section-title">Animation Library</h2>
+      <div class="gallery-grid" id="animation-gallery">
+        <!-- Gallery items rendered by JS -->
+      </div>
+      <div class="gallery-empty" id="gallery-empty" hidden>
+        <p>No animations available. Please check your connection and try again.</p>
+        <button class="btn btn-secondary" id="retry-load-btn">Retry</button>
+      </div>
+    </section>
+
+    <!-- Animation Preview -->
+    <section class="preview-section" id="preview-section">
+      <h2 class="section-title">Preview</h2>
+      <div class="preview-container" id="preview-container">
+        <p class="preview-placeholder">Select an animation to preview</p>
+      </div>
+      <div class="preview-actions">
+        <button class="btn btn-primary" id="generate-btn" disabled>Generate QR Code</button>
+      </div>
+    </section>
+
+    <!-- QR Code Output -->
+    <section class="qr-section" id="qr-section" hidden>
+      <h2 class="section-title">Your AR QR Code</h2>
+      <div class="qr-container" id="qr-container"></div>
+      <div class="qr-actions">
+        <button class="btn btn-primary" id="download-png-btn">Download PNG</button>
+        <button class="btn btn-secondary" id="download-svg-btn">Download SVG</button>
+      </div>
+      <div class="share-link-container">
+        <label for="share-link">Shareable Link:</label>
+        <input type="text" id="share-link" class="share-link-input" readonly>
+        <button class="btn btn-small" id="copy-link-btn">Copy</button>
+      </div>
+    </section>
+  </main>
+
+  <!-- Error Toast -->
+  <div class="error-toast" id="error-toast" hidden>
+    <p class="error-message" id="error-message"></p>
+    <button class="btn btn-small" id="error-dismiss-btn">Dismiss</button>
+  </div>
+
+  <!-- Scripts -->
+  <script src="js/utils.js"></script>
+  <script src="js/animation-library.js"></script>
+  <script src="js/qr-generator.js"></script>
+  <script src="js/creator-interface.js"></script>
+  <script src="js/service-worker-manager.js"></script>
+  <script>
+    // Register service worker via ServiceWorkerManager
+    ServiceWorkerManager.register();
+  </script>
+</body>
+</html>

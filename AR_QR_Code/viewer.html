@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="description" content="View augmented reality animations anchored to QR codes">
+  <meta name="theme-color" content="#6200EE">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>AR QR Code - Viewer</title>
+
+  <!-- PWA Manifest -->
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+
+  <!-- Stylesheets -->
+  <link rel="stylesheet" href="css/styles.css">
+
+  <!-- A-Frame + AR.js -->
+  <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/donmccurdy/aframe-extras@v7.0.0/dist/aframe-extras.min.js"></script>
+  <script src="https://raw.githack.com/AR-js-org/AR.js/3.4.5/aframe/build/aframe-ar.js"></script>
+
+  <!-- QR Code Generation (for pattern reference) -->
+  <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+</head>
+<body class="viewer-body">
+  <!-- AR Scene Container -->
+  <div id="ar-scene-container">
+    <!-- A-Frame AR scene will be injected here by viewer-interface.js -->
+  </div>
+
+  <!-- Instruction Overlay -->
+  <div class="instruction-overlay" id="instruction-overlay" hidden>
+    <div class="instruction-content">
+      <div class="instruction-icon">📷</div>
+      <h2>Point your camera at the QR code</h2>
+      <p>Hold your device steady and aim at the AR QR code to see the animation</p>
+    </div>
+  </div>
+
+  <!-- Zoom Controls -->
+  <div class="zoom-controls" id="zoom-controls" hidden>
+    <button class="zoom-btn zoom-in" id="zoom-in-btn" aria-label="Zoom in">+</button>
+    <button class="zoom-btn zoom-out" id="zoom-out-btn" aria-label="Zoom out">−</button>
+  </div>
+
+  <!-- Error Overlay -->
+  <div class="error-overlay" id="error-overlay" hidden>
+    <div class="error-content">
+      <h2 class="error-title" id="error-title">Error</h2>
+      <p class="error-description" id="error-description"></p>
+      <button class="btn btn-primary" id="error-retry-btn" hidden>Retry</button>
+    </div>
+  </div>
+
+  <!-- Browser Unsupported Overlay -->
+  <div class="unsupported-overlay" id="unsupported-overlay" hidden>
+    <div class="unsupported-content">
+      <h2>Browser Not Supported</h2>
+      <p>This AR experience requires a modern browser with camera support.</p>
+      <h3>Supported Browsers:</h3>
+      <ul class="browser-list" id="browser-list">
+        <li>Safari 14+</li>
+        <li>Chrome 80+</li>
+        <li>Firefox 79+</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- Loading Indicator -->
+  <div class="loading-overlay" id="loading-overlay">
+    <div class="loading-spinner"></div>
+    <p>Loading AR experience...</p>
+  </div>
+
+  <!-- Scripts -->
+  <script src="js/utils.js"></script>
+  <script src="js/animation-library.js"></script>
+  <script src="js/camera-activator.js"></script>
+  <script src="js/marker-tracker.js"></script>
+  <script src="js/ar-renderer.js"></script>
+  <script src="js/zoom-controller.js"></script>
+  <script src="js/marker-loss-handler.js"></script>
+  <script src="js/viewer-interface.js"></script>
+  <script src="js/service-worker-manager.js"></script>
+  <script>
+    // Register service worker via ServiceWorkerManager
+    ServiceWorkerManager.register();
+  </script>
+</body>
+</html>

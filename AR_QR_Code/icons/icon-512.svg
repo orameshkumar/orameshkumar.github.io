@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="64" fill="#6200EE"/>
+  <text x="256" y="200" text-anchor="middle" font-family="Arial" font-size="128" font-weight="bold" fill="white">AR</text>
+  <text x="256" y="340" text-anchor="middle" font-family="Arial" font-size="86" fill="white">QR</text>
+  <rect x="140" y="380" width="232" height="20" rx="10" fill="rgba(255,255,255,0.6)"/>
+</svg>

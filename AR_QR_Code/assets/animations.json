@@ -1,0 +1,213 @@
+{
+  "version": "1.0.0",
+  "lastUpdated": "2024-01-15T10:00:00.000Z",
+  "assets": [
+    {
+      "id": "dancing-robot",
+      "name": "Dancing Robot",
+      "type": "3d",
+      "format": "glb",
+      "filePath": "assets/models/dancing-robot.glb",
+      "thumbnailPath": "assets/thumbnails/dancing-robot.png",
+      "fileSize": 2457600,
+      "metadata": {
+        "polygonCount": 12500,
+        "duration": 4.5,
+        "frameRate": 30
+      },
+      "createdAt": "2024-01-10T08:00:00.000Z",
+      "active": true
+    },
+    {
+      "id": "spinning-cube",
+      "name": "Spinning Cube",
+      "type": "3d",
+      "format": "gltf",
+      "filePath": "assets/models/spinning-cube.gltf",
+      "thumbnailPath": "assets/thumbnails/spinning-cube.png",
+      "fileSize": 524288,
+      "metadata": {
+        "polygonCount": 36,
+        "duration": 2.0,
+        "frameRate": 60
+      },
+      "createdAt": "2024-01-10T08:30:00.000Z",
+      "active": true
+    },
+    {
+      "id": "butterfly-flight",
+      "name": "Butterfly Flight",
+      "type": "3d",
+      "format": "glb",
+      "filePath": "assets/models/butterfly-flight.glb",
+      "thumbnailPath": "assets/thumbnails/butterfly-flight.png",
+      "fileSize": 1843200,
+      "metadata": {
+        "polygonCount": 8200,
+        "duration": 6.0,
+        "frameRate": 30
+      },
+      "createdAt": "2024-01-11T09:00:00.000Z",
+      "active": true
+    },
+    {
+      "id": "fireworks-burst",
+      "name": "Fireworks Burst",
+      "type": "2d",
+      "format": "apng",
+      "filePath": "assets/images/fireworks-burst.apng",
+      "thumbnailPath": "assets/thumbnails/fireworks-burst.png",
+      "fileSize": 1048576,
+      "metadata": {
+        "dimensions": {
+          "width": 512,
+          "height": 512
+        },
+        "duration": 3.0,
+        "frameRate": 24
+      },
+      "createdAt": "2024-01-11T10:00:00.000Z",
+      "active": true
+    },
+    {
+      "id": "heart-pulse",
+      "name": "Heart Pulse Animation",
+      "type": "2d",
+      "format": "gif",
+      "filePath": "assets/images/heart-pulse.gif",
+      "thumbnailPath": "assets/thumbnails/heart-pulse.png",
+      "fileSize": 768000,
+      "metadata": {
+        "dimensions": {
+          "width": 256,
+          "height": 256
+        },
+        "duration": 1.5,
+        "frameRate": 20
+      },
+      "createdAt": "2024-01-12T08:00:00.000Z",
+      "active": true
+    },
+    {
+      "id": "dragon-fly",
+      "name": "Dragon Fly-By",
+      "type": "3d",
+      "format": "glb",
+      "filePath": "assets/models/dragon-fly.glb",
+      "thumbnailPath": "assets/thumbnails/dragon-fly.png",
+      "fileSize": 4194304,
+      "metadata": {
+        "polygonCount": 45000,
+        "duration": 8.0,
+        "frameRate": 30
+      },
+      "createdAt": "2024-01-12T12:00:00.000Z",
+      "active": true
+    },
+    {
+      "id": "neon-wave",
+      "name": "Neon Wave Effect",
+      "type": "2d",
+      "format": "webp",
+      "filePath": "assets/images/neon-wave.webp",
+      "thumbnailPath": "assets/thumbnails/neon-wave.png",
+      "fileSize": 409600,
+      "metadata": {
+        "dimensions": {
+          "width": 1024,
+          "height": 1024
+        },
+        "duration": 2.5,
+        "frameRate": 30
+      },
+      "createdAt": "2024-01-13T09:00:00.000Z",
+      "active": true
+    },
+    {
+      "id": "rocket-launch",
+      "name": "Rocket Launch",
+      "type": "3d",
+      "format": "glb",
+      "filePath": "assets/models/rocket-launch.glb",
+      "thumbnailPath": "assets/thumbnails/rocket-launch.png",
+      "fileSize": 3145728,
+      "metadata": {
+        "polygonCount": 28000,
+        "duration": 5.0,
+        "frameRate": 30
+      },
+      "createdAt": "2024-01-13T14:00:00.000Z",
+      "active": true
+    },
+    {
+      "id": "sparkle-star",
+      "name": "Sparkle Star",
+      "type": "2d",
+      "format": "gif",
+      "filePath": "assets/images/sparkle-star.gif",
+      "thumbnailPath": "assets/thumbnails/sparkle-star.png",
+      "fileSize": 512000,
+      "metadata": {
+        "dimensions": {
+          "width": 320,
+          "height": 320
+        },
+        "duration": 2.0,
+        "frameRate": 15
+      },
+      "createdAt": "2024-01-14T08:00:00.000Z",
+      "active": true
+    },
+    {
+      "id": "galaxy-portal",
+      "name": "Galaxy Portal Vortex",
+      "type": "3d",
+      "format": "glb",
+      "filePath": "assets/models/galaxy-portal.glb",
+      "thumbnailPath": "assets/thumbnails/galaxy-portal.png",
+      "fileSize": 3670016,
+      "metadata": {
+        "polygonCount": 35000,
+        "duration": 10.0,
+        "frameRate": 30
+      },
+      "createdAt": "2024-01-14T16:00:00.000Z",
+      "active": true
+    },
+    {
+      "id": "confetti-shower",
+      "name": "Confetti Shower Celebration",
+      "type": "2d",
+      "format": "apng",
+      "filePath": "assets/images/confetti-shower.apng",
+      "thumbnailPath": "assets/thumbnails/confetti-shower.png",
+      "fileSize": 1572864,
+      "metadata": {
+        "dimensions": {
+          "width": 800,
+          "height": 800
+        },
+        "duration": 4.0,
+        "frameRate": 24
+      },
+      "createdAt": "2024-01-15T09:00:00.000Z",
+      "active": true
+    },
+    {
+      "id": "vintage-car",
+      "name": "Vintage Car Spin (Archived)",
+      "type": "3d",
+      "format": "glb",
+      "filePath": "assets/models/vintage-car.glb",
+      "thumbnailPath": "assets/thumbnails/vintage-car.png",
+      "fileSize": 4800000,
+      "metadata": {
+        "polygonCount": 48000,
+        "duration": 6.0,
+        "frameRate": 30
+      },
+      "createdAt": "2024-01-05T08:00:00.000Z",
+      "active": false
+    }
+  ]
+}
