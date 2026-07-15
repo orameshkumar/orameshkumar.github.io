@@ -1,13 +1,13 @@
 {
   "version": "1.0.0",
-  "lastUpdated": "2024-01-15T10:00:00.000Z",
+  "lastUpdated": "2025-07-01T10:00:00.000Z",
   "assets": [
     {
       "id": "dancing-robot",
       "name": "Dancing Robot",
       "type": "3d",
       "format": "glb",
-      "filePath": "assets/models/dancing-robot.glb",
+      "filePath": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/RobotExpressive/glTF-Binary/RobotExpressive.glb",
       "thumbnailPath": "assets/thumbnails/dancing-robot.svg",
       "fileSize": 2457600,
       "metadata": {
@@ -22,8 +22,8 @@
       "id": "spinning-cube",
       "name": "Spinning Cube",
       "type": "3d",
-      "format": "gltf",
-      "filePath": "assets/models/spinning-cube.glb",
+      "format": "glb",
+      "filePath": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/BoxAnimated/glTF-Binary/BoxAnimated.glb",
       "thumbnailPath": "assets/thumbnails/spinning-cube.svg",
       "fileSize": 524288,
       "metadata": {
@@ -36,10 +36,10 @@
     },
     {
       "id": "butterfly-flight",
-      "name": "Butterfly Flight",
+      "name": "Fox Run",
       "type": "3d",
       "format": "glb",
-      "filePath": "assets/models/butterfly-flight.glb",
+      "filePath": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/Fox/glTF-Binary/Fox.glb",
       "thumbnailPath": "assets/thumbnails/butterfly-flight.svg",
       "fileSize": 1843200,
       "metadata": {
@@ -52,17 +52,14 @@
     },
     {
       "id": "fireworks-burst",
-      "name": "Fireworks Burst",
-      "type": "2d",
-      "format": "apng",
-      "filePath": "assets/images/fireworks-burst.apng",
+      "name": "Animated Triangle",
+      "type": "3d",
+      "format": "glb",
+      "filePath": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/AnimatedTriangle/glTF-Binary/AnimatedTriangle.glb",
       "thumbnailPath": "assets/thumbnails/fireworks-burst.svg",
       "fileSize": 1048576,
       "metadata": {
-        "dimensions": {
-          "width": 512,
-          "height": 512
-        },
+        "polygonCount": 3,
         "duration": 3.0,
         "frameRate": 24
       },
@@ -71,17 +68,14 @@
     },
     {
       "id": "heart-pulse",
-      "name": "Heart Pulse Animation",
-      "type": "2d",
-      "format": "gif",
-      "filePath": "assets/images/heart-pulse.gif",
+      "name": "Cesium Man",
+      "type": "3d",
+      "format": "glb",
+      "filePath": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/CesiumMan/glTF-Binary/CesiumMan.glb",
       "thumbnailPath": "assets/thumbnails/heart-pulse.svg",
       "fileSize": 768000,
       "metadata": {
-        "dimensions": {
-          "width": 256,
-          "height": 256
-        },
+        "polygonCount": 2500,
         "duration": 1.5,
         "frameRate": 20
       },
@@ -90,10 +84,10 @@
     },
     {
       "id": "dragon-fly",
-      "name": "Dragon Fly-By",
+      "name": "Brain Stem",
       "type": "3d",
       "format": "glb",
-      "filePath": "assets/models/dragon-fly.glb",
+      "filePath": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/BrainStem/glTF-Binary/BrainStem.glb",
       "thumbnailPath": "assets/thumbnails/dragon-fly.svg",
       "fileSize": 4194304,
       "metadata": {
@@ -106,17 +100,14 @@
     },
     {
       "id": "neon-wave",
-      "name": "Neon Wave Effect",
-      "type": "2d",
-      "format": "webp",
-      "filePath": "assets/images/neon-wave.webp",
+      "name": "Interpolation Test",
+      "type": "3d",
+      "format": "glb",
+      "filePath": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/InterpolationTest/glTF-Binary/InterpolationTest.glb",
       "thumbnailPath": "assets/thumbnails/neon-wave.svg",
       "fileSize": 409600,
       "metadata": {
-        "dimensions": {
-          "width": 1024,
-          "height": 1024
-        },
+        "polygonCount": 1000,
         "duration": 2.5,
         "frameRate": 30
       },
@@ -125,10 +116,10 @@
     },
     {
       "id": "rocket-launch",
-      "name": "Rocket Launch",
+      "name": "Animated Morph Cube",
       "type": "3d",
       "format": "glb",
-      "filePath": "assets/models/rocket-launch.glb",
+      "filePath": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/AnimatedMorphCube/glTF-Binary/AnimatedMorphCube.glb",
       "thumbnailPath": "assets/thumbnails/rocket-launch.svg",
       "fileSize": 3145728,
       "metadata": {
@@ -141,17 +132,14 @@
     },
     {
       "id": "sparkle-star",
-      "name": "Sparkle Star",
-      "type": "2d",
-      "format": "gif",
-      "filePath": "assets/images/sparkle-star.gif",
+      "name": "Rigged Simple",
+      "type": "3d",
+      "format": "glb",
+      "filePath": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/RiggedSimple/glTF-Binary/RiggedSimple.glb",
       "thumbnailPath": "assets/thumbnails/sparkle-star.svg",
       "fileSize": 512000,
       "metadata": {
-        "dimensions": {
-          "width": 320,
-          "height": 320
-        },
+        "polygonCount": 320,
         "duration": 2.0,
         "frameRate": 15
       },
@@ -160,10 +148,10 @@
     },
     {
       "id": "galaxy-portal",
-      "name": "Galaxy Portal Vortex",
+      "name": "Rigged Figure",
       "type": "3d",
       "format": "glb",
-      "filePath": "assets/models/galaxy-portal.glb",
+      "filePath": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/RiggedFigure/glTF-Binary/RiggedFigure.glb",
       "thumbnailPath": "assets/thumbnails/galaxy-portal.svg",
       "fileSize": 3670016,
       "metadata": {
@@ -176,38 +164,19 @@
     },
     {
       "id": "confetti-shower",
-      "name": "Confetti Shower Celebration",
-      "type": "2d",
-      "format": "apng",
-      "filePath": "assets/images/confetti-shower.apng",
+      "name": "Animated Morph Sphere",
+      "type": "3d",
+      "format": "glb",
+      "filePath": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/AnimatedMorphSphere/glTF-Binary/AnimatedMorphSphere.glb",
       "thumbnailPath": "assets/thumbnails/confetti-shower.svg",
       "fileSize": 1572864,
       "metadata": {
-        "dimensions": {
-          "width": 800,
-          "height": 800
-        },
+        "polygonCount": 800,
         "duration": 4.0,
         "frameRate": 24
       },
       "createdAt": "2024-01-15T09:00:00.000Z",
       "active": true
-    },
-    {
-      "id": "vintage-car",
-      "name": "Vintage Car Spin (Archived)",
-      "type": "3d",
-      "format": "glb",
-      "filePath": "assets/models/vintage-car.glb",
-      "thumbnailPath": "assets/thumbnails/vintage-car.svg",
-      "fileSize": 4800000,
-      "metadata": {
-        "polygonCount": 48000,
-        "duration": 6.0,
-        "frameRate": 30
-      },
-      "createdAt": "2024-01-05T08:00:00.000Z",
-      "active": false
     }
   ]
 }
