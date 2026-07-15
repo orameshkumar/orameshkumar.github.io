@@ -187,15 +187,14 @@ var CreatorInterface = (() => {
     if (!previewEl) return;
 
     if (asset.type === '3d') {
+      // Show thumbnail as preview with 3D badge overlay
+      // A-Frame scene is only used when the actual model file exists
       previewEl.innerHTML =
-        '<a-scene embedded style="width:100%;height:280px;" vr-mode-ui="enabled:false">' +
-          '<a-entity gltf-model="url(' + asset.filePath + ')" ' +
-                    'position="0 0 -3" ' +
-                    'animation-mixer="loop:repeat">' +
-          '</a-entity>' +
-          '<a-light type="ambient" intensity="0.8"></a-light>' +
-          '<a-light type="directional" position="1 2 1" intensity="0.6"></a-light>' +
-        '</a-scene>';
+        '<div class="preview-3d-placeholder" style="position:relative;width:100%;height:280px;display:flex;align-items:center;justify-content:center;background:#1a1a2e;border-radius:12px;overflow:hidden;">' +
+          '<img src="' + asset.thumbnailPath + '" alt="' + asset.name + '" style="max-width:80%;max-height:80%;object-fit:contain;">' +
+          '<div style="position:absolute;bottom:12px;right:12px;background:rgba(98,0,238,0.9);color:white;padding:4px 12px;border-radius:16px;font-size:12px;font-weight:bold;">3D Model</div>' +
+          '<div style="position:absolute;top:12px;left:12px;color:rgba(255,255,255,0.7);font-size:11px;">Preview in AR after generating QR code</div>' +
+        '</div>';
     } else {
       previewEl.innerHTML =
         '<img src="' + asset.filePath + '" ' +

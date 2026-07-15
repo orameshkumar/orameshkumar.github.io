@@ -23,7 +23,7 @@
       "name": "Spinning Cube",
       "type": "3d",
       "format": "gltf",
-      "filePath": "assets/models/spinning-cube.gltf",
+      "filePath": "assets/models/spinning-cube.glb",
       "thumbnailPath": "assets/thumbnails/spinning-cube.svg",
       "fileSize": 524288,
       "metadata": {
