@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200">
+  <rect width="200" height="200" fill="#F9A825" rx="12"/>
+  <text x="100" y="85" text-anchor="middle" font-size="40">✨</text>
+  <text x="100" y="125" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="white">Sparkle Star</text>
+  <rect x="75" y="145" width="50" height="22" rx="11" fill="rgba(255,255,255,0.3)"/>
+  <text x="100" y="161" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="white">2D</text>
+</svg>

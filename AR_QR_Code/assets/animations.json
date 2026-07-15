@@ -8,7 +8,7 @@
       "type": "3d",
       "format": "glb",
       "filePath": "assets/models/dancing-robot.glb",
-      "thumbnailPath": "assets/thumbnails/dancing-robot.png",
+      "thumbnailPath": "assets/thumbnails/dancing-robot.svg",
       "fileSize": 2457600,
       "metadata": {
         "polygonCount": 12500,
@@ -24,7 +24,7 @@
       "type": "3d",
       "format": "gltf",
       "filePath": "assets/models/spinning-cube.gltf",
-      "thumbnailPath": "assets/thumbnails/spinning-cube.png",
+      "thumbnailPath": "assets/thumbnails/spinning-cube.svg",
       "fileSize": 524288,
       "metadata": {
         "polygonCount": 36,
@@ -40,7 +40,7 @@
       "type": "3d",
       "format": "glb",
       "filePath": "assets/models/butterfly-flight.glb",
-      "thumbnailPath": "assets/thumbnails/butterfly-flight.png",
+      "thumbnailPath": "assets/thumbnails/butterfly-flight.svg",
       "fileSize": 1843200,
       "metadata": {
         "polygonCount": 8200,
@@ -56,7 +56,7 @@
       "type": "2d",
       "format": "apng",
       "filePath": "assets/images/fireworks-burst.apng",
-      "thumbnailPath": "assets/thumbnails/fireworks-burst.png",
+      "thumbnailPath": "assets/thumbnails/fireworks-burst.svg",
       "fileSize": 1048576,
       "metadata": {
         "dimensions": {
@@ -75,7 +75,7 @@
       "type": "2d",
       "format": "gif",
       "filePath": "assets/images/heart-pulse.gif",
-      "thumbnailPath": "assets/thumbnails/heart-pulse.png",
+      "thumbnailPath": "assets/thumbnails/heart-pulse.svg",
       "fileSize": 768000,
       "metadata": {
         "dimensions": {
@@ -94,7 +94,7 @@
       "type": "3d",
       "format": "glb",
       "filePath": "assets/models/dragon-fly.glb",
-      "thumbnailPath": "assets/thumbnails/dragon-fly.png",
+      "thumbnailPath": "assets/thumbnails/dragon-fly.svg",
       "fileSize": 4194304,
       "metadata": {
         "polygonCount": 45000,
@@ -110,7 +110,7 @@
       "type": "2d",
       "format": "webp",
       "filePath": "assets/images/neon-wave.webp",
-      "thumbnailPath": "assets/thumbnails/neon-wave.png",
+      "thumbnailPath": "assets/thumbnails/neon-wave.svg",
       "fileSize": 409600,
       "metadata": {
         "dimensions": {
@@ -129,7 +129,7 @@
       "type": "3d",
       "format": "glb",
       "filePath": "assets/models/rocket-launch.glb",
-      "thumbnailPath": "assets/thumbnails/rocket-launch.png",
+      "thumbnailPath": "assets/thumbnails/rocket-launch.svg",
       "fileSize": 3145728,
       "metadata": {
         "polygonCount": 28000,
@@ -145,7 +145,7 @@
       "type": "2d",
       "format": "gif",
       "filePath": "assets/images/sparkle-star.gif",
-      "thumbnailPath": "assets/thumbnails/sparkle-star.png",
+      "thumbnailPath": "assets/thumbnails/sparkle-star.svg",
       "fileSize": 512000,
       "metadata": {
         "dimensions": {
@@ -164,7 +164,7 @@
       "type": "3d",
       "format": "glb",
       "filePath": "assets/models/galaxy-portal.glb",
-      "thumbnailPath": "assets/thumbnails/galaxy-portal.png",
+      "thumbnailPath": "assets/thumbnails/galaxy-portal.svg",
       "fileSize": 3670016,
       "metadata": {
         "polygonCount": 35000,
@@ -180,7 +180,7 @@
       "type": "2d",
       "format": "apng",
       "filePath": "assets/images/confetti-shower.apng",
-      "thumbnailPath": "assets/thumbnails/confetti-shower.png",
+      "thumbnailPath": "assets/thumbnails/confetti-shower.svg",
       "fileSize": 1572864,
       "metadata": {
         "dimensions": {
@@ -199,7 +199,7 @@
       "type": "3d",
       "format": "glb",
       "filePath": "assets/models/vintage-car.glb",
-      "thumbnailPath": "assets/thumbnails/vintage-car.png",
+      "thumbnailPath": "assets/thumbnails/vintage-car.svg",
       "fileSize": 4800000,
       "metadata": {
         "polygonCount": 48000,

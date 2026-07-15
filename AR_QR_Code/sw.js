@@ -55,6 +55,11 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
+  // Only handle http/https requests — skip chrome-extension, etc.
+  if (!url.protocol.startsWith('http')) {
+    return;
+  }
+
   // Animation assets use network-first strategy
   if (url.pathname.includes('/assets/')) {
     event.respondWith(networkFirstStrategy(event.request));
