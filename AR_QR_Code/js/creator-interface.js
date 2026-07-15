@@ -197,10 +197,11 @@ var CreatorInterface = (() => {
         '</div>';
     } else {
       previewEl.innerHTML =
-        '<img src="' + asset.filePath + '" ' +
-             'alt="Preview of ' + asset.name + '" ' +
-             'class="preview-image" ' +
-             'style="max-width:100%;max-height:280px;object-fit:contain;">';
+        '<div class="preview-2d-placeholder" style="position:relative;width:100%;height:280px;display:flex;align-items:center;justify-content:center;background:#1a1a2e;border-radius:12px;overflow:hidden;">' +
+          '<img src="' + asset.thumbnailPath + '" alt="' + asset.name + '" style="max-width:80%;max-height:80%;object-fit:contain;">' +
+          '<div style="position:absolute;bottom:12px;right:12px;background:rgba(0,150,136,0.9);color:white;padding:4px 12px;border-radius:16px;font-size:12px;font-weight:bold;">2D Animation</div>' +
+          '<div style="position:absolute;top:12px;left:12px;color:rgba(255,255,255,0.7);font-size:11px;">Preview in AR after generating QR code</div>' +
+        '</div>';
     }
   }
 
