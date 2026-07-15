@@ -46,8 +46,69 @@ var CreatorInterface = (() => {
       retryBtn.addEventListener('click', loadGallery);
     }
 
+    // Wire generate QR button
+    if (generateBtn) {
+      generateBtn.addEventListener('click', handleGenerateQR);
+    }
+
     // Load and render gallery
     loadGallery();
+  }
+
+  /**
+   * Handles the Generate QR Code button click.
+   * Uses QRGenerator to create a QR code for the selected asset.
+   */
+  async function handleGenerateQR() {
+    if (!selectedAsset) {
+      showError('Please select an animation first.');
+      return;
+    }
+
+    const qrOutputEl = document.getElementById('qr-container') || document.getElementById('qr-output');
+    if (!qrOutputEl) return;
+
+    try {
+      generateBtn.disabled = true;
+      generateBtn.textContent = 'Generating...';
+
+      const result = await QRGenerator.generate(selectedAsset.id);
+
+      // Show the QR section
+      const qrSection = document.getElementById('qr-section');
+      if (qrSection) qrSection.hidden = false;
+
+      // Display the QR code and download options
+      qrOutputEl.innerHTML =
+        '<div class="qr-result" style="text-align:center;padding:20px;">' +
+          '<h3 style="margin-bottom:12px;">Your AR QR Code</h3>' +
+          '<img src="' + result.qrImageDataUrl + '" alt="AR QR Code for ' + selectedAsset.name + '" style="width:300px;height:300px;border:2px solid #333;border-radius:8px;">' +
+          '<p style="margin:12px 0;font-size:14px;color:#666;">Scan this QR code to see <strong>' + selectedAsset.name + '</strong> in AR</p>' +
+          '<div class="qr-actions" style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">' +
+            '<button class="btn btn-primary" id="download-png-btn">Download PNG</button>' +
+            '<button class="btn btn-secondary" id="download-svg-btn">Download SVG</button>' +
+          '</div>' +
+          '<div class="qr-share" style="margin-top:16px;">' +
+            '<label style="font-size:12px;color:#888;">Shareable Link:</label>' +
+            '<input type="text" readonly value="' + result.experienceUrl + '" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:4px;margin-top:4px;font-size:12px;" onclick="this.select()">' +
+          '</div>' +
+        '</div>';
+
+      // Wire download buttons
+      document.getElementById('download-png-btn').addEventListener('click', function() {
+        QRGenerator.downloadAsPNG(result);
+      });
+      document.getElementById('download-svg-btn').addEventListener('click', function() {
+        QRGenerator.downloadAsSVG(result);
+      });
+
+      generateBtn.textContent = 'Generate QR Code';
+      generateBtn.disabled = false;
+    } catch (error) {
+      showError('QR generation failed: ' + error.message);
+      generateBtn.textContent = 'Generate QR Code';
+      generateBtn.disabled = false;
+    }
   }
 
   /**
