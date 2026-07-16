@@ -1569,6 +1569,68 @@ h3 {
 .member-new-input { width: 100%; padding: 10px 14px; margin-bottom: 10px; border: 1px solid var(--accent-secondary); border-radius: 8px; background: var(--bg-input); color: var(--text-primary); font-size: 0.95rem; }
 .member-new-input.hidden { display: none; }
 
+/* === Record Match Modal === */
+.record-match-modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+.record-match-modal.hidden { display: none; }
+.record-match-modal-content {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    padding: 24px;
+    max-width: 360px;
+    width: 90%;
+    text-align: center;
+}
+.record-match-modal-content h3 { color: var(--accent-primary); margin-bottom: 8px; }
+.record-match-modal-content p { color: var(--text-muted); margin-bottom: 16px; font-size: 0.9rem; }
+.record-score-inputs {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    margin-bottom: 20px;
+}
+.record-score-team {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+}
+.record-score-team label {
+    font-weight: 600;
+    color: var(--text-primary);
+    font-size: 0.85rem;
+}
+.record-score-input {
+    width: 70px;
+    padding: 12px;
+    border: 2px solid var(--border-light);
+    border-radius: 8px;
+    background: var(--bg-input);
+    color: var(--text-primary);
+    font-size: 1.5rem;
+    font-weight: 700;
+    text-align: center;
+}
+.record-vs {
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: var(--text-faint);
+}
+.record-match-actions {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+}
+
 /* Print */
 @media print {
     body {

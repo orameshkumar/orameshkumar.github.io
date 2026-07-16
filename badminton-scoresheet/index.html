@@ -71,6 +71,7 @@
                 </label>
             </div>
             <button id="start-match" class="btn btn-primary">Start Match</button>
+            <button id="record-match" class="btn btn-secondary">📝 Record Match</button>
         </section>
 
         <!-- Scoreboard -->
@@ -291,6 +292,29 @@
                 <div id="members-list" class="members-list"></div>
             </div>
         </section>
+    </div>
+
+    <!-- Record Match Modal -->
+    <div id="record-match-modal" class="record-match-modal hidden">
+        <div class="record-match-modal-content">
+            <h3>📝 Record Match Result</h3>
+            <p>Enter the final scores:</p>
+            <div class="record-score-inputs">
+                <div class="record-score-team">
+                    <label id="record-teamA-label">Team A</label>
+                    <input type="number" id="record-scoreA" min="0" max="30" value="21" class="record-score-input">
+                </div>
+                <span class="record-vs">vs</span>
+                <div class="record-score-team">
+                    <label id="record-teamB-label">Team B</label>
+                    <input type="number" id="record-scoreB" min="0" max="30" value="0" class="record-score-input">
+                </div>
+            </div>
+            <div class="record-match-actions">
+                <button class="btn btn-primary" id="btn-confirm-record">Save Match</button>
+                <button class="btn btn-secondary" id="btn-cancel-record">Cancel</button>
+            </div>
+        </div>
     </div>
 
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>

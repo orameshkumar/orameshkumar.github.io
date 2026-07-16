@@ -514,6 +514,9 @@ class BadmintonScoreSheet {
     // --- Event Listeners ---
     initEventListeners() {
         document.getElementById('start-match').addEventListener('click', () => this.startMatch());
+        document.getElementById('record-match').addEventListener('click', () => this.showRecordMatchModal());
+        document.getElementById('btn-confirm-record').addEventListener('click', () => this.confirmRecordMatch());
+        document.getElementById('btn-cancel-record').addEventListener('click', () => this.hideRecordMatchModal());
         document.getElementById('btn-scoreA').addEventListener('click', () => this.addPoint('A'));
         document.getElementById('btn-scoreB').addEventListener('click', () => this.addPoint('B'));
         document.getElementById('btn-record-error').addEventListener('click', () => this.recordError());
@@ -682,6 +685,95 @@ class BadmintonScoreSheet {
     switchService() {
         this.servingTeam = this.servingTeam === 'A' ? 'B' : 'A';
         this.updateServiceDisplay();
+    }
+
+    // --- Record Match (Quick Entry) ---
+    showRecordMatchModal() {
+        const getPlayerName = (selectId) => {
+            const select = document.getElementById(selectId);
+            if (select && select.tagName === 'SELECT') {
+                if (select.value === '__new__') {
+                    const input = document.getElementById(selectId + '-new');
+                    return input ? input.value.trim() : '';
+                }
+                return select.value || '';
+            }
+            return select ? select.value.trim() : '';
+        };
+        const teamA1 = getPlayerName('teamA-player1') || 'Player A1';
+        const teamA2 = getPlayerName('teamA-player2') || 'Player A2';
+        const teamB1 = getPlayerName('teamB-player1') || 'Player B1';
+        const teamB2 = getPlayerName('teamB-player2') || 'Player B2';
+
+        if (!getPlayerName('teamA-player1') && !getPlayerName('teamA-player2') &&
+            !getPlayerName('teamB-player1') && !getPlayerName('teamB-player2')) {
+            alert('Please select at least the team players before recording.');
+            return;
+        }
+
+        document.getElementById('record-teamA-label').textContent = `${teamA1} / ${teamA2}`;
+        document.getElementById('record-teamB-label').textContent = `${teamB1} / ${teamB2}`;
+        document.getElementById('record-scoreA').value = '21';
+        document.getElementById('record-scoreB').value = '0';
+
+        document.getElementById('record-match-modal').classList.remove('hidden');
+    }
+
+    hideRecordMatchModal() {
+        document.getElementById('record-match-modal').classList.add('hidden');
+    }
+
+    confirmRecordMatch() {
+        const scoreA = parseInt(document.getElementById('record-scoreA').value) || 0;
+        const scoreB = parseInt(document.getElementById('record-scoreB').value) || 0;
+
+        if (scoreA === 0 && scoreB === 0) {
+            alert('Please enter valid scores.');
+            return;
+        }
+
+        const getPlayerName = (selectId) => {
+            const select = document.getElementById(selectId);
+            if (select && select.tagName === 'SELECT') {
+                if (select.value === '__new__') {
+                    const input = document.getElementById(selectId + '-new');
+                    return input ? input.value.trim() : '';
+                }
+                return select.value || '';
+            }
+            return select ? select.value.trim() : '';
+        };
+        const teamA1 = getPlayerName('teamA-player1') || 'Player A1';
+        const teamA2 = getPlayerName('teamA-player2') || 'Player A2';
+        const teamB1 = getPlayerName('teamB-player1') || 'Player B1';
+        const teamB2 = getPlayerName('teamB-player2') || 'Player B2';
+
+        this.memberManager?.autoAddMembers([teamA1, teamA2, teamB1, teamB2]);
+
+        const winner = scoreA >= scoreB ? 'A' : 'B';
+
+        const record = {
+            id: Date.now(),
+            date: new Date().toISOString(),
+            teamA: { players: [teamA1, teamA2], name: `${teamA1} / ${teamA2}` },
+            teamB: { players: [teamB1, teamB2], name: `${teamB1} / ${teamB2}` },
+            sets: [{ scoreA: scoreA, scoreB: scoreB }],
+            setsWon: { A: winner === 'A' ? 1 : 0, B: winner === 'B' ? 1 : 0 },
+            winner: winner,
+            errors: 0,
+            duration: 'Recorded',
+            eventId: this.eventManager?.getActiveEventId()
+        };
+
+        const history = this.getMatchHistory();
+        history.unshift(record);
+        if (history.length > 100) history.pop();
+        localStorage.setItem(this.eventManager.getMatchHistoryKey(), JSON.stringify(history));
+
+        this.sync?.saveMatch(record);
+
+        this.hideRecordMatchModal();
+        alert(`Match recorded! ${record.teamA.name} ${scoreA} - ${scoreB} ${record.teamB.name}`);
     }
 
     updateServiceDisplay() {
