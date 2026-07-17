@@ -1493,22 +1493,42 @@ class BadmintonScoreSheet {
                 { name: m.teamB.players[1], team: 'B' }
             ];
 
+            // Calculate total points for each team across all sets
+            let totalPointsA = 0, totalPointsB = 0;
+            if (m.sets && Array.isArray(m.sets)) {
+                m.sets.forEach(s => {
+                    totalPointsA += (s.scoreA || 0);
+                    totalPointsB += (s.scoreB || 0);
+                });
+            }
+
             allPlayers.forEach(p => {
                 if (!playerStats[p.name]) {
-                    playerStats[p.name] = { wins: 0, losses: 0, matches: 0 };
+                    playerStats[p.name] = { wins: 0, losses: 0, matches: 0, pointsWon: 0, pointsAgainst: 0 };
                 }
                 playerStats[p.name].matches++;
                 if (p.team === m.winner) playerStats[p.name].wins++;
                 else playerStats[p.name].losses++;
+
+                // Points won/against (player's team points vs opponent team points)
+                if (p.team === 'A') {
+                    playerStats[p.name].pointsWon += totalPointsA;
+                    playerStats[p.name].pointsAgainst += totalPointsB;
+                } else {
+                    playerStats[p.name].pointsWon += totalPointsB;
+                    playerStats[p.name].pointsAgainst += totalPointsA;
+                }
             });
         });
 
         const sorted = Object.entries(playerStats)
             .map(([name, stats]) => ({
                 name, ...stats,
+                pointsDiff: stats.pointsWon - stats.pointsAgainst,
                 winRate: stats.matches > 0 ? Math.round((stats.wins / stats.matches) * 100) : 0
             }))
-            .sort((a, b) => b.wins - a.wins || b.winRate - a.winRate);
+            // Sort: wins desc → pointsDiff desc → pointsWon desc
+            .sort((a, b) => b.wins - a.wins || b.pointsDiff - a.pointsDiff || b.pointsWon - a.pointsWon);
 
         const container = document.getElementById('leaderboard-content');
         const dateInfo = (fromDate || toDate) ? `<p style="color:var(--text-muted); font-size:0.85rem; margin-bottom:12px;">Showing: ${fromDate || 'start'} → ${toDate || 'now'} (${filtered.length} matches)</p>` : '';
@@ -1519,14 +1539,16 @@ class BadmintonScoreSheet {
         }
 
         let html = dateInfo + `<table>
-            <tr><th>#</th><th>Player</th><th>W</th><th>L</th><th>Played</th><th>Win %</th></tr>`;
+            <tr><th>#</th><th>Player</th><th>W</th><th>L</th><th>PW</th><th>PA</th><th>+/-</th><th>Win%</th></tr>`;
         sorted.forEach((p, i) => {
             const rankClass = i < 3 ? `rank-${i+1}` : '';
             const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i+1}`;
+            const diffStr = p.pointsDiff >= 0 ? `+${p.pointsDiff}` : `${p.pointsDiff}`;
             html += `<tr class="${rankClass}">
                 <td>${medal}</td><td>${p.name}</td>
                 <td>${p.wins}</td><td>${p.losses}</td>
-                <td>${p.matches}</td><td>${p.winRate}%</td></tr>`;
+                <td>${p.pointsWon}</td><td>${p.pointsAgainst}</td>
+                <td>${diffStr}</td><td>${p.winRate}%</td></tr>`;
         });
         html += '</table>';
         container.innerHTML = html;
