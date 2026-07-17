@@ -812,23 +812,34 @@ h3 {
     font-size: 0.9rem;
 }
 
+.leaderboard-content {
+    overflow-x: auto;
+}
+
 .leaderboard-content table {
     width: 100%;
     border-collapse: collapse;
+    min-width: 360px;
 }
 
 .leaderboard-content th,
 .leaderboard-content td {
-    padding: 12px 16px;
-    text-align: left;
+    padding: 8px 6px;
+    text-align: center;
     border-bottom: 1px solid var(--border-color);
-    font-size: 0.9rem;
+    font-size: 0.8rem;
+    white-space: nowrap;
+}
+
+.leaderboard-content th:nth-child(2),
+.leaderboard-content td:nth-child(2) {
+    text-align: left;
 }
 
 .leaderboard-content th {
     color: var(--accent-heading);
     font-weight: 600;
-    font-size: 0.85rem;
+    font-size: 0.75rem;
 }
 
 .leaderboard-content td {

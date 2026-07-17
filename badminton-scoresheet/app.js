@@ -1507,16 +1507,18 @@ class BadmintonScoreSheet {
                     playerStats[p.name] = { wins: 0, losses: 0, matches: 0, pointsWon: 0, pointsAgainst: 0 };
                 }
                 playerStats[p.name].matches++;
-                if (p.team === m.winner) playerStats[p.name].wins++;
-                else playerStats[p.name].losses++;
-
-                // Points won/against (player's team points vs opponent team points)
-                if (p.team === 'A') {
-                    playerStats[p.name].pointsWon += totalPointsA;
-                    playerStats[p.name].pointsAgainst += totalPointsB;
+                if (p.team === m.winner) {
+                    playerStats[p.name].wins++;
+                    // PW/PA only from matches the player won
+                    if (p.team === 'A') {
+                        playerStats[p.name].pointsWon += totalPointsA;
+                        playerStats[p.name].pointsAgainst += totalPointsB;
+                    } else {
+                        playerStats[p.name].pointsWon += totalPointsB;
+                        playerStats[p.name].pointsAgainst += totalPointsA;
+                    }
                 } else {
-                    playerStats[p.name].pointsWon += totalPointsB;
-                    playerStats[p.name].pointsAgainst += totalPointsA;
+                    playerStats[p.name].losses++;
                 }
             });
         });
