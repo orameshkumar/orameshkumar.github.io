@@ -365,11 +365,8 @@ class FirebaseSync {
             const matchHistoryKey = this.app?.eventManager?.getMatchHistoryKey() || 'badminton-match-history';
             localStorage.setItem(matchHistoryKey, JSON.stringify(mergedMatches));
 
-            // Merge player registry
-            const localPlayers = this._getLocalPlayerRegistry();
-            const mergedPlayers = this.mergePlayerRegistry(localPlayers, remoteData.players);
-            const playerNamesKey = this.app?.eventManager?.getPlayerNamesKey() || 'badminton-player-names';
-            localStorage.setItem(playerNamesKey, JSON.stringify(mergedPlayers));
+            // Player registry merge disabled — MemberManager now handles member data
+            // Legacy playerRegistry in Firebase is no longer merged to avoid resurrecting deleted members
 
             // Resolve active match
             const localActive = this._getLocalActiveMatch();

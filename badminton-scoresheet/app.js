@@ -1379,6 +1379,15 @@ class BadmintonScoreSheet {
         let history = this.getMatchHistory();
         history = history.filter(m => m.id !== id);
         localStorage.setItem(this.eventManager.getMatchHistoryKey(), JSON.stringify(history));
+
+        // Also delete from Firebase so it doesn't come back on merge
+        const eventId = this.eventManager?.getActiveEventId();
+        if (eventId && this.sync?.available && this.sync?.db) {
+            this.sync.db.collection('events').doc(eventId)
+                .collection('matches').doc(String(id)).delete()
+                .catch(e => console.warn('[App] Failed to delete match from Firebase:', e));
+        }
+
         this.renderHistoryPage();
     }
 
@@ -1390,6 +1399,19 @@ class BadmintonScoreSheet {
 
     clearHistory() {
         if (confirm('Delete all match history? This cannot be undone.')) {
+            // Delete all matches from Firebase for this event
+            const eventId = this.eventManager?.getActiveEventId();
+            if (eventId && this.sync?.available && this.sync?.db) {
+                this.sync.db.collection('events').doc(eventId)
+                    .collection('matches').get()
+                    .then(snapshot => {
+                        const batch = this.sync.db.batch();
+                        snapshot.forEach(doc => batch.delete(doc.ref));
+                        return batch.commit();
+                    })
+                    .catch(e => console.warn('[App] Failed to clear matches from Firebase:', e));
+            }
+
             localStorage.removeItem(this.eventManager.getMatchHistoryKey());
             this.renderHistoryPage();
         }
