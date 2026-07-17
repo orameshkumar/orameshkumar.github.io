@@ -20,6 +20,7 @@
                 <button class="btn btn-icon" id="btn-theme-toggle" title="Toggle Theme">🌙</button>
                 <button class="btn btn-icon" id="btn-show-history" title="Match History">📜</button>
                 <button class="btn btn-icon" id="btn-show-leaderboard" title="Leaderboard">🏆</button>
+                <button class="btn btn-icon" id="btn-show-qr" title="Share App QR">📱</button>
                 <span id="sync-status" class="sync-indicator sync-offline" title="Offline">
                     <span class="sync-dot"></span>
                     <span class="sync-label">Offline</span>
@@ -314,6 +315,17 @@
                 <button class="btn btn-primary" id="btn-confirm-record">Save Match</button>
                 <button class="btn btn-secondary" id="btn-cancel-record">Cancel</button>
             </div>
+        </div>
+    </div>
+
+    <!-- QR Share Modal -->
+    <div id="qr-modal" class="qr-modal hidden">
+        <div class="qr-modal-content">
+            <h3>📱 Share This App</h3>
+            <p>Scan to open on another device:</p>
+            <canvas id="qr-canvas"></canvas>
+            <p class="qr-url" id="qr-url-text"></p>
+            <button class="btn btn-secondary btn-sm" id="btn-close-qr">Close</button>
         </div>
     </div>
 

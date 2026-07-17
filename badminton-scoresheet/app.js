@@ -585,6 +585,8 @@ class BadmintonScoreSheet {
 
         document.getElementById('btn-show-history').addEventListener('click', () => this.showHistoryPage());
         document.getElementById('btn-show-leaderboard').addEventListener('click', () => this.showLeaderboard());
+        document.getElementById('btn-show-qr').addEventListener('click', () => this.showQRModal());
+        document.getElementById('btn-close-qr').addEventListener('click', () => this.hideQRModal());
 
         // History filters
         document.getElementById('history-search').addEventListener('input', () => this.renderHistoryPage());
@@ -1559,6 +1561,46 @@ class BadmintonScoreSheet {
         document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
         document.querySelector('[data-section="setup-section"]').classList.add('active');
         this.showSection('setup-section');
+    }
+
+    // --- QR Code Share ---
+    showQRModal() {
+        const url = window.location.href;
+        document.getElementById('qr-url-text').textContent = url;
+        this.generateQRCode(url);
+        document.getElementById('qr-modal').classList.remove('hidden');
+    }
+
+    hideQRModal() {
+        document.getElementById('qr-modal').classList.add('hidden');
+    }
+
+    generateQRCode(text) {
+        // Use a simple QR code API rendered to an image, then draw on canvas
+        const canvas = document.getElementById('qr-canvas');
+        const size = 200;
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext('2d');
+
+        // Use Google Charts QR API as image source (works without any library)
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => {
+            ctx.drawImage(img, 0, 0, size, size);
+        };
+        img.onerror = () => {
+            // Fallback: draw a placeholder with the URL text
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, size, size);
+            ctx.fillStyle = '#333333';
+            ctx.font = '12px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('QR Code', size/2, size/2 - 10);
+            ctx.fillText('(requires internet)', size/2, size/2 + 10);
+        };
+        const encoded = encodeURIComponent(text);
+        img.src = `https://chart.googleapis.com/chart?cht=qr&chs=${size}x${size}&chl=${encoded}&choe=UTF-8`;
     }
 
     showSection(sectionId) {
