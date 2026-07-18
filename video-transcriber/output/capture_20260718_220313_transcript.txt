@@ -1,0 +1,447 @@
+[00:00:00 --> 00:00:07]  The answer is the next one.
+[00:00:07 --> 00:00:10]  There's a way smarter way to work with it.
+[00:00:10 --> 00:00:12]  And once you see it, you can't go back.
+[00:00:12 --> 00:00:18]  Let me show you what an AI agent actually is and how to build one inside prod without
+[00:00:18 --> 00:00:20]  writing a single line of code.
+[00:00:20 --> 00:00:25]  Before we build anything, I want to get clear on one thing because the term AI agents
+[00:00:25 --> 00:00:29]  gets thrown around constantly and most explanations are either two technical or two-valve.
+[00:00:29 --> 00:00:32]  And if you add the user, here's how I think about it.
+[00:00:32 --> 00:00:38]  There are three distinct levels of working with AI, and most people are stuck at level
+[00:00:38 --> 00:00:42]  one without realizing levels two and three, so you can even exist.
+[00:00:42 --> 00:00:43]  Level one is basic chat.
+[00:00:43 --> 00:00:45]  You ask something, plot, answer.
+[00:00:45 --> 00:00:46]  You need a definition.
+[00:00:46 --> 00:00:51]  Quick summary, an explanation, you type it in, you get it back.
+[00:00:51 --> 00:00:54]  This is genuinely useful, but it's also the most limited cost of light work of the
+[00:00:54 --> 00:00:55]  technology.
+[00:00:55 --> 00:00:56]  You're essentially using the very simple data search engine.
+[00:00:56 --> 00:00:57]  Let us do it, as well as call it go to the month.
+[00:00:57 --> 00:00:58]  You stop asking questions, you start asking plot conditions.
+[00:00:58 --> 00:01:02]  You might need a script, not just an AI, but just an AI, not again real-outlet.
+[00:01:02 --> 00:01:05]  Not just an information, but it's a catch-up that is still managing every single step
+[00:01:05 --> 00:01:06]  yourself.
+[00:01:06 --> 00:01:08]  You decide which next to review the answer if you carry the whole project forward,
+[00:01:08 --> 00:01:09]  manage level three, just a gender for it.
+[00:01:09 --> 00:01:10]  This is where the real step has been.
+[00:01:10 --> 00:01:13]  Instead of managing every step, you hand plot the ball, for real-to-deaf outcome, and it
+[00:01:13 --> 00:01:14]  figures out how to get there.
+[00:01:14 --> 00:01:16]  If things really pass, write it into the papers, ask a question to something as unclear,
+[00:01:16 --> 00:01:19]  execute each writing sequence, reduce its own work, and deliver the finished result.
+[00:01:19 --> 00:01:21]  You're not going to lose for every mic investigation, you set the destination to the A.
+[00:01:21 --> 00:01:22]  agent's right.
+[00:01:22 --> 00:01:24]  And what makes plot particularly powerful for this account now?
+[00:01:24 --> 00:01:25]  Because we don't need any developers that have to get started.
+[00:01:25 --> 00:01:27]  The plot that's up at all, then you have to get some code works that you can get.
+[00:01:27 --> 00:01:28]  So you can get code works that you can get.
+[00:01:28 --> 00:01:29]  Now it's files and then again it's work-rugs.
+[00:01:29 --> 00:01:31]  But now it's like a single line of actual code.
+[00:01:31 --> 00:01:33]  That used to require serious technical interceptors now is the data back.
+[00:01:33 --> 00:01:35]  There are many of the things that are going to come different forward, but now it's like a
+[00:01:35 --> 00:01:36]  certain one-factor.
+[00:01:36 --> 00:01:37]  To the title, this is Go High Level.
+[00:01:37 --> 00:01:38]  Be the access to three-metre all of these.
+[00:01:38 --> 00:01:41]  So to review a page of the code, see your content calendar, to get a new code content,
+[00:01:41 --> 00:01:42]  it's like a multiple-factor in one set.
+[00:01:42 --> 00:01:44]  You know what, no high level of scope, you know what I mean?
+[00:01:44 --> 00:01:46]  You can get campaigns, games, games, games, games, games, games, games, games, games,
+[00:01:46 --> 00:01:48]  that can block editor, tell high level of scope and calendar, to get some certain things.
+[00:01:48 --> 00:01:50]  If you find the code by telling me, you can get some different calendar types.
+[00:01:50 --> 00:01:53]  One of them one-factor, you call, round-lotting schedule, and if you have a team,
+[00:01:53 --> 00:01:55]  and here's the best one, tell high level, and it's kind of three-bill work-rugs.
+[00:01:55 --> 00:01:58]  I like three-bill, three-file, and there's nothing not the standard school of three-day,
+[00:01:58 --> 00:01:59]  it's just the standard file.
+[00:01:59 --> 00:02:00]  Not every block conversation is actually agent.
+[00:02:00 --> 00:02:02]  There's a real difference between a certificate of art and a genuine agent work-rugs.
+[00:02:02 --> 00:02:03]  And it comes down to three-texts.
+[00:02:03 --> 00:02:05]  The first thing, is that a real agent follows a process.
+[00:02:05 --> 00:02:07]  Not just the sponsor message, the chatbot gives you one-defile for message,
+[00:02:07 --> 00:02:08]  and agent moves your stages.
+[00:02:08 --> 00:02:09]  The gathers context.
+[00:02:16 --> 00:02:18]  The second thing is that it doesn't understand your effects, but your agent stops and asks.
+[00:02:18 --> 00:02:19]  The adaptor defends the code, and you can find it.
+[00:02:19 --> 00:02:22]  If the initial selection turns out to be wrong, the collect-words, the ladder-based kitchen-forward,
+[00:02:22 --> 00:02:24]  the adaptor assumption, the ladder-goat, the rhythm-goat, and the rhythm,
+[00:02:24 --> 00:02:25]  the ladder-dungeon pattern matching the most vulnerable answers,
+[00:02:25 --> 00:02:27]  with separate agent-based and fancy art and theme.
+[00:02:27 --> 00:02:28]  The third thing is the clarification of where execute.
+[00:02:28 --> 00:02:30]  This one is probably the most underrated.
+[00:02:30 --> 00:02:32]  The faster-dungeon is that AI-out-the-taping, because the more you mess with,
+[00:02:32 --> 00:02:33]  the more you mess with, the more you actually want.
+[00:02:33 --> 00:02:34]  It's a genuine audience, a format, a scope.
+[00:02:34 --> 00:02:36]  Now, a well-designed agent asks before it has.
+[00:02:36 --> 00:02:36]  The treats your agent-worth-sense, the starting point for the recond
+[00:02:36 --> 00:02:38]  conversation, not as a complete specification, as a complete exception.
+[00:02:38 --> 00:02:39]  The expectation sets were most of the quality rich.
+[00:02:39 --> 00:02:40]  All right, that's the reason.
+[00:02:40 --> 00:02:41]  Open the squad desktop app and go to the code workspaces.
+[00:02:41 --> 00:02:42]  If you haven't downloaded it yet, it's available directly from the product.
+[00:02:42 --> 00:02:43]  This search squad desktop app and it will be the first result.
+[00:02:43 --> 00:02:44]  Once you're in the code workspaces, then you've got to solve it.
+[00:02:44 --> 00:02:45]  You can make it anything.
+[00:02:45 --> 00:02:46]  I'll call mine agent-worth-sense, then I'll open it.
+[00:02:46 --> 00:02:47]  This folder is your AI-operaid environment.
+[00:02:47 --> 00:02:48]  Think of it as the office or agent-worth-sense.
+[00:02:48 --> 00:02:49]  Everything in P.A. is organized in Reconcious Life here.
+[00:02:49 --> 00:02:50]  Right now, it's completely empty and that's fully fine for the work that we do.
+[00:02:50 --> 00:02:52]  The first thing you do to add is the most important file opening file set.
+[00:02:52 --> 00:02:55]  It's called Clot Mb and I genuinely believe most people discover the AI agent are struggling
+[00:02:55 --> 00:02:56]  because they skip this file entirely.
+[00:02:56 --> 00:02:58]  You can do it if you genuinely need the easiest part of this post-set.
+[00:02:58 --> 00:03:00]  You don't open a test editor, you don't mess with the file system.
+[00:03:00 --> 00:03:03]  You just tell Clot Mb, you ate a file called Clot Mb, and the weirdest project,
+[00:03:03 --> 00:03:05]  rise the chat, and instead of the file for you to send it.
+[00:03:05 --> 00:03:06]  That's it. Now we just need to set it in.
+[00:03:06 --> 00:03:07]  Here's the problem with most agents set.
+[00:03:07 --> 00:03:09]  People send hours designing a ladder work load.
+[00:03:09 --> 00:03:11]  Then launch them without getting Clot Mb content about B.L.R.
+[00:03:11 --> 00:03:13]  With the help of the client, you can get a lot of money.
+[00:03:13 --> 00:03:14]  You can get a lot of money from the client.
+[00:03:14 --> 00:03:15]  That's it. Now we just need to set it in.
+[00:03:15 --> 00:03:16]  Here's the problem with most agents set.
+[00:03:16 --> 00:03:18]  People send hours designing a ladder work load.
+[00:03:18 --> 00:03:20]  Then launch them without getting Clot Mb content about B.L.R.
+[00:03:20 --> 00:03:22]  With the help of the client, you can get a lot of money from the client.
+[00:03:22 --> 00:03:23]  Then they wonder why you out there.
+[00:03:23 --> 00:03:24]  Clot Mb solves this.
+[00:03:24 --> 00:03:25]  The client sets file with a market.
+[00:03:25 --> 00:03:26]  Here's a sample for an AI agent set.
+[00:03:26 --> 00:03:28]  Clot Mb I9 can read you can ever start working inside the product.
+[00:03:28 --> 00:03:30]  They could have an ongoing document for your AI.
+[00:03:30 --> 00:03:32]  Except instead of ongoing a new hire one, you write it one.
+[00:03:32 --> 00:03:33]  Clot Mb uses everything to set it in work load.
+[00:03:33 --> 00:03:35]  Let me walk you through the gels into the field of Clot Mb.
+[00:03:35 --> 00:03:37]  Because the structure method, Clot Mb is a project context section.
+[00:03:37 --> 00:03:39]  The only thing that makes it so much more precise is that it's something like this.
+[00:03:39 --> 00:03:41]  This works like it used for AI as a research content,
+[00:03:41 --> 00:03:42]  the agent works well by making outforsk.
+[00:03:42 --> 00:03:44]  Outforsk are primarily from non-tactical audiences.
+[00:03:44 --> 00:03:46]  They want practical actionable information about AI tools.
+[00:03:46 --> 00:03:47]  Next, add a value setting.
+[00:03:47 --> 00:03:48]  Clot Mb you are the however you are.
+[00:03:48 --> 00:03:49]  With the background feature, with Clot Mb,
+[00:03:49 --> 00:03:51]  for example, IPH practical AI content for everyday use.
+[00:03:51 --> 00:03:53]  I prefer to size for that explanation
+[00:03:53 --> 00:03:54]  for the academic or garden head language.
+[00:03:54 --> 00:03:56]  Heavy output, 50 like advice, and multiple friends.
+[00:03:56 --> 00:03:57]  Not a focal support.
+[00:03:57 --> 00:03:58]  Then write a rule section.
+[00:03:58 --> 00:03:59]  Then worry and tell your work preferences.
+[00:03:59 --> 00:04:00]  Subscribe to write them automatically every time.
+[00:04:00 --> 00:04:01]  Some rules I use my own set.
+[00:04:01 --> 00:04:04]  Always add that you prefer buying breakfast before starting any complex task.
+[00:04:04 --> 00:04:06]  Always show your friends before you exit.
+[00:04:06 --> 00:04:08]  Every weekend I use your tackle under the best of length.
+[00:04:08 --> 00:04:10]  Mattertiles, then saving fires is low at times and height is not spaces.
+[00:04:10 --> 00:04:12]  You might sound like small dents, or only when I live in the fire.
+[00:04:12 --> 00:04:14]  If you stop having to re-explain them every second.
+[00:04:14 --> 00:04:15]  Finally, define your folder structure.
+[00:04:15 --> 00:04:17]  Something like a workload folder, be instruction fire.
+[00:04:17 --> 00:04:19]  An out-of-folder can be a work and a resource folder for revenue security.
+[00:04:19 --> 00:04:20]  You want to drop the drop-up.
+[00:04:20 --> 00:04:22]  This gets the agent to clear a map of work and work.
+[00:04:22 --> 00:04:23]  And register them to become a self-destruction.
+[00:04:23 --> 00:04:25]  Once you save the fire, plot behavior inside your project.
+[00:04:25 --> 00:04:26]  Change immediately.
+[00:04:26 --> 00:04:27]  There's no longer work and construct that is at the site.
+[00:04:27 --> 00:04:28]  It has content.
+[00:04:28 --> 00:04:29]  Rules and structures operate within.
+[00:04:29 --> 00:04:30]  That one fire is done well.
+[00:04:30 --> 00:04:32]  The most of the content here is that you find anywhere online.
+[00:04:32 --> 00:04:35]  Before we create our first year workload, I'm going to talk about one Saturday that makes 4 great AI agents work.
+[00:04:35 --> 00:04:36]  It's called Plenimo.
+[00:04:36 --> 00:04:38]  The idea is that you never let the agent exit you can use.
+[00:04:38 --> 00:04:39]  Here's why this matters.
+[00:04:39 --> 00:04:41]  When an AI agent starts operating upon a street, it commits to your direction that the next fire.
+[00:04:41 --> 00:04:43]  Structure content makes a assumption.
+[00:04:43 --> 00:04:45]  And if any of those makers something's wrong, which happens more often than you expect,
+[00:04:45 --> 00:04:48]  you'd waste the time in your now-correcting task and a project instead of steering a clean one.
+[00:04:48 --> 00:04:51]  Plenty mode means you always have to go out and show your friends before it does anything.
+[00:04:51 --> 00:04:59]  You want to see how the internet evolved.
+
+[00:05:00 --> 00:05:02]  The 5% is the 3% is the 8% and the questions are still had.
+[00:05:02 --> 00:05:05]  That review has made it 2 minutes, but we can't say 10 minutes of peanut from that fan.
+[00:05:05 --> 00:05:09]  The surface rate of the others is everywhere, but if you add 1 line in your claw dot md rule session,
+[00:05:09 --> 00:05:12]  Always try to think the written fans and write for approval before you get any multi-set fan.
+[00:05:12 --> 00:05:14]  Once that's there, the lobby falls to showing you the same thing before that.
+[00:05:14 --> 00:05:16]  You're a dude, you're a judge, you're a fool, then it exites.
+[00:05:16 --> 00:05:19]  The cars before we start doing it, if we do further agents, have you think things okay?
+[00:05:19 --> 00:05:22]  I actually want the players to be able to face the bad guys for that, before they eye mask.
+[00:05:22 --> 00:05:24]  And there are 2 things inside that work together, first of all, to call better than a lie central,
+[00:05:24 --> 00:05:27]  which I hand on side of the video, talking to you in our next module, my second thoughts,
+[00:05:30 --> 00:05:31]  I'm not sure if you're interested in the first, but the fact that we say back one,
+[00:05:31 --> 00:05:33]  on every major mark, that you can see it's broad, general ID,
+[00:05:33 --> 00:05:35]  it's broad, the seed ends to clean the video, now that I've been in the first one,
+[00:05:35 --> 00:05:36]  I've no doubt that we can fit the link in the description,
+[00:05:36 --> 00:05:38]  honestly, the annual time of the smartest movie,
+[00:05:38 --> 00:05:40]  talking 42 percent of the fact one, from every generation runs out,
+[00:05:40 --> 00:05:41]  okay, back to the go.
+[00:05:41 --> 00:05:43]  Now let's work at the underlying architecture of what we're doing,
+[00:05:43 --> 00:05:45]  because understanding the structure makes you much better at designing your own work,
+[00:05:45 --> 00:05:45]  those writers.
+[00:05:45 --> 00:05:47]  Most of the ancestors have different colors,
+[00:05:47 --> 00:05:48]  and they work together in specific ways,
+[00:05:48 --> 00:05:49]  the first component is the work that we're talking about.
+[00:05:49 --> 00:05:51]  This is a written document, usually a marked down file,
+[00:05:51 --> 00:05:54]  that describes the entire process of agents to follow for specific types of tasks,
+[00:05:54 --> 00:05:57]  the color of the balls, the steps, the rules, the steps, the elements, and what to do with something like that.
+[00:05:57 --> 00:05:59]  Made a bit of a standard operating procedure written inside the canvas,
+[00:05:59 --> 00:06:01]  they're not writing any culture, they're reading just writing out of process and time work.
+[00:06:01 --> 00:06:03]  The second component is the agent itself,
+[00:06:03 --> 00:06:05]  plot, plot, feature, work, no bias, understand the objectives, and act as a format,
+[00:06:05 --> 00:06:09]  but decide to be a step, the question to ask, when to proceed, and when to pass the template,
+[00:06:09 --> 00:06:11]  it's not just like a project manager who can let the SOT,
+[00:06:11 --> 00:06:12]  and it's not running the process,
+[00:06:12 --> 00:06:13]  but certain elements, in the fourth set,
+[00:06:13 --> 00:06:14]  the actual key to the various plots and views inside the project are worked by
+[00:06:14 --> 00:06:15]  reading and creating files,
+[00:06:15 --> 00:06:18]  organizing folders, searching for documents, analyzing and editing tasks.
+[00:06:18 --> 00:06:19]  For most of the inherent media workers,
+[00:06:19 --> 00:06:20]  these don't include the values from more than enough,
+[00:06:24 --> 00:06:25]  and this one runs counter to what most people expect.
+[00:06:25 --> 00:06:26]  The most important component is the workflow,
+[00:06:26 --> 00:06:27]  but not to do.
+[00:06:27 --> 00:06:30]  The software design workflow is basically a tool as a form of 40 design workflow
+[00:06:30 --> 00:06:32]  to facilitate a presentation every single time,
+[00:06:32 --> 00:06:33]  the entire thing is within instructions,
+[00:06:33 --> 00:06:34]  not the technology set,
+[00:06:34 --> 00:06:34]  that's actually the reason,
+[00:06:34 --> 00:06:36]  because instruction for something anyone can write,
+[00:06:36 --> 00:06:37]  all right, let's go something to do,
+[00:06:37 --> 00:06:38]  we're going to create a user type,
+[00:06:38 --> 00:06:39]  a system where you just write a topic,
+[00:06:39 --> 00:06:41]  and it's handled the entire research in the fourth line process,
+[00:06:41 --> 00:06:42]  you start to get it.
+[00:06:42 --> 00:06:43]  Open a new conversation inside your spot,
+[00:06:43 --> 00:06:44]  tell work space,
+[00:06:44 --> 00:06:45]  don't get it thought of yet,
+[00:06:45 --> 00:06:46]  instead tell it what kind of system you want to build.
+[00:06:46 --> 00:06:47]  Here's the kind of prompt that works well with it.
+[00:06:47 --> 00:06:49]  I want to design a user's workflow,
+[00:06:49 --> 00:06:49]  when I give you a copy,
+[00:06:54 --> 00:06:54]  you research the product there,
+[00:06:54 --> 00:06:56]  organize your findings into the field settings,
+[00:06:56 --> 00:06:57]  and say the structure before you dive before they're,
+[00:06:57 --> 00:06:58]  before you dive,
+[00:06:58 --> 00:06:59]  show your friends the workflow set,
+[00:06:59 --> 00:06:59]  now it's what we're doing here,
+[00:06:59 --> 00:07:00]  we're not judging the space and the task,
+[00:07:00 --> 00:07:02]  we're designing a system that we're handling with that.
+[00:07:02 --> 00:07:04]  That extra step is the turns of one time as far as
+[00:07:04 --> 00:07:04]  you're the field workflow,
+[00:07:04 --> 00:07:06]  you can run over and over with different topics,
+[00:07:06 --> 00:07:07]  while we're coming back,
+[00:07:07 --> 00:07:08]  with the code structure to the workflow.
+[00:07:08 --> 00:07:09]  It might suggest games like
+[00:07:09 --> 00:07:10]  third-party patient-based
+[00:07:10 --> 00:07:11]  specific questions that we always ask,
+[00:07:11 --> 00:07:12]  the research phase,
+[00:07:12 --> 00:07:12]  local and concept topics,
+[00:07:12 --> 00:07:14]  to send a step where the next finding
+[00:07:14 --> 00:07:15]  to cross-work is and the user's
+[00:07:15 --> 00:07:16]  before setting the final file.
+[00:07:16 --> 00:07:17]  That's a real agent workflow that can check,
+[00:07:17 --> 00:07:18]  you can find a list with 5 and 0 file,
+[00:07:18 --> 00:07:20]  once the structure looks like you use
+[00:07:20 --> 00:07:21]  Toss block to go ahead and write the actual workflow,
+[00:07:21 --> 00:07:23]  but there'll be 8-something like research agents
+[00:07:23 --> 00:07:24]  that can be inside the workflow folder,
+[00:07:24 --> 00:07:25]  when you open that file,
+[00:07:25 --> 00:07:26]  you'll need to upload instructions for your agent,
+[00:07:26 --> 00:07:27]  living in the time language,
+[00:07:27 --> 00:07:28]  living in edit,
+[00:07:28 --> 00:07:29]  and be useful every time you want a user's
+[00:07:29 --> 00:07:30]  before and you copy.
+[00:07:30 --> 00:07:31]  Now it's for the workflow to work,
+[00:07:31 --> 00:07:32]  open a list session inside the same workflow,
+[00:07:32 --> 00:07:33]  because Toss block wants to run the list
+[00:07:33 --> 00:07:34]  of workflow in specific topics.
+[00:07:34 --> 00:07:35]  I'll use the example I actually run recently.
+[00:07:35 --> 00:07:36]  I want the research support
+[00:07:36 --> 00:07:38]  on the current state of AI agents in 20 times 6.
+[00:07:38 --> 00:07:38]  What's working factors?
+[00:07:38 --> 00:07:39]  What's over-hide?
+[00:07:39 --> 00:07:40]  And where is the industry actually heading?
+[00:07:40 --> 00:07:41]  If your workflow is set up for that,
+[00:07:47 --> 00:07:48]  you can not have a professional search
+[00:07:48 --> 00:07:48]  here as a AI,
+[00:07:48 --> 00:07:49]  so don't have a bad bad luck.
+[00:07:49 --> 00:07:50]  Keep the talent conversational.
+[00:07:50 --> 00:07:51]  Focus on tools and workflow,
+[00:07:51 --> 00:07:52]  which you are actually using today,
+[00:07:52 --> 00:07:53]  not to your eyes or fingers.
+[00:07:53 --> 00:07:54]  Target length around 1500 words,
+[00:07:54 --> 00:07:55]  flaw, then forms a living time.
+[00:07:55 --> 00:07:56]  Here are the sections I'll tell you.
+[00:07:56 --> 00:07:57]  Here's the structure,
+[00:07:57 --> 00:07:58]  here's where I'll fire it.
+[00:07:58 --> 00:07:59]  To review it, maybe a bit more of these things,
+[00:07:59 --> 00:07:59]  tell you through it,
+[00:07:59 --> 00:08:00]  tell me the agent's life.
+[00:08:00 --> 00:08:01]  When having a chance to manually get the feeling
+[00:08:01 --> 00:08:02]  of one of the types here,
+[00:08:02 --> 00:08:03]  flaw the workflow to face
+[00:08:03 --> 00:08:04]  the work's life,
+[00:08:04 --> 00:08:04]  the client's relationship,
+[00:08:04 --> 00:08:05]  synthesizes the rights,
+[00:08:05 --> 00:08:06]  structures the outcomes,
+[00:08:06 --> 00:08:06]  and saves it for the work
+[00:08:06 --> 00:08:07]  your eyes will follow that
+[00:08:07 --> 00:08:08]  as you can define.
+[00:08:08 --> 00:08:09]  If you're not managing any of those stuff,
+[00:08:09 --> 00:08:09]  you have to move the client,
+[00:08:09 --> 00:08:10]  and now it's execute.
+[00:08:10 --> 00:08:11]  That note,
+[00:08:11 --> 00:08:12]  when you watch the agent's work,
+[00:08:12 --> 00:08:12]  it works well in time.
+[00:08:12 --> 00:08:14]  It's going to stop getting like that,
+[00:08:14 --> 00:08:14]  it's going to start getting like something
+[00:08:14 --> 00:08:15]  that actually works well.
+[00:08:15 --> 00:08:16]  Here's where a lot of people don't realize
+[00:08:16 --> 00:08:18]  how powerful the system project context actually is.
+[00:08:18 --> 00:08:19]  Once you're agent's movement output,
+[00:08:19 --> 00:08:20]  you don't just stop and zero,
+[00:08:20 --> 00:08:20]  it's making a change.
+[00:08:20 --> 00:08:21]  Well,
+[00:08:21 --> 00:08:22]  I already have full context
+[00:08:22 --> 00:08:22]  where the creative,
+[00:08:22 --> 00:08:23]  so the finance are fast.
+[00:08:23 --> 00:08:24]  So the objective summary
+[00:08:24 --> 00:08:25]  and the work went to the wrong.
+[00:08:25 --> 00:08:25]  You just say,
+[00:08:25 --> 00:08:26]  try and use that to summary,
+[00:08:26 --> 00:08:27]  I want to down with the three key points.
+[00:08:27 --> 00:08:28]  Quite a big step
+[00:08:28 --> 00:08:29]  in without touching the rest of the document.
+[00:08:29 --> 00:08:30]  For maybe you want to add something,
+[00:08:30 --> 00:08:30]  add a short section of the end
+[00:08:30 --> 00:08:32]  comparing the top three AI agent's work on use-takes.
+[00:08:32 --> 00:08:33]  While they're back into the document,
+[00:08:33 --> 00:08:34]  reference it to the already wrote,
+[00:08:34 --> 00:08:35]  and add the new section
+[00:08:35 --> 00:08:36]  to the right of 50 existing structure and cut.
+[00:08:36 --> 00:08:37]  This is the compounded effect
+[00:08:37 --> 00:08:38]  that works inside of the system's work-spec.
+[00:08:38 --> 00:08:40]  Each section works on the left.
+[00:08:40 --> 00:08:40]  The context is the key right.
+[00:08:40 --> 00:08:42]  Instead of starting over every time you need something new,
+[00:08:42 --> 00:08:43]  you'll be finding the standing,
+[00:08:43 --> 00:08:44]  the living body of work.
+[00:08:44 --> 00:08:44]  That's the fundamental
+[00:08:44 --> 00:08:45]  difference relationship with AI,
+[00:08:45 --> 00:08:47]  and the context where most people are still stepping.
+[00:08:47 --> 00:08:48]  Okay, so the research agent was used to
+[00:08:48 --> 00:08:49]  select those something
+[00:08:49 --> 00:08:50]  that generally say you find everything new.
+[00:08:50 --> 00:08:51]  Remain to the research agent,
+[00:08:51 --> 00:08:52]  you feel it one long strip,
+[00:08:52 --> 00:08:53]  and it fits out each word's grip
+[00:08:59 --> 00:09:00]  and you get the AI agent's one instruction.
+[00:09:00 --> 00:09:01]  The reason is that this is the strongest moment.
+[00:09:01 --> 00:09:02]  In terms of each one,
+[00:09:02 --> 00:09:03]  it uses only 67 short strips to the presser.
+[00:09:03 --> 00:09:04]  Then it writes a single pet,
+[00:09:04 --> 00:09:05]  an extra,
+[00:09:05 --> 00:09:06]  a link and cut with the end-to-vent actions.
+[00:09:06 --> 00:09:07]  And finally, it converts every artifact
+[00:09:07 --> 00:09:08]  into 3D,
+[00:09:08 --> 00:09:09]  and it's rock and all in two outer folders.
+[00:09:09 --> 00:09:10]  Now let's write a system file.
+[00:09:10 --> 00:09:11]  Santafile can be four.
+[00:09:11 --> 00:09:12]  We describe the role of the end-to-stab
+[00:09:12 --> 00:09:13]  and the outer format.
+[00:09:13 --> 00:09:14]  The role is a content of the practice
+[00:09:14 --> 00:09:14]  and stack it.
+[00:09:14 --> 00:09:15]  The end-to-stab is the single one-plum script
+[00:09:15 --> 00:09:16]  and the end-to-folder,
+[00:09:16 --> 00:09:16]  the steps are,
+[00:09:16 --> 00:09:17]  read a script,
+[00:09:17 --> 00:09:18]  identify three standalone moments
+[00:09:18 --> 00:09:19]  that work a short,
+[00:09:19 --> 00:09:20]  write each one that is only open,
+[00:09:20 --> 00:09:20]  pay off and draft,
+[00:09:20 --> 00:09:21]  select one specific self-intensive method
+[00:09:21 --> 00:09:22]  that works for its
+[00:09:22 --> 00:09:22]  the outer,
+[00:09:22 --> 00:09:23]  the storm-lock-and-fire,
+[00:09:23 --> 00:09:24]  some vertical PDF,
+[00:09:24 --> 00:09:24]  save the outer folder.
+[00:09:24 --> 00:09:25]  I'll read it right.
+[00:09:25 --> 00:09:26]  One prompt,
+[00:09:26 --> 00:09:27]  and you'll see the file with the ear in the folder,
+[00:09:27 --> 00:09:27]  one after another.
+[00:09:27 --> 00:09:28]  Each works the best,
+[00:09:28 --> 00:09:29]  one social-packed PDF,
+[00:09:29 --> 00:09:30]  for the single strip,
+[00:09:30 --> 00:09:30]  and under two minutes.
+[00:09:30 --> 00:09:32]  I send a water time running these workflows
+[00:09:32 --> 00:09:33]  and watching other people try to get started with them.
+[00:09:33 --> 00:09:34]  And if they are,
+[00:09:34 --> 00:09:35]  I'm always coming the same time for mistakes.
+[00:09:35 --> 00:09:36]  Let me walk you through them
+[00:09:36 --> 00:09:37]  so you can skip the press-baiting part.
+[00:09:37 --> 00:09:38]  Misset1 is sticking to our dot-mb,
+[00:09:38 --> 00:09:39]  without that file.
+[00:09:39 --> 00:09:40]  One has no persistent context
+[00:09:40 --> 00:09:40]  without the reward,
+[00:09:40 --> 00:09:41]  how you like to work
+[00:09:41 --> 00:09:42]  with standards without this need,
+[00:09:42 --> 00:09:43]  and the every session starts from zero.
+[00:09:43 --> 00:09:44]  The quality is inconsistent,
+[00:09:44 --> 00:09:45]  you send more time to record out here
+[00:09:45 --> 00:09:46]  than you save by using 80% of your file,
+[00:09:46 --> 00:09:48]  write a file before you do anything else.
+[00:09:48 --> 00:09:49]  Misset2 is using the go.
+[00:09:49 --> 00:09:50]  Telling about the recent user-con AI,
+[00:09:50 --> 00:09:51]  with the recent review of the video,
+[00:09:51 --> 00:09:52]  with the video audience.
+[00:09:52 --> 00:09:52]  Telling about the recent time,
+[00:09:52 --> 00:09:53]  why don't you just let the person
+[00:09:53 --> 00:09:54]  write the video and then you can
+[00:09:54 --> 00:09:54]  edit it out into the content
+[00:09:54 --> 00:09:55]  of the content,
+[00:09:55 --> 00:09:56]  focus on full-fledged PDF,
+[00:09:56 --> 00:09:56]  and tell your audience
+[00:09:56 --> 00:09:57]  that you never did an online show.
+[00:09:57 --> 00:09:58]  So, this is something to actually use.
+[00:09:58 --> 00:09:59]  The set is the ability of the go,
+[00:09:59 --> 00:10:00]  the time it's a-
+
+[00:10:30 --> 00:10:33]  I'm not that excited about agents from W&W Research Systems, the content planners, CRN Workflow,
+[00:10:33 --> 00:10:35]  female responders, and analytics experts with all of the same work.
+[00:10:35 --> 00:10:37]  It was all the five type working systems that none of them trust for you.
+[00:10:37 --> 00:10:38]  Start with one workshop.
+[00:10:38 --> 00:10:40]  Run it until it's reliable and understand how it depends.
+[00:10:40 --> 00:10:41]  Then, go to the next.
+[00:10:41 --> 00:10:43]  Once you have one or two workflows running well, the natural question is,
+[00:10:43 --> 00:10:44]  what's next?
+[00:10:44 --> 00:10:46]  Here's the practical correction for how to expand your agent's strategy out over running yourself.
+[00:10:46 --> 00:10:49]  The permission that works best starts with simple, self-contained research for lighting tasks.
+[00:10:49 --> 00:10:51]  Thank you for your interest and your outfit for me.
+[00:10:51 --> 00:10:53]  For research before, the content outline, the document summary, these are low sets.
+[00:10:53 --> 00:10:56]  Try to do that task, and you can see immediately whether the agent has been well from where the cost,
+[00:10:56 --> 00:10:57]  without outfit is minimal.
+[00:10:57 --> 00:10:59]  From there, you can move more air at the workflow.
+[00:10:59 --> 00:11:01]  Once where the agent produces the first draft, and then you find it,
+[00:11:01 --> 00:11:02]  based on your feedback across multiple rounds.
+[00:11:02 --> 00:11:03]  Script lighting works well here.
+[00:11:03 --> 00:11:05]  So, this editing and including workflow, where you get to the rough draft,
+[00:11:05 --> 00:11:07]  and apply specific archivism to it.
+[00:11:07 --> 00:11:09]  To more advanced methods, multi-workflow systems, where one workflow triggers,
+[00:11:09 --> 00:11:11]  one for one another for research agent, to use the finance system,
+[00:11:11 --> 00:11:13]  and then the content finding agent, these data players, and generate video ideas,
+[00:11:13 --> 00:11:14]  based on where the research identifies.
+[00:11:14 --> 00:11:15]  That's the real type of task.
+[00:11:15 --> 00:11:18]  It's not as complicated as it sounds, and once your end of your workflow is resolved,
+[00:11:18 --> 00:11:20]  then I want you to take away from the progression, and step,
+[00:11:20 --> 00:11:21]  and take away the ability to do something in a lot of all of what.
+[00:11:21 --> 00:11:23]  You've got to implement it, one reliable workflow at a time,
+[00:11:23 --> 00:11:25]  and a system that's more powerful as each one's own gets more refined.
+[00:11:25 --> 00:11:26]  That's the first two working agents.
+[00:11:26 --> 00:11:28]  Once where research, once where research, if you actually go to the one of them,
+[00:11:28 --> 00:11:30]  then you're already ahead of 90% of people to the problem.
+[00:11:30 --> 00:11:32]  For people that are on their own, you can subscribe,
+[00:11:32 --> 00:11:33]  and that another video link up here.
+[00:11:33 --> 00:11:34]  When you might actually learn this properly,
+[00:11:34 --> 00:11:35]  instead of just watching the videos,
+[00:11:35 --> 00:11:36]  that's what you go to AI Massive.
+[00:11:36 --> 00:11:37]  Listen to this.
