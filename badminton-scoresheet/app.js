@@ -1635,14 +1635,15 @@ class BadmintonScoreSheet {
         const ctx = canvas.getContext('2d');
 
         // Use the qrcode-lib (loaded via script tag)
-        if (typeof qrcode !== 'undefined') {
+        if (typeof qrcode === 'function') {
             try {
-                const qr = qrcode(0, 'M');
+                // Use type 4 for short URLs, type 10 for longer ones
+                const typeNum = text.length > 50 ? 10 : 4;
+                const qr = qrcode(typeNum, 'L');
                 qr.addData(text);
                 qr.make();
                 const moduleCount = qr.getModuleCount();
-                const cellSize = Math.floor(size / moduleCount);
-                const offset = Math.floor((size - cellSize * moduleCount) / 2);
+                const cellSize = size / moduleCount;
 
                 ctx.fillStyle = '#ffffff';
                 ctx.fillRect(0, 0, size, size);
@@ -1651,13 +1652,13 @@ class BadmintonScoreSheet {
                 for (let row = 0; row < moduleCount; row++) {
                     for (let col = 0; col < moduleCount; col++) {
                         if (qr.isDark(row, col)) {
-                            ctx.fillRect(offset + col * cellSize, offset + row * cellSize, cellSize, cellSize);
+                            ctx.fillRect(col * cellSize, row * cellSize, cellSize, cellSize);
                         }
                     }
                 }
                 return;
             } catch (e) {
-                console.warn('[QR] Library generation failed:', e);
+                console.error('[QR] Generation failed:', e);
             }
         }
 
@@ -1667,7 +1668,9 @@ class BadmintonScoreSheet {
         ctx.fillStyle = '#333333';
         ctx.font = '12px sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText('QR library not loaded', size/2, size/2);
+        ctx.fillText('QR generation failed', size/2, size/2 - 10);
+        ctx.font = '10px sans-serif';
+        ctx.fillText(text.substring(0, 40), size/2, size/2 + 10);
     }
 
     showSection(sectionId) {
