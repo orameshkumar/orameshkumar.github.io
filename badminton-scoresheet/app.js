@@ -598,6 +598,7 @@ class BadmintonScoreSheet {
         document.getElementById('btn-import-history').addEventListener('change', (e) => this.importHistory(e));
         document.getElementById('btn-leaderboard-filter').addEventListener('click', () => this.renderLeaderboard());
         document.getElementById('btn-leaderboard-clear').addEventListener('click', () => this.clearLeaderboardFilters());
+        document.getElementById('btn-print-leaderboard').addEventListener('click', () => this.printLeaderboard());
 
         // Window resize listener for sticky header height
         window.addEventListener('resize', () => this.updateStickyHeaderHeight());
@@ -1588,6 +1589,37 @@ class BadmintonScoreSheet {
         document.getElementById('leaderboard-from').value = '';
         document.getElementById('leaderboard-to').value = '';
         this.renderLeaderboard();
+    }
+
+    printLeaderboard() {
+        const content = document.getElementById('leaderboard-content').innerHTML;
+        const eventName = this.eventManager?.getActiveEvent()?.name || 'Leaderboard';
+        const fromDate = document.getElementById('leaderboard-from').value;
+        const toDate = document.getElementById('leaderboard-to').value;
+        const dateRange = (fromDate || toDate) ? `${fromDate || 'start'} to ${toDate || 'now'}` : 'All time';
+
+        const printWindow = window.open('', '_blank');
+        printWindow.document.write(`<!DOCTYPE html>
+<html><head><title>${eventName} - Leaderboard</title>
+<style>
+body { font-family: 'Segoe UI', sans-serif; padding: 20px; color: #333; }
+h1 { font-size: 1.4rem; margin-bottom: 4px; }
+.subtitle { font-size: 0.85rem; color: #666; margin-bottom: 16px; }
+table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+th, td { padding: 8px 10px; border-bottom: 1px solid #ddd; text-align: center; }
+th { background: #f5f5f5; font-weight: 600; font-size: 0.8rem; }
+td:nth-child(2) { text-align: left; }
+th:nth-child(2) { text-align: left; }
+tr:nth-child(even) { background: #fafafa; }
+@media print { body { padding: 0; } }
+</style></head><body>
+<h1>🏸 ${eventName} - Player Leaderboard</h1>
+<p class="subtitle">Period: ${dateRange} | Printed: ${new Date().toLocaleDateString()}</p>
+${content}
+</body></html>`);
+        printWindow.document.close();
+        printWindow.focus();
+        setTimeout(() => { printWindow.print(); }, 300);
     }
 
     // --- Utilities ---

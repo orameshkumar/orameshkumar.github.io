@@ -850,6 +850,11 @@ h3 {
     background: var(--bg-card-hover);
 }
 
+.leaderboard-actions {
+    margin-top: 16px;
+    text-align: center;
+}
+
 .leaderboard-content .rank-1 td { color: #ffd700; }
 .leaderboard-content .rank-2 td { color: #c0c0c0; }
 .leaderboard-content .rank-3 td { color: #cd7f32; }
