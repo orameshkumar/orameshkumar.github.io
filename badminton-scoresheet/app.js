@@ -1526,7 +1526,7 @@ class BadmintonScoreSheet {
 
             allPlayers.forEach(p => {
                 if (!playerStats[p.name]) {
-                    playerStats[p.name] = { wins: 0, losses: 0, matches: 0, pointsWon: 0, pointsAgainst: 0 };
+                    playerStats[p.name] = { wins: 0, losses: 0, matches: 0, pointsWon: 0, pointsAgainst: 0, pointsTaken: 0 };
                 }
                 playerStats[p.name].matches++;
                 if (p.team === m.winner) {
@@ -1541,6 +1541,12 @@ class BadmintonScoreSheet {
                     }
                 } else {
                     playerStats[p.name].losses++;
+                    // Points Taken: player's team points in lost matches
+                    if (p.team === 'A') {
+                        playerStats[p.name].pointsTaken += totalPointsA;
+                    } else {
+                        playerStats[p.name].pointsTaken += totalPointsB;
+                    }
                 }
             });
         });
@@ -1551,8 +1557,8 @@ class BadmintonScoreSheet {
                 pointsDiff: stats.pointsWon - stats.pointsAgainst,
                 winRate: stats.matches > 0 ? Math.round((stats.wins / stats.matches) * 100) : 0
             }))
-            // Sort: wins desc → pointsDiff desc → pointsWon desc
-            .sort((a, b) => b.wins - a.wins || b.pointsDiff - a.pointsDiff || b.pointsWon - a.pointsWon);
+            // Sort: wins desc → pointsDiff desc → pointsWon desc → pointsTaken desc
+            .sort((a, b) => b.wins - a.wins || b.pointsDiff - a.pointsDiff || b.pointsWon - a.pointsWon || b.pointsTaken - a.pointsTaken);
 
         const container = document.getElementById('leaderboard-content');
         const dateInfo = (fromDate || toDate) ? `<p style="color:var(--text-muted); font-size:0.85rem; margin-bottom:12px;">Showing: ${fromDate || 'start'} → ${toDate || 'now'} (${filtered.length} matches)</p>` : '';
@@ -1563,7 +1569,7 @@ class BadmintonScoreSheet {
         }
 
         let html = dateInfo + `<table>
-            <tr><th>#</th><th>Player</th><th>W</th><th>L</th><th>PW</th><th>PA</th><th>+/-</th><th>Win%</th></tr>`;
+            <tr><th>#</th><th>Player</th><th>W</th><th>L</th><th>PW</th><th>PA</th><th>+/-</th><th>PT</th><th>Win%</th></tr>`;
         sorted.forEach((p, i) => {
             const rankClass = i < 3 ? `rank-${i+1}` : '';
             const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i+1}`;
@@ -1572,7 +1578,7 @@ class BadmintonScoreSheet {
                 <td>${medal}</td><td>${p.name}</td>
                 <td>${p.wins}</td><td>${p.losses}</td>
                 <td>${p.pointsWon}</td><td>${p.pointsAgainst}</td>
-                <td>${diffStr}</td><td>${p.winRate}%</td></tr>`;
+                <td>${diffStr}</td><td>${p.pointsTaken}</td><td>${p.winRate}%</td></tr>`;
         });
         html += '</table>';
         container.innerHTML = html;
@@ -1622,31 +1628,46 @@ class BadmintonScoreSheet {
     }
 
     generateQRCode(text) {
-        // Use a simple QR code API rendered to an image, then draw on canvas
         const canvas = document.getElementById('qr-canvas');
         const size = 200;
         canvas.width = size;
         canvas.height = size;
         const ctx = canvas.getContext('2d');
 
-        // Use Google Charts QR API as image source (works without any library)
-        const img = new Image();
-        img.crossOrigin = 'anonymous';
-        img.onload = () => {
-            ctx.drawImage(img, 0, 0, size, size);
-        };
-        img.onerror = () => {
-            // Fallback: draw a placeholder with the URL text
-            ctx.fillStyle = '#ffffff';
-            ctx.fillRect(0, 0, size, size);
-            ctx.fillStyle = '#333333';
-            ctx.font = '12px sans-serif';
-            ctx.textAlign = 'center';
-            ctx.fillText('QR Code', size/2, size/2 - 10);
-            ctx.fillText('(requires internet)', size/2, size/2 + 10);
-        };
-        const encoded = encodeURIComponent(text);
-        img.src = `https://chart.googleapis.com/chart?cht=qr&chs=${size}x${size}&chl=${encoded}&choe=UTF-8`;
+        // Use the qrcode-lib (loaded via script tag)
+        if (typeof qrcode !== 'undefined') {
+            try {
+                const qr = qrcode(0, 'M');
+                qr.addData(text);
+                qr.make();
+                const moduleCount = qr.getModuleCount();
+                const cellSize = Math.floor(size / moduleCount);
+                const offset = Math.floor((size - cellSize * moduleCount) / 2);
+
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(0, 0, size, size);
+
+                ctx.fillStyle = '#000000';
+                for (let row = 0; row < moduleCount; row++) {
+                    for (let col = 0; col < moduleCount; col++) {
+                        if (qr.isDark(row, col)) {
+                            ctx.fillRect(offset + col * cellSize, offset + row * cellSize, cellSize, cellSize);
+                        }
+                    }
+                }
+                return;
+            } catch (e) {
+                console.warn('[QR] Library generation failed:', e);
+            }
+        }
+
+        // Fallback if library not loaded
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, size, size);
+        ctx.fillStyle = '#333333';
+        ctx.font = '12px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('QR library not loaded', size/2, size/2);
     }
 
     showSection(sectionId) {
