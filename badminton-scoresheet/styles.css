@@ -680,6 +680,7 @@ h3 {
     border-collapse: collapse;
     font-size: 0.82rem;
     text-align: center;
+    table-layout: fixed;
 }
 
 .perf-table thead th {
@@ -732,9 +733,9 @@ h3 {
 
 /* Data cells */
 .perf-cell {
-    padding: 6px 4px;
+    padding: 6px 3px;
     font-weight: 500;
-    min-width: 28px;
+    min-width: 0;
 }
 
 .perf-cell-positive {
@@ -789,16 +790,34 @@ h3 {
 /* Mobile responsive */
 @media (max-width: 480px) {
     .perf-table {
-        font-size: 0.72rem;
+        font-size: 0.65rem;
+        table-layout: fixed;
+        width: 100%;
+    }
+    .perf-table thead th {
+        padding-top: 30px;
+        padding-left: 1px;
+        padding-right: 1px;
+    }
+    .perf-vertical {
+        font-size: 0.55rem;
     }
     .perf-cell {
-        padding: 4px 2px;
-        min-width: 22px;
+        padding: 3px 1px;
+        min-width: 0;
     }
     .perf-player-name {
-        padding: 6px 4px;
-        font-size: 0.72rem;
-        max-width: 65px;
+        padding: 4px 2px;
+        font-size: 0.62rem;
+        max-width: 50px;
+        width: 50px;
+    }
+    .perf-player-header {
+        min-width: 50px;
+        width: 50px;
+    }
+    .perf-table-wrapper {
+        margin: 0 -8px;
     }
 }
 
