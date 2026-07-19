@@ -1,0 +1,12 @@
+<svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+  <!-- Placed: Shuttlecock landing precisely on target spot -->
+  <!-- Court outline -->
+  <rect x="4" y="10" width="24" height="18" rx="2" fill="none" stroke="#4CAF50" stroke-width="1.5"/>
+  <line x1="4" y1="19" x2="28" y2="19" stroke="#4CAF50" stroke-width="1"/>
+  <!-- Target/crosshair for precision -->
+  <circle cx="20" cy="24" r="4" fill="none" stroke="#66BB6A" stroke-width="1.5"/>
+  <circle cx="20" cy="24" r="1.5" fill="#4CAF50"/>
+  <!-- Shuttlecock approaching target -->
+  <circle cx="12" cy="6" r="2.5" fill="#A5D6A7" stroke="#4CAF50" stroke-width="1.5"/>
+  <path d="M13 8.5 L18 20" stroke="#4CAF50" stroke-width="1.5" stroke-dasharray="2,2" stroke-linecap="round"/>
+</svg>

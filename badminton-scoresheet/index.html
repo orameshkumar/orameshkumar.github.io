@@ -21,6 +21,7 @@
                 <button class="btn btn-icon" id="btn-show-history" title="Match History">📜</button>
                 <button class="btn btn-icon" id="btn-show-leaderboard" title="Leaderboard">🏆</button>
                 <button class="btn btn-icon" id="btn-show-qr" title="Share App QR">📱</button>
+                <button id="btn-manual-sync" class="btn btn-icon btn-sync" title="Sync Now">🔄</button>
                 <span id="sync-status" class="sync-indicator sync-offline" title="Offline">
                     <span class="sync-dot"></span>
                     <span class="sync-label">Offline</span>
@@ -102,54 +103,134 @@
                     <button class="btn btn-score-tap" id="btn-scoreB">+1</button>
                 </div>
 
-                <!-- Per-Player Error Icons -->
-                <div class="error-icons-section">
-                    <div class="error-icons-team error-icons-team-a">
-                        <span class="error-icons-player-name" id="error-player-a1-name">A1</span>
-                        <div class="error-icons-row" data-team="A" data-player="0">
-                            <button class="error-icon-btn" data-error="net" title="Net"><img src="icons/faults/net-1.svg" alt="Net"></button>
-                            <button class="error-icon-btn" data-error="out" title="Out"><img src="icons/faults/out-1.svg" alt="Out"></button>
-                            <button class="error-icon-btn" data-error="service" title="Service"><img src="icons/faults/service-2.svg" alt="Service"></button>
-                            <button class="error-icon-btn" data-error="double-hit" title="Double Hit"><img src="icons/faults/double-hit-2.svg" alt="Double Hit"></button>
-                            <button class="error-icon-btn" data-error="carry" title="Carry"><img src="icons/faults/carry-1.svg" alt="Carry"></button>
-                            <button class="error-icon-btn" data-error="obstruction" title="Obstruction"><img src="icons/faults/obstruction-1.svg" alt="Obstruction"></button>
-                            <button class="error-icon-btn" data-error="unforced" title="Unforced"><img src="icons/faults/unforced-3.svg" alt="Unforced"></button>
-                            <button class="error-icon-btn" data-error="other" title="Other"><img src="icons/faults/other-3.svg" alt="Other"></button>
+                <!-- Per-Player Action Icons -->
+                <div class="action-icons-section">
+                    <!-- Team A Player 1 -->
+                    <div class="action-icons-player" data-team="A" data-player="0">
+                        <span class="action-player-name" id="action-player-a1-name">A1</span>
+                        <div class="action-icons-group action-icons-positive">
+                            <button class="action-icon-btn" data-action="smash" data-category="positive" title="Smash">
+                                <img src="icons/actions/smash.svg" alt="Smash">
+                            </button>
+                            <button class="action-icon-btn" data-action="drop" data-category="positive" title="Drop">
+                                <img src="icons/actions/drop.svg" alt="Drop">
+                            </button>
+                            <button class="action-icon-btn" data-action="placed" data-category="positive" title="Placed">
+                                <img src="icons/actions/placed.svg" alt="Placed">
+                            </button>
                         </div>
-                        <span class="error-icons-player-name" id="error-player-a2-name">A2</span>
-                        <div class="error-icons-row" data-team="A" data-player="1">
-                            <button class="error-icon-btn" data-error="net" title="Net"><img src="icons/faults/net-1.svg" alt="Net"></button>
-                            <button class="error-icon-btn" data-error="out" title="Out"><img src="icons/faults/out-1.svg" alt="Out"></button>
-                            <button class="error-icon-btn" data-error="service" title="Service"><img src="icons/faults/service-2.svg" alt="Service"></button>
-                            <button class="error-icon-btn" data-error="double-hit" title="Double Hit"><img src="icons/faults/double-hit-2.svg" alt="Double Hit"></button>
-                            <button class="error-icon-btn" data-error="carry" title="Carry"><img src="icons/faults/carry-1.svg" alt="Carry"></button>
-                            <button class="error-icon-btn" data-error="obstruction" title="Obstruction"><img src="icons/faults/obstruction-1.svg" alt="Obstruction"></button>
-                            <button class="error-icon-btn" data-error="unforced" title="Unforced"><img src="icons/faults/unforced-3.svg" alt="Unforced"></button>
-                            <button class="error-icon-btn" data-error="other" title="Other"><img src="icons/faults/other-3.svg" alt="Other"></button>
+                        <div class="action-icons-group action-icons-negative">
+                            <button class="action-icon-btn" data-action="net" data-category="negative" title="Net fault">
+                                <img src="icons/faults/net-1.svg" alt="Net fault">
+                            </button>
+                            <button class="action-icon-btn" data-action="out" data-category="negative" title="Out">
+                                <img src="icons/faults/out-1.svg" alt="Out">
+                            </button>
+                            <button class="action-icon-btn" data-action="service" data-category="negative" title="Service fault">
+                                <img src="icons/faults/service-2.svg" alt="Service fault">
+                            </button>
+                            <button class="action-icon-btn" data-action="unforced" data-category="negative" title="Unforced error">
+                                <img src="icons/faults/unforced-3.svg" alt="Unforced error">
+                            </button>
+                            <button class="action-icon-btn" data-action="carry" data-category="negative" title="Carry">
+                                <img src="icons/faults/carry-1.svg" alt="Carry">
+                            </button>
                         </div>
                     </div>
-                    <div class="error-icons-team error-icons-team-b">
-                        <span class="error-icons-player-name" id="error-player-b1-name">B1</span>
-                        <div class="error-icons-row" data-team="B" data-player="0">
-                            <button class="error-icon-btn" data-error="net" title="Net"><img src="icons/faults/net-1.svg" alt="Net"></button>
-                            <button class="error-icon-btn" data-error="out" title="Out"><img src="icons/faults/out-1.svg" alt="Out"></button>
-                            <button class="error-icon-btn" data-error="service" title="Service"><img src="icons/faults/service-2.svg" alt="Service"></button>
-                            <button class="error-icon-btn" data-error="double-hit" title="Double Hit"><img src="icons/faults/double-hit-2.svg" alt="Double Hit"></button>
-                            <button class="error-icon-btn" data-error="carry" title="Carry"><img src="icons/faults/carry-1.svg" alt="Carry"></button>
-                            <button class="error-icon-btn" data-error="obstruction" title="Obstruction"><img src="icons/faults/obstruction-1.svg" alt="Obstruction"></button>
-                            <button class="error-icon-btn" data-error="unforced" title="Unforced"><img src="icons/faults/unforced-3.svg" alt="Unforced"></button>
-                            <button class="error-icon-btn" data-error="other" title="Other"><img src="icons/faults/other-3.svg" alt="Other"></button>
+                    <!-- Team A Player 2 -->
+                    <div class="action-icons-player" data-team="A" data-player="1">
+                        <span class="action-player-name" id="action-player-a2-name">A2</span>
+                        <div class="action-icons-group action-icons-positive">
+                            <button class="action-icon-btn" data-action="smash" data-category="positive" title="Smash">
+                                <img src="icons/actions/smash.svg" alt="Smash">
+                            </button>
+                            <button class="action-icon-btn" data-action="drop" data-category="positive" title="Drop">
+                                <img src="icons/actions/drop.svg" alt="Drop">
+                            </button>
+                            <button class="action-icon-btn" data-action="placed" data-category="positive" title="Placed">
+                                <img src="icons/actions/placed.svg" alt="Placed">
+                            </button>
                         </div>
-                        <span class="error-icons-player-name" id="error-player-b2-name">B2</span>
-                        <div class="error-icons-row" data-team="B" data-player="1">
-                            <button class="error-icon-btn" data-error="net" title="Net"><img src="icons/faults/net-1.svg" alt="Net"></button>
-                            <button class="error-icon-btn" data-error="out" title="Out"><img src="icons/faults/out-1.svg" alt="Out"></button>
-                            <button class="error-icon-btn" data-error="service" title="Service"><img src="icons/faults/service-2.svg" alt="Service"></button>
-                            <button class="error-icon-btn" data-error="double-hit" title="Double Hit"><img src="icons/faults/double-hit-2.svg" alt="Double Hit"></button>
-                            <button class="error-icon-btn" data-error="carry" title="Carry"><img src="icons/faults/carry-1.svg" alt="Carry"></button>
-                            <button class="error-icon-btn" data-error="obstruction" title="Obstruction"><img src="icons/faults/obstruction-1.svg" alt="Obstruction"></button>
-                            <button class="error-icon-btn" data-error="unforced" title="Unforced"><img src="icons/faults/unforced-3.svg" alt="Unforced"></button>
-                            <button class="error-icon-btn" data-error="other" title="Other"><img src="icons/faults/other-3.svg" alt="Other"></button>
+                        <div class="action-icons-group action-icons-negative">
+                            <button class="action-icon-btn" data-action="net" data-category="negative" title="Net fault">
+                                <img src="icons/faults/net-1.svg" alt="Net fault">
+                            </button>
+                            <button class="action-icon-btn" data-action="out" data-category="negative" title="Out">
+                                <img src="icons/faults/out-1.svg" alt="Out">
+                            </button>
+                            <button class="action-icon-btn" data-action="service" data-category="negative" title="Service fault">
+                                <img src="icons/faults/service-2.svg" alt="Service fault">
+                            </button>
+                            <button class="action-icon-btn" data-action="unforced" data-category="negative" title="Unforced error">
+                                <img src="icons/faults/unforced-3.svg" alt="Unforced error">
+                            </button>
+                            <button class="action-icon-btn" data-action="carry" data-category="negative" title="Carry">
+                                <img src="icons/faults/carry-1.svg" alt="Carry">
+                            </button>
+                        </div>
+                    </div>
+                    <!-- Team B Player 1 -->
+                    <div class="action-icons-player" data-team="B" data-player="0">
+                        <span class="action-player-name" id="action-player-b1-name">B1</span>
+                        <div class="action-icons-group action-icons-positive">
+                            <button class="action-icon-btn" data-action="smash" data-category="positive" title="Smash">
+                                <img src="icons/actions/smash.svg" alt="Smash">
+                            </button>
+                            <button class="action-icon-btn" data-action="drop" data-category="positive" title="Drop">
+                                <img src="icons/actions/drop.svg" alt="Drop">
+                            </button>
+                            <button class="action-icon-btn" data-action="placed" data-category="positive" title="Placed">
+                                <img src="icons/actions/placed.svg" alt="Placed">
+                            </button>
+                        </div>
+                        <div class="action-icons-group action-icons-negative">
+                            <button class="action-icon-btn" data-action="net" data-category="negative" title="Net fault">
+                                <img src="icons/faults/net-1.svg" alt="Net fault">
+                            </button>
+                            <button class="action-icon-btn" data-action="out" data-category="negative" title="Out">
+                                <img src="icons/faults/out-1.svg" alt="Out">
+                            </button>
+                            <button class="action-icon-btn" data-action="service" data-category="negative" title="Service fault">
+                                <img src="icons/faults/service-2.svg" alt="Service fault">
+                            </button>
+                            <button class="action-icon-btn" data-action="unforced" data-category="negative" title="Unforced error">
+                                <img src="icons/faults/unforced-3.svg" alt="Unforced error">
+                            </button>
+                            <button class="action-icon-btn" data-action="carry" data-category="negative" title="Carry">
+                                <img src="icons/faults/carry-1.svg" alt="Carry">
+                            </button>
+                        </div>
+                    </div>
+                    <!-- Team B Player 2 -->
+                    <div class="action-icons-player" data-team="B" data-player="1">
+                        <span class="action-player-name" id="action-player-b2-name">B2</span>
+                        <div class="action-icons-group action-icons-positive">
+                            <button class="action-icon-btn" data-action="smash" data-category="positive" title="Smash">
+                                <img src="icons/actions/smash.svg" alt="Smash">
+                            </button>
+                            <button class="action-icon-btn" data-action="drop" data-category="positive" title="Drop">
+                                <img src="icons/actions/drop.svg" alt="Drop">
+                            </button>
+                            <button class="action-icon-btn" data-action="placed" data-category="positive" title="Placed">
+                                <img src="icons/actions/placed.svg" alt="Placed">
+                            </button>
+                        </div>
+                        <div class="action-icons-group action-icons-negative">
+                            <button class="action-icon-btn" data-action="net" data-category="negative" title="Net fault">
+                                <img src="icons/faults/net-1.svg" alt="Net fault">
+                            </button>
+                            <button class="action-icon-btn" data-action="out" data-category="negative" title="Out">
+                                <img src="icons/faults/out-1.svg" alt="Out">
+                            </button>
+                            <button class="action-icon-btn" data-action="service" data-category="negative" title="Service fault">
+                                <img src="icons/faults/service-2.svg" alt="Service fault">
+                            </button>
+                            <button class="action-icon-btn" data-action="unforced" data-category="negative" title="Unforced error">
+                                <img src="icons/faults/unforced-3.svg" alt="Unforced error">
+                            </button>
+                            <button class="action-icon-btn" data-action="carry" data-category="negative" title="Carry">
+                                <img src="icons/faults/carry-1.svg" alt="Carry">
+                            </button>
                         </div>
                     </div>
                     <button class="btn btn-undo" id="btn-undo">↩ Undo</button>
@@ -214,16 +295,8 @@
                     <div id="set-results"></div>
                 </div>
                 <div class="summary-card">
-                    <h3>Error Summary</h3>
-                    <div id="error-summary"></div>
-                </div>
-                <div class="summary-card">
-                    <h3>Player Error Breakdown</h3>
-                    <div id="player-errors"></div>
-                </div>
-                <div class="summary-card">
-                    <h3>Error Types</h3>
-                    <div id="error-types-summary"></div>
+                    <h3>Performance</h3>
+                    <div id="performance-summary"></div>
                 </div>
             </div>
             <div class="summary-actions">

@@ -22,7 +22,21 @@ class FirebaseSync {
         this.available = false;
         this._activeWriteTimer = null;
         this._pendingActiveState = null;
+        this._retryQueue = this._loadRetryQueue();
         this.init();
+    }
+
+    _loadRetryQueue() {
+        try {
+            const data = localStorage.getItem('firebase-retry-queue');
+            return data ? JSON.parse(data) : [];
+        } catch (e) { return []; }
+    }
+
+    _persistRetryQueue() {
+        try {
+            localStorage.setItem('firebase-retry-queue', JSON.stringify(this._retryQueue));
+        } catch (e) {}
     }
 
     /**
@@ -34,6 +48,12 @@ class FirebaseSync {
 
         this.enableOfflinePersistence();
         this.startConnectivityMonitor();
+
+        // Sync events list from Firebase FIRST (fixes multi-device ID mismatch)
+        if (this.app?.eventManager?.initFromFirebase) {
+            await this.app.eventManager.initFromFirebase();
+        }
+
         await this.loadAndMerge();
     }
 
@@ -101,19 +121,11 @@ class FirebaseSync {
 
         const labelEl = el.querySelector('.sync-label');
         if (labelEl) {
-            const labels = {
-                synced: 'Synced',
-                syncing: 'Syncing',
-                offline: 'Offline'
-            };
+            const labels = { synced: 'Synced', syncing: 'Syncing', offline: 'Offline', failed: 'Failed' };
             labelEl.textContent = labels[status] || 'Offline';
         }
 
-        const titles = {
-            synced: 'All data synced to cloud',
-            syncing: 'Syncing data...',
-            offline: 'Working offline'
-        };
+        const titles = { synced: 'All data synced to cloud', syncing: 'Syncing data...', offline: 'Working offline', failed: 'Sync failed - tap Sync to retry' };
         el.title = titles[status] || 'Sync Status';
     }
 
@@ -225,6 +237,8 @@ class FirebaseSync {
             this.setSyncStatus('synced');
         } catch (error) {
             console.error('[FirebaseSync] Failed to save match:', error);
+            this._retryQueue.push({ collectionPath: 'events/' + eid + '/matches', docId: String(record.id), data: { ...record, lastModified: Date.now() }, timestamp: Date.now() });
+            this._persistRetryQueue();
             this.setSyncStatus('offline');
         }
     }
@@ -245,6 +259,8 @@ class FirebaseSync {
             this.setSyncStatus('synced');
         } catch (error) {
             console.error('[FirebaseSync] Failed to save player registry:', error);
+            this._retryQueue.push({ collectionPath: 'events/' + eid + '/playerRegistry', docId: 'data', data: { names: names, lastModified: Date.now() }, timestamp: Date.now() });
+            this._persistRetryQueue();
             this.setSyncStatus('offline');
         }
     }
@@ -282,6 +298,8 @@ class FirebaseSync {
             this.setSyncStatus('synced');
         } catch (error) {
             console.error('[FirebaseSync] Failed to save active match:', error);
+            this._retryQueue.push({ collectionPath: 'events/' + eid + '/appData', docId: 'activeMatch', data: { ...state, lastModified: Date.now() }, timestamp: Date.now() });
+            this._persistRetryQueue();
             this.setSyncStatus('offline');
         }
     }
@@ -331,6 +349,62 @@ class FirebaseSync {
         }
     }
 
+    // ─── Retry Queue & Manual Sync ──────────────────────────────────────────
+
+    async flushRetryQueue() {
+        if (!this.available || this._retryQueue.length === 0) return { success: 0, failed: 0 };
+
+        const remaining = [];
+        let success = 0;
+
+        for (const entry of this._retryQueue) {
+            try {
+                // Rebuild Firestore reference from stored path segments
+                const pathParts = entry.collectionPath.split('/');
+                let ref = this.db;
+                for (let i = 0; i < pathParts.length; i++) {
+                    ref = (i % 2 === 0) ? ref.collection(pathParts[i]) : ref.doc(pathParts[i]);
+                }
+                await ref.doc(entry.docId).set(entry.data);
+                success++;
+            } catch (e) {
+                remaining.push(entry);
+            }
+        }
+
+        this._retryQueue = remaining;
+        this._persistRetryQueue();
+        return { success, failed: remaining.length };
+    }
+
+    async manualSync() {
+        if (!this.available) {
+            this.setSyncStatus('offline');
+            return;
+        }
+
+        this.setSyncStatus('syncing');
+        this._setSyncButtonState(true);
+
+        try {
+            await this.flushRetryQueue();
+            await this.loadAndMerge();
+            // loadAndMerge sets status to 'synced' on success
+        } catch (error) {
+            console.error('[FirebaseSync] Manual sync failed:', error);
+            this.setSyncStatus('failed');
+        } finally {
+            this._setSyncButtonState(false);
+        }
+    }
+
+    _setSyncButtonState(syncing) {
+        const btn = document.getElementById('btn-manual-sync');
+        if (!btn) return;
+        btn.disabled = syncing;
+        btn.classList.toggle('syncing', syncing);
+    }
+
     // ─── Task 7.1: loadAndMerge ───────────────────────────────────────────────
 
     async loadAndMerge() {
@@ -340,6 +414,9 @@ class FirebaseSync {
         }
 
         this.setSyncStatus('syncing');
+
+        // Flush any pending writes before pulling remote data
+        await this.flushRetryQueue();
 
         try {
             const eid = this.app?.eventManager?.getActiveEventId();

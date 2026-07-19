@@ -25,6 +25,8 @@
     --select-bg: #2c3e50;
     --score-shadow: rgba(0,0,0,0.3);
     --history-bg: rgba(0,0,0,0.2);
+    --color-positive: #4caf50;
+    --color-negative: #f44336;
 }
 
 [data-theme="light"] {
@@ -47,6 +49,8 @@
     --select-bg: #ffffff;
     --score-shadow: rgba(0,0,0,0.1);
     --history-bg: rgba(0,0,0,0.04);
+    --color-positive: #2e7d32;
+    --color-negative: #c62828;
 }
 
 body {
@@ -665,6 +669,55 @@ h3 {
     color: var(--text-secondary);
 }
 
+/* Performance Summary Styles */
+.player-performance-block {
+    margin-bottom: 20px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.player-performance-block:last-child {
+    margin-bottom: 0;
+    padding-bottom: 0;
+    border-bottom: none;
+}
+
+.player-performance-block h4 {
+    margin: 0 0 12px 0;
+    color: var(--accent-heading);
+    font-size: 1rem;
+}
+
+.performance-subsection {
+    margin-bottom: 12px;
+}
+
+.performance-subsection strong {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.positive-actions strong {
+    color: var(--color-positive, #27ae60);
+}
+
+.negative-actions strong {
+    color: var(--color-negative, #e74c3c);
+}
+
+.performance-subsection table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 4px;
+}
+
+.performance-subsection .total-row td {
+    border-top: 2px solid var(--border-color);
+    padding-top: 6px;
+}
+
 /* Share Preview */
 .share-preview {
     margin-top: 20px;
@@ -1203,73 +1256,77 @@ h3 {
     100% { transform: scale(1); background: var(--bg-card); }
 }
 
-/* --- Per-Player Error Icons --- */
-.error-icons-section {
+/* --- Per-Player Action Icons --- */
+.action-icons-section {
     margin-top: 8px;
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 6px;
     align-items: stretch;
 }
 
-.error-icons-team {
+.action-icons-player {
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: 4px;
+    padding: 8px;
+    border-radius: 8px;
+    background: var(--history-bg);
+    border: 1px solid var(--border-color);
 }
 
-.error-icons-team-a {
+.action-icons-player[data-team="A"] {
     border-left: 3px solid rgba(100, 255, 218, 0.5);
-    padding-left: 6px;
-    background: rgba(100, 255, 218, 0.06);
-    border-radius: 8px;
-    padding: 8px;
-    margin-bottom: 6px;
 }
 
-.error-icons-team-b {
+.action-icons-player[data-team="B"] {
     border-left: 3px solid rgba(255, 171, 64, 0.5);
-    padding-left: 6px;
-    background: rgba(255, 171, 64, 0.06);
-    border-radius: 8px;
-    padding: 8px;
 }
 
-.error-icons-player-name {
+.action-player-name {
     font-size: 0.8rem;
     font-weight: 700;
     color: var(--text-muted);
-    margin-bottom: 2px;
     display: inline-block;
     padding: 2px 8px;
     border-radius: 4px;
+    margin-bottom: 2px;
 }
 
-.error-icons-team-a .error-icons-player-name {
+.action-icons-player[data-team="A"] .action-player-name {
     color: #64ffda;
     background: rgba(100, 255, 218, 0.1);
 }
 
-.error-icons-team-b .error-icons-player-name {
+.action-icons-player[data-team="B"] .action-player-name {
     color: #ffab40;
     background: rgba(255, 171, 64, 0.1);
 }
 
-.error-icons-row {
+[data-theme="light"] .action-icons-player[data-team="A"] .action-player-name {
+    color: #00796b;
+    background: rgba(0, 121, 107, 0.08);
+}
+
+[data-theme="light"] .action-icons-player[data-team="B"] .action-player-name {
+    color: #e65100;
+    background: rgba(230, 81, 0, 0.08);
+}
+
+.action-icons-group {
     display: flex;
     gap: 4px;
     flex-wrap: nowrap;
-    justify-content: stretch;
     width: 100%;
 }
 
-.error-icons-row .error-icon-btn {
+.action-icons-group .action-icon-btn {
     flex: 1 1 0;
     min-width: 0;
     max-width: none;
 }
 
-.error-icon-btn {
+.action-icon-btn {
     height: 36px;
     min-height: 36px;
     border: 1px solid var(--border-color);
@@ -1285,77 +1342,100 @@ h3 {
     color: var(--text-muted);
 }
 
-.error-icon-btn svg {
-    width: 18px;
-    height: 18px;
-    pointer-events: none;
-    color: inherit;
-}
-
-.error-icon-btn img {
-    width: 22px;
-    height: 22px;
+.action-icon-btn img {
+    width: 24px;
+    height: 24px;
     pointer-events: none;
 }
 
-.error-icon-btn[data-error="net"] { color: #FFD54F; }
-.error-icon-btn[data-error="out"] { color: #EF5350; }
-.error-icon-btn[data-error="service"] { color: #FF9800; }
-.error-icon-btn[data-error="double-hit"] { color: #AB47BC; }
-.error-icon-btn[data-error="carry"] { color: #A1887F; }
-.error-icon-btn[data-error="obstruction"] { color: #FF7043; }
-.error-icon-btn[data-error="unforced"] { color: #42A5F5; }
-.error-icon-btn[data-error="other"] { color: #B0BEC5; }
-
-/* Force SVG elements to use the button's color */
-.error-icon-btn svg line,
-.error-icon-btn svg path,
-.error-icon-btn svg rect,
-.error-icon-btn svg circle,
-.error-icon-btn svg polyline {
-    stroke: currentColor !important;
-}
-.error-icon-btn svg text {
-    fill: currentColor !important;
-}
-.error-icon-btn svg circle[fill]:not([fill="none"]) {
-    fill: currentColor !important;
-    opacity: 0.6;
-}
-
-.error-icon-btn:hover {
-    transform: scale(1.15);
-    border-color: currentColor;
+.action-icon-btn:hover {
+    transform: scale(1.1);
     background: rgba(255, 255, 255, 0.1);
 }
 
-.error-icon-btn:active {
+.action-icon-btn:active {
     transform: scale(0.9);
-    background: rgba(255, 255, 255, 0.2);
-    border-color: currentColor;
+    background: rgba(255, 255, 255, 0.15);
 }
 
-/* Subtle colored border to help identify icons */
-.error-icon-btn[data-error="net"] { border-color: rgba(255, 213, 79, 0.4); }
-.error-icon-btn[data-error="out"] { border-color: rgba(239, 83, 80, 0.4); }
-.error-icon-btn[data-error="service"] { border-color: rgba(255, 152, 0, 0.4); }
-.error-icon-btn[data-error="double-hit"] { border-color: rgba(171, 71, 188, 0.4); }
-.error-icon-btn[data-error="carry"] { border-color: rgba(161, 136, 127, 0.4); }
-.error-icon-btn[data-error="obstruction"] { border-color: rgba(255, 112, 67, 0.4); }
-.error-icon-btn[data-error="unforced"] { border-color: rgba(66, 165, 245, 0.4); }
-.error-icon-btn[data-error="other"] { border-color: rgba(176, 190, 197, 0.4); }
+/* Positive action buttons — green tint */
+.action-icons-positive .action-icon-btn {
+    border-color: var(--color-positive);
+    background: rgba(76, 175, 80, 0.08);
+}
 
+.action-icons-positive .action-icon-btn:hover {
+    background: rgba(76, 175, 80, 0.2);
+    border-color: var(--color-positive);
+    transform: scale(1.1);
+}
+
+.action-icons-positive .action-icon-btn:active {
+    background: rgba(76, 175, 80, 0.3);
+    transform: scale(0.9);
+}
+
+/* Negative action buttons — red tint */
+.action-icons-negative .action-icon-btn {
+    border-color: var(--color-negative);
+    background: rgba(244, 67, 54, 0.08);
+}
+
+.action-icons-negative .action-icon-btn:hover {
+    background: rgba(244, 67, 54, 0.2);
+    border-color: var(--color-negative);
+    transform: scale(1.1);
+}
+
+.action-icons-negative .action-icon-btn:active {
+    background: rgba(244, 67, 54, 0.3);
+    transform: scale(0.9);
+}
+
+/* Light theme adjustments for action icon buttons */
+[data-theme="light"] .action-icons-positive .action-icon-btn {
+    background: rgba(46, 125, 50, 0.06);
+}
+
+[data-theme="light"] .action-icons-positive .action-icon-btn:hover {
+    background: rgba(46, 125, 50, 0.15);
+}
+
+[data-theme="light"] .action-icons-negative .action-icon-btn {
+    background: rgba(198, 40, 40, 0.06);
+}
+
+[data-theme="light"] .action-icons-negative .action-icon-btn:hover {
+    background: rgba(198, 40, 40, 0.15);
+}
+
+/* Responsive action icons for mobile */
 @media (max-width: 480px) {
-    .error-icon-btn {
-        width: 28px;
-        height: 28px;
-        min-width: 28px;
-        min-height: 28px;
-        font-size: 0.8rem;
+    .action-icons-section {
+        gap: 4px;
     }
 
-    .error-icons-player-name {
+    .action-icons-player {
+        padding: 6px;
+        gap: 3px;
+    }
+
+    .action-icon-btn {
+        height: 32px;
+        min-height: 32px;
+    }
+
+    .action-icon-btn img {
+        width: 20px;
+        height: 20px;
+    }
+
+    .action-player-name {
         font-size: 0.7rem;
+    }
+
+    .action-icons-group {
+        gap: 3px;
     }
 }
 
@@ -1410,6 +1490,53 @@ h3 {
 }
 .sync-offline .sync-label {
     color: #78909c;
+}
+
+/* Sync failed state */
+.sync-indicator.sync-failed .sync-dot {
+    background: #f44336;
+    box-shadow: 0 0 4px rgba(244, 67, 54, 0.5);
+}
+
+.sync-indicator.sync-failed .sync-label {
+    color: #f44336;
+}
+
+/* Manual Sync Button */
+#btn-manual-sync {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 1.2rem;
+    padding: 4px 8px;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+    opacity: 0.8;
+}
+
+#btn-manual-sync:hover {
+    opacity: 1;
+    background: rgba(255, 255, 255, 0.1);
+}
+
+#btn-manual-sync.syncing {
+    animation: spin 1s linear infinite;
+    opacity: 0.5;
+    pointer-events: none;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+#btn-manual-sync:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+[data-theme="light"] #btn-manual-sync:hover {
+    background: rgba(0, 0, 0, 0.05);
 }
 
 /* === Event Management === */
@@ -1581,6 +1708,7 @@ h3 {
 .member-item-actions button { width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--border-color); background: var(--bg-card); color: var(--text-muted); cursor: pointer; font-size: 0.8rem; display: flex; align-items: center; justify-content: center; }
 .member-item-actions button:hover { border-color: var(--accent-primary); transform: scale(1.1); }
 .member-item-actions .btn-delete-member:hover { border-color: var(--accent-error); color: var(--accent-error); }
+.member-item-actions .btn-merge-member:hover { border-color: var(--accent-secondary); color: var(--accent-secondary); }
 .member-picker { width: 100%; padding: 10px 14px; margin-bottom: 10px; border: 1px solid var(--border-light); border-radius: 8px; background: var(--bg-input); color: var(--text-primary); font-size: 0.95rem; }
 .member-new-input { width: 100%; padding: 10px 14px; margin-bottom: 10px; border: 1px solid var(--accent-secondary); border-radius: 8px; background: var(--bg-input); color: var(--text-primary); font-size: 0.95rem; }
 .member-new-input.hidden { display: none; }

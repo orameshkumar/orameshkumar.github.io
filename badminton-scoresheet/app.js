@@ -1,5 +1,24 @@
 // Badminton Doubles Score Sheet App - Enhanced Edition
 
+/**
+ * Action_Entry Schema
+ * Represents a single recorded player action (positive or negative).
+ * {
+ *   team: 'A' | 'B',              // Team of the player performing the action
+ *   playerIndex: 0 | 1,           // Player index within the team
+ *   playerName: string,           // Player display name
+ *   actionType: string,           // One of: 'smash', 'drop', 'placed', 'net', 'out', 'service', 'unforced', 'carry'
+ *   actionTypeLabel: string,      // Human-readable: "Smash", "Drop", "Placed", "Net fault", etc.
+ *   category: 'positive' | 'negative', // "positive" for winning shots, "negative" for faults
+ *   set: number,                  // Current set number (1-indexed)
+ *   time: Date                    // Timestamp of recording
+ * }
+ *
+ * Valid Action Types:
+ *   Positive (winning shots): smash, drop, placed
+ *   Negative (faults):        net, out, service, unforced, carry
+ */
+
 class BadmintonScoreSheet {
     constructor() {
         this.match = null;
@@ -10,6 +29,11 @@ class BadmintonScoreSheet {
         this.servingTeam = 'A';
         this.lastFaultType = 'net';
         this.soundEnabled = true;
+
+        // Valid action types for the performance scoring system
+        this.VALID_ACTION_TYPES = ['smash', 'drop', 'placed', 'net', 'out', 'service', 'unforced', 'carry'];
+        this.POSITIVE_ACTION_TYPES = ['smash', 'drop', 'placed'];
+        this.NEGATIVE_ACTION_TYPES = ['net', 'out', 'service', 'unforced', 'carry'];
 
         // Initialize EventManager before other init calls
         this.eventManager = new EventManager(this);
@@ -444,17 +468,34 @@ class BadmintonScoreSheet {
             matchedPlayerName = teamObj.players[playerIndex];
         }
 
-        // Record error directly without relying on dropdowns
-        this.recordErrorDirect(team, playerIndex, detectedError, detectedErrorLabel);
+        // Record action directly using new unified action system
+        // Map detected error to action label
+        const voiceActionLabelMap = {
+            net: 'Net fault',
+            out: 'Out',
+            service: 'Service fault',
+            unforced: 'Unforced error',
+            carry: 'Carry',
+            'double-hit': 'Carry',
+            obstruction: 'Carry',
+            other: 'Carry'
+        };
+        const voiceActionType = (detectedError === 'double-hit' || detectedError === 'obstruction' || detectedError === 'other') ? 'carry' : detectedError;
+        const voiceLabel = voiceActionLabelMap[detectedError] || detectedErrorLabel;
+        this.recordActionDirect(team, playerIndex, voiceActionType, voiceLabel, 'negative');
 
         // Also sync the dropdowns visually
         const teamSelect = document.getElementById('error-team');
-        teamSelect.value = team;
-        teamSelect.dispatchEvent(new Event('change'));
-        document.getElementById('error-player').value = String(playerIndex + 1);
-        document.getElementById('error-type').value = detectedError;
+        if (teamSelect) {
+            teamSelect.value = team;
+            teamSelect.dispatchEvent(new Event('change'));
+        }
+        const errorPlayerSelect = document.getElementById('error-player');
+        if (errorPlayerSelect) errorPlayerSelect.value = String(playerIndex + 1);
+        const errorTypeSelect = document.getElementById('error-type');
+        if (errorTypeSelect) errorTypeSelect.value = detectedError;
 
-        this.setVoiceStatus(`✓ ${detectedErrorLabel} by ${matchedPlayerName} (Team ${team})`, 'success');
+        this.setVoiceStatus(`✓ ${voiceLabel} by ${matchedPlayerName} (Team ${team})`, 'success');
     }
 
     // --- Player Name Autocomplete ---
@@ -492,6 +533,8 @@ class BadmintonScoreSheet {
 
     saveMatchToHistory() {
         const history = this.getMatchHistory();
+        const totalErrors = this.match.allErrors ? this.match.allErrors.length : 0;
+        const totalActions = this.match.allActions ? this.match.allActions.length : 0;
         const record = {
             id: Date.now(),
             date: new Date().toISOString(),
@@ -501,7 +544,7 @@ class BadmintonScoreSheet {
             sets: this.match.sets.map(s => ({ scoreA: s.scoreA, scoreB: s.scoreB })),
             setsWon: this.match.setsWon,
             winner: this.match.winner,
-            errors: this.match.allErrors.length,
+            errors: totalErrors + totalActions,
             duration: this.getMatchDuration()
         };
         history.unshift(record);
@@ -522,18 +565,38 @@ class BadmintonScoreSheet {
         document.getElementById('btn-record-error').addEventListener('click', () => this.recordError());
         document.getElementById('btn-voice-error').addEventListener('click', () => this.toggleVoice());
 
-        // New fault buttons (per-player, one-tap)
-        // Per-player error icon buttons (8 icons per player, one-tap fault recording)
-        document.querySelectorAll('.error-icon-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                const row = e.currentTarget.closest('.error-icons-row');
-                const team = row.dataset.team;
-                const playerIdx = parseInt(row.dataset.player);
-                const errorType = e.currentTarget.dataset.error;
-                const errorTypeLabel = e.currentTarget.title;
-                this.recordErrorDirect(team, playerIdx, errorType, errorTypeLabel);
+        // Action icon buttons (per-player, one-tap action recording via event delegation)
+        const actionIconsSection = document.querySelector('.action-icons-section');
+        if (actionIconsSection) {
+            actionIconsSection.addEventListener('click', (e) => {
+                const btn = e.target.closest('.action-icon-btn');
+                if (!btn) return;
+                if (this.match && this.match.isFinished) return;
+
+                const playerContainer = btn.closest('.action-icons-player');
+                if (!playerContainer) return;
+
+                const team = playerContainer.dataset.team;
+                const playerIndex = parseInt(playerContainer.dataset.player);
+                const actionType = btn.dataset.action;
+                const category = btn.dataset.category;
+
+                // Map data-action to human-readable label
+                const actionLabelMap = {
+                    smash: 'Smash',
+                    drop: 'Drop',
+                    placed: 'Placed',
+                    net: 'Net fault',
+                    out: 'Out',
+                    service: 'Service fault',
+                    unforced: 'Unforced error',
+                    carry: 'Carry'
+                };
+                const label = actionLabelMap[actionType] || actionType;
+
+                this.recordActionDirect(team, playerIndex, actionType, label, category);
             });
-        });
+        }
 
         // Legacy fault buttons (guard in case still in DOM)
         document.querySelectorAll('.btn-fault').forEach(btn => {
@@ -544,7 +607,16 @@ class BadmintonScoreSheet {
                 if (!faultSelect) return;
                 const errorType = faultSelect.value;
                 const errorTypeLabel = faultSelect.selectedOptions[0].text;
-                this.recordErrorDirect(team, playerIdx, errorType, errorTypeLabel);
+                // Legacy: route through recordActionDirect as negative action
+                const actionLabelMap = {
+                    net: 'Net fault',
+                    out: 'Out',
+                    service: 'Service fault',
+                    unforced: 'Unforced error',
+                    carry: 'Carry'
+                };
+                const label = actionLabelMap[errorType] || errorTypeLabel;
+                this.recordActionDirect(team, playerIdx, errorType, label, 'negative');
             });
         });
 
@@ -587,6 +659,12 @@ class BadmintonScoreSheet {
         document.getElementById('btn-show-leaderboard').addEventListener('click', () => this.showLeaderboard());
         document.getElementById('btn-show-qr').addEventListener('click', () => this.showQRModal());
         document.getElementById('btn-close-qr').addEventListener('click', () => this.hideQRModal());
+
+        // Manual Sync button
+        const btnManualSync = document.getElementById('btn-manual-sync');
+        if (btnManualSync) {
+            btnManualSync.addEventListener('click', () => this.sync?.manualSync());
+        }
 
         // History filters
         document.getElementById('history-search').addEventListener('input', () => this.renderHistoryPage());
@@ -826,6 +904,8 @@ class BadmintonScoreSheet {
             this.lastFaultType = state.lastFaultType || 'net';
             // Restore dates as Date objects
             this.match.startTime = new Date(this.match.startTime);
+            // Migrate old error format to new action format if needed
+            this.migrateMatchData(this.match);
             // Restore UI
             this.updateErrorPlayerOptions();
             this.updateQuickErrorLabels();
@@ -838,6 +918,86 @@ class BadmintonScoreSheet {
         } catch (e) {
             this.clearActiveMatch();
         }
+    }
+
+    /**
+     * Migrates old match data from errors[]/allErrors[] format to actions[]/allActions[] format.
+     * Old error entries are converted to action entries with category: "negative".
+     * Already-migrated data (has allActions[]) is not re-migrated.
+     * @param {object} match - The match object to migrate in place
+     */
+    migrateMatchData(match) {
+        if (!match) return;
+
+        // Don't migrate if already in new format (allActions exists and has data, or allErrors doesn't exist)
+        if (match.allActions && match.allActions.length > 0) return;
+        if (!match.allErrors && !match.sets?.some(s => s.errors && s.errors.length > 0)) return;
+
+        // Error type to action type mapping
+        const errorTypeToActionType = {
+            net: 'net',
+            out: 'out',
+            service: 'service',
+            unforced: 'unforced',
+            other: 'carry'
+        };
+
+        // Migrate each set's errors[] to actions[]
+        if (match.sets) {
+            match.sets.forEach(set => {
+                if (set.errors && set.errors.length > 0 && (!set.actions || set.actions.length === 0)) {
+                    set.actions = set.errors.map(error => ({
+                        team: error.team,
+                        playerIndex: error.playerIndex,
+                        playerName: error.playerName,
+                        actionType: errorTypeToActionType[error.errorType] || error.errorType || 'carry',
+                        actionTypeLabel: error.errorTypeLabel || error.errorType || 'Carry',
+                        category: 'negative',
+                        set: error.set,
+                        time: error.time
+                    }));
+                }
+                // Ensure actions array exists
+                if (!set.actions) set.actions = [];
+
+                // Migrate history entries: convert type: 'error' to type: 'action'
+                if (set.history) {
+                    set.history = set.history.map(entry => {
+                        if (entry.type === 'error') {
+                            return {
+                                type: 'action',
+                                team: entry.team,
+                                actionTeam: entry.errorTeam,
+                                playerName: entry.playerName,
+                                actionType: entry.errorType || 'Carry',
+                                category: 'negative',
+                                scoreA: entry.scoreA,
+                                scoreB: entry.scoreB,
+                                time: entry.time
+                            };
+                        }
+                        return entry;
+                    });
+                }
+            });
+        }
+
+        // Migrate allErrors[] to allActions[]
+        if (match.allErrors && match.allErrors.length > 0 && (!match.allActions || match.allActions.length === 0)) {
+            match.allActions = match.allErrors.map(error => ({
+                team: error.team,
+                playerIndex: error.playerIndex,
+                playerName: error.playerName,
+                actionType: errorTypeToActionType[error.errorType] || error.errorType || 'carry',
+                actionTypeLabel: error.errorTypeLabel || error.errorType || 'Carry',
+                category: 'negative',
+                set: error.set,
+                time: error.time
+            }));
+        }
+
+        // Ensure allActions array exists
+        if (!match.allActions) match.allActions = [];
     }
 
     // --- Sticky Header Height ---
@@ -878,9 +1038,10 @@ class BadmintonScoreSheet {
             teamB: { players: [teamB1, teamB2], name: `${teamB1} / ${teamB2}` },
             format, pointsPerSet,
             currentSet: 1,
-            sets: [{ scoreA: 0, scoreB: 0, history: [], errors: [] }],
+            sets: [{ scoreA: 0, scoreB: 0, history: [], errors: [], actions: [] }],
             setsWon: { A: 0, B: 0 },
             allErrors: [],
+            allActions: [],
             isFinished: false,
             startTime: new Date()
         };
@@ -940,15 +1101,15 @@ class BadmintonScoreSheet {
         if (faultB1) faultB1.textContent = this.truncateLabel(this.match.teamB.players[0]);
         if (faultB2) faultB2.textContent = this.truncateLabel(this.match.teamB.players[1]);
 
-        // Update error icon player name labels
-        const eiA1 = document.getElementById('error-player-a1-name');
-        const eiA2 = document.getElementById('error-player-a2-name');
-        const eiB1 = document.getElementById('error-player-b1-name');
-        const eiB2 = document.getElementById('error-player-b2-name');
-        if (eiA1) eiA1.textContent = this.truncateLabel(this.match.teamA.players[0]);
-        if (eiA2) eiA2.textContent = this.truncateLabel(this.match.teamA.players[1]);
-        if (eiB1) eiB1.textContent = this.truncateLabel(this.match.teamB.players[0]);
-        if (eiB2) eiB2.textContent = this.truncateLabel(this.match.teamB.players[1]);
+        // Update action icon player name labels (new action-icons-section)
+        const aiA1 = document.getElementById('action-player-a1-name');
+        const aiA2 = document.getElementById('action-player-a2-name');
+        const aiB1 = document.getElementById('action-player-b1-name');
+        const aiB2 = document.getElementById('action-player-b2-name');
+        if (aiA1) aiA1.textContent = this.truncateLabel(this.match.teamA.players[0]);
+        if (aiA2) aiA2.textContent = this.truncateLabel(this.match.teamA.players[1]);
+        if (aiB1) aiB1.textContent = this.truncateLabel(this.match.teamB.players[0]);
+        if (aiB2) aiB2.textContent = this.truncateLabel(this.match.teamB.players[1]);
 
         // Also update old quick-error-names if still present (backward compatibility)
         const namesEl = document.getElementById('quick-error-names');
@@ -998,74 +1159,217 @@ class BadmintonScoreSheet {
     }
 
     recordError() {
-        if (this.match.isFinished) return;
+        if (!this.match || this.match.isFinished) return;
         const team = document.getElementById('error-team').value;
         const playerIndex = parseInt(document.getElementById('error-player').value) - 1;
         const errorType = document.getElementById('error-type').value;
         const errorTypeLabel = document.getElementById('error-type').selectedOptions[0].text;
-        this.recordErrorDirect(team, playerIndex, errorType, errorTypeLabel);
+        // Route through unified action system as a negative action
+        const actionLabelMap = {
+            net: 'Net fault',
+            out: 'Out',
+            service: 'Service fault',
+            unforced: 'Unforced error',
+            carry: 'Carry'
+        };
+        const label = actionLabelMap[errorType] || errorTypeLabel;
+        this.recordActionDirect(team, playerIndex, errorType, label, 'negative');
     }
 
+    /**
+     * @deprecated Use recordActionDirect instead. Kept for backward compatibility with voice commands.
+     */
     recordErrorDirect(team, playerIndex, errorType, errorTypeLabel) {
+        // Map legacy error types to action types
+        const legacyTypeMap = {
+            'double-hit': 'carry',
+            'obstruction': 'carry',
+            'other': 'carry'
+        };
+        const actionType = legacyTypeMap[errorType] || errorType;
+        const actionLabelMap = {
+            net: 'Net fault',
+            out: 'Out',
+            service: 'Service fault',
+            unforced: 'Unforced error',
+            carry: 'Carry'
+        };
+        const label = actionLabelMap[actionType] || errorTypeLabel;
+        this.recordActionDirect(team, playerIndex, actionType, label, 'negative');
+    }
+
+    /**
+     * Records a player action (positive or negative) and updates score.
+     * @param {string} team - 'A' or 'B'
+     * @param {number} playerIndex - 0 or 1
+     * @param {string} actionType - One of: smash, drop, placed, net, out, service, unforced, carry
+     * @param {string} actionTypeLabel - Human-readable label (e.g., "Smash", "Net fault")
+     * @param {string} category - "positive" or "negative"
+     */
+    recordActionDirect(team, playerIndex, actionType, actionTypeLabel, category) {
         if (this.match.isFinished) return;
+
         const teamObj = team === 'A' ? this.match.teamA : this.match.teamB;
         const playerName = teamObj.players[playerIndex];
 
-        const error = { team, playerIndex, playerName, errorType, errorTypeLabel, set: this.match.currentSet, time: new Date() };
-        const set = this.getCurrentSet();
-        set.errors.push(error);
-        this.match.allErrors.push(error);
+        // Build Action_Entry object
+        const actionEntry = {
+            team,
+            playerIndex,
+            playerName,
+            actionType,
+            actionTypeLabel,
+            category,
+            set: this.match.currentSet,
+            time: new Date()
+        };
 
-        const opposingTeam = team === 'A' ? 'B' : 'A';
-        if (opposingTeam === 'A') set.scoreA++;
+        const set = this.getCurrentSet();
+
+        // Push to actions arrays
+        set.actions.push(actionEntry);
+        this.match.allActions.push(actionEntry);
+
+        // Determine which team gains the point
+        let scoringTeam;
+        if (category === 'positive') {
+            // Positive action: point goes to the acting team
+            scoringTeam = team;
+        } else {
+            // Negative action: point goes to the opposing team
+            scoringTeam = team === 'A' ? 'B' : 'A';
+        }
+
+        // Increment the scoring team's score
+        if (scoringTeam === 'A') set.scoreA++;
         else set.scoreB++;
 
+        // Push history entry
         set.history.push({
-            type: 'error', team: opposingTeam, errorTeam: team,
-            playerName, errorType: errorTypeLabel,
-            scoreA: set.scoreA, scoreB: set.scoreB, time: new Date()
+            type: 'action',
+            team: scoringTeam,
+            actionTeam: team,
+            playerName,
+            actionType: actionTypeLabel,
+            category,
+            scoreA: set.scoreA,
+            scoreB: set.scoreB,
+            time: new Date()
         });
 
-        this.playErrorSound();
-        this.animateScore(opposingTeam);
+        // Voice announcement for the action
+        this.announceAction(team, playerName, actionTypeLabel, category);
 
-        // Voice announcement for fault
-        this.announceFault(team, playerName, errorTypeLabel);
-
-        // Service goes to the team that gained the point (opposing team)
-        this.servingTeam = opposingTeam;
+        // Transfer service to the team that gained the point
+        this.servingTeam = scoringTeam;
         this.updateServiceDisplay();
 
+        this.saveActiveMatch();
         this.updateDisplay();
         this.checkSetEnd();
-        this.saveActiveMatch();
     }
 
     // --- Voice Announcement (Text-to-Speech) ---
-    announceFault(team, playerName, errorTypeLabel) {
+
+    /**
+     * Speaks the action via TTS.
+     * Positive format: "{Team Name}, {Player Name}, {Action Type}!"
+     * Negative format: "{Team Name}, {Player Name}, {Action Type}"
+     * @param {string} team - 'A' or 'B'
+     * @param {string} playerName
+     * @param {string} actionTypeLabel
+     * @param {string} category - "positive" or "negative"
+     */
+    announceAction(team, playerName, actionTypeLabel, category) {
         if (!window.speechSynthesis) return;
-        const teamLabel = team === 'A' ? 'Team A' : 'Team B';
-        const text = `${teamLabel}, ${playerName}, ${errorTypeLabel} fault`;
+        const teamName = team === 'A' ? this.match.teamA.name : this.match.teamB.name;
+        let text;
+        if (category === 'positive') {
+            text = `${teamName}, ${playerName}, ${actionTypeLabel}!`;
+        } else {
+            text = `${teamName}, ${playerName}, ${actionTypeLabel}`;
+        }
         const utterance = new SpeechSynthesisUtterance(text);
         utterance.rate = 1.1;
         utterance.pitch = 1.0;
         utterance.volume = 0.8;
         utterance.lang = 'en-US';
-        window.speechSynthesis.cancel(); // Cancel any pending speech
+        window.speechSynthesis.cancel();
         window.speechSynthesis.speak(utterance);
+
+        // After a brief pause, announce the current score (serving team first)
+        this.announceScore();
+    }
+
+    /**
+     * Announces the current match score via TTS after a brief filler pause.
+     * Serving team's score is announced first, followed by the other team's score.
+     * Format: "Score... {ServingTeamScore}, {OtherTeamScore}"
+     */
+    announceScore() {
+        if (!window.speechSynthesis) return;
+        const set = this.getCurrentSet();
+        let servingScore, otherScore;
+        if (this.servingTeam === 'A') {
+            servingScore = set.scoreA;
+            otherScore = set.scoreB;
+        } else {
+            servingScore = set.scoreB;
+            otherScore = set.scoreA;
+        }
+        // Small filler "Score..." followed by the numbers
+        const scoreText = `Score... ${servingScore}, ${otherScore}`;
+        const scoreUtterance = new SpeechSynthesisUtterance(scoreText);
+        scoreUtterance.rate = 1.0;
+        scoreUtterance.pitch = 1.0;
+        scoreUtterance.volume = 0.8;
+        scoreUtterance.lang = 'en-US';
+        // Queue after the action announcement (don't cancel — it queues automatically)
+        window.speechSynthesis.speak(scoreUtterance);
     }
 
     undoLast() {
         const set = this.getCurrentSet();
         if (set.history.length === 0) return;
         const lastEntry = set.history.pop();
-        if (lastEntry.type === 'error') { set.errors.pop(); this.match.allErrors.pop(); }
-        if (set.history.length > 0) {
-            const prev = set.history[set.history.length - 1];
-            set.scoreA = prev.scoreA; set.scoreB = prev.scoreB;
-        } else { set.scoreA = 0; set.scoreB = 0; }
-        this.updateDisplay();
+
+        // Handle new 'action' type history entries
+        if (lastEntry.type === 'action') {
+            // Remove from actions arrays
+            if (set.actions && set.actions.length > 0) set.actions.pop();
+            if (this.match.allActions && this.match.allActions.length > 0) this.match.allActions.pop();
+
+            // Reverse the score based on category
+            if (lastEntry.category === 'positive') {
+                // Positive action: the acting team (actionTeam) scored, so decrease their score
+                if (lastEntry.actionTeam === 'A') set.scoreA--;
+                else set.scoreB--;
+            } else if (lastEntry.category === 'negative') {
+                // Negative action: the opposing team (team field = scoring team) scored
+                if (lastEntry.team === 'A') set.scoreA--;
+                else set.scoreB--;
+            }
+        }
+        // Handle legacy 'error' type history entries (backward compatibility)
+        else if (lastEntry.type === 'error') {
+            if (set.errors && set.errors.length > 0) set.errors.pop();
+            if (this.match.allErrors && this.match.allErrors.length > 0) this.match.allErrors.pop();
+            // Restore scores from previous history entry
+            if (set.history.length > 0) {
+                const prev = set.history[set.history.length - 1];
+                set.scoreA = prev.scoreA; set.scoreB = prev.scoreB;
+            } else { set.scoreA = 0; set.scoreB = 0; }
+        }
+        // Fallback for any other type (e.g., plain score entries)
+        else {
+            if (set.history.length > 0) {
+                const prev = set.history[set.history.length - 1];
+                set.scoreA = prev.scoreA; set.scoreB = prev.scoreB;
+            } else { set.scoreA = 0; set.scoreB = 0; }
+        }
+
         this.saveActiveMatch();
+        this.updateDisplay();
     }
 
     checkSetEnd() {
@@ -1090,7 +1394,7 @@ class BadmintonScoreSheet {
                 setTimeout(() => this.showSummary(), 500);
             } else {
                 this.match.currentSet++;
-                this.match.sets.push({ scoreA: 0, scoreB: 0, history: [], errors: [] });
+                this.match.sets.push({ scoreA: 0, scoreB: 0, history: [], errors: [], actions: [] });
                 this.servingTeam = 'A';
                 this.updateServiceDisplay();
                 this.updateDisplay();
@@ -1143,7 +1447,16 @@ class BadmintonScoreSheet {
         set.history.slice().reverse().forEach(entry => {
             const div = document.createElement('div');
             const time = new Date(entry.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            if (entry.type === 'error') {
+            if (entry.type === 'action') {
+                if (entry.category === 'positive') {
+                    div.className = 'point-entry team-' + entry.team.toLowerCase();
+                    div.innerHTML = `<span>🏆 ${entry.actionType} by ${entry.playerName} → Point to Team ${entry.team}</span><span class="timestamp">${entry.scoreA}-${entry.scoreB} | ${time}</span>`;
+                } else {
+                    div.className = 'point-entry error';
+                    div.innerHTML = `<span>⚠️ ${entry.actionType} by ${entry.playerName} → Point to Team ${entry.team}</span><span class="timestamp">${entry.scoreA}-${entry.scoreB} | ${time}</span>`;
+                }
+            } else if (entry.type === 'error') {
+                // Legacy format (backward compat for old matches)
                 div.className = 'point-entry error';
                 div.innerHTML = `<span>⚠️ ${entry.errorType} by ${entry.playerName} → Point to Team ${entry.team}</span><span class="timestamp">${entry.scoreA}-${entry.scoreB} | ${time}</span>`;
             } else {
@@ -1188,29 +1501,74 @@ class BadmintonScoreSheet {
         setHTML += '</table>';
         document.getElementById('set-results').innerHTML = setHTML;
 
-        const errorsA = this.match.allErrors.filter(e => e.team === 'A').length;
-        const errorsB = this.match.allErrors.filter(e => e.team === 'B').length;
-        document.getElementById('error-summary').innerHTML = `<table>
-            <tr><th>Team</th><th>Total Errors</th></tr>
-            <tr><td>${this.match.teamA.name}</td><td>${errorsA}</td></tr>
-            <tr><td>${this.match.teamB.name}</td><td>${errorsB}</td></tr>
-            <tr><td><strong>Total</strong></td><td><strong>${errorsA + errorsB}</strong></td></tr></table>`;
+        // Build per-player performance summary from allActions
+        const players = [
+            { name: this.match.teamA.players[0], team: 'A', index: 0 },
+            { name: this.match.teamA.players[1], team: 'A', index: 1 },
+            { name: this.match.teamB.players[0], team: 'B', index: 0 },
+            { name: this.match.teamB.players[1], team: 'B', index: 1 }
+        ];
 
-        const playerErrorMap = {};
-        this.match.allErrors.forEach(e => { playerErrorMap[e.playerName] = (playerErrorMap[e.playerName] || 0) + 1; });
-        let peHTML = '<table><tr><th>Player</th><th>Errors</th></tr>';
-        Object.entries(playerErrorMap).sort((a,b) => b[1]-a[1]).forEach(([n,c]) => { peHTML += `<tr><td>${n}</td><td>${c}</td></tr>`; });
-        if (!Object.keys(playerErrorMap).length) peHTML += '<tr><td colspan="2">No errors recorded</td></tr>';
-        peHTML += '</table>';
-        document.getElementById('player-errors').innerHTML = peHTML;
+        const positiveTypes = [
+            { key: 'smash', label: 'Smash' },
+            { key: 'drop', label: 'Drop' },
+            { key: 'placed', label: 'Placed' }
+        ];
+        const negativeTypes = [
+            { key: 'net', label: 'Net fault' },
+            { key: 'out', label: 'Out' },
+            { key: 'service', label: 'Service fault' },
+            { key: 'unforced', label: 'Unforced error' },
+            { key: 'carry', label: 'Carry' }
+        ];
 
-        const errorTypeMap = {};
-        this.match.allErrors.forEach(e => { errorTypeMap[e.errorTypeLabel] = (errorTypeMap[e.errorTypeLabel] || 0) + 1; });
-        let etHTML = '<table><tr><th>Error Type</th><th>Count</th></tr>';
-        Object.entries(errorTypeMap).sort((a,b) => b[1]-a[1]).forEach(([t,c]) => { etHTML += `<tr><td>${t}</td><td>${c}</td></tr>`; });
-        if (!Object.keys(errorTypeMap).length) etHTML += '<tr><td colspan="2">No errors recorded</td></tr>';
-        etHTML += '</table>';
-        document.getElementById('error-types-summary').innerHTML = etHTML;
+        let perfHTML = '';
+        players.forEach(player => {
+            const playerActions = this.match.allActions.filter(
+                a => a.team === player.team && a.playerIndex === player.index
+            );
+
+            // Count each action type
+            const counts = {};
+            playerActions.forEach(a => {
+                counts[a.actionType] = (counts[a.actionType] || 0) + 1;
+            });
+
+            // Calculate totals
+            const totalPositive = positiveTypes.reduce((sum, t) => sum + (counts[t.key] || 0), 0);
+            const totalNegative = negativeTypes.reduce((sum, t) => sum + (counts[t.key] || 0), 0);
+
+            perfHTML += `<div class="player-performance-block">`;
+            perfHTML += `<h4>${player.name} (Team ${player.team})</h4>`;
+
+            // Positive actions sub-section
+            perfHTML += `<div class="performance-subsection positive-actions">`;
+            perfHTML += `<strong>Positive Actions</strong>`;
+            perfHTML += `<table><tr><th>Action</th><th>Count</th></tr>`;
+            positiveTypes.forEach(t => {
+                perfHTML += `<tr><td>${t.label}</td><td>${counts[t.key] || 0}</td></tr>`;
+            });
+            perfHTML += `<tr class="total-row"><td><strong>Total Positive</strong></td><td><strong>${totalPositive}</strong></td></tr>`;
+            perfHTML += `</table></div>`;
+
+            // Negative actions sub-section
+            perfHTML += `<div class="performance-subsection negative-actions">`;
+            perfHTML += `<strong>Negative Actions</strong>`;
+            perfHTML += `<table><tr><th>Action</th><th>Count</th></tr>`;
+            negativeTypes.forEach(t => {
+                perfHTML += `<tr><td>${t.label}</td><td>${counts[t.key] || 0}</td></tr>`;
+            });
+            perfHTML += `<tr class="total-row"><td><strong>Total Negative</strong></td><td><strong>${totalNegative}</strong></td></tr>`;
+            perfHTML += `</table></div>`;
+
+            perfHTML += `</div>`;
+        });
+
+        if (!this.match.allActions.length) {
+            perfHTML = '<p>No actions recorded</p>';
+        }
+
+        document.getElementById('performance-summary').innerHTML = perfHTML;
     }
 
     getMatchDuration() {
@@ -1239,10 +1597,18 @@ class BadmintonScoreSheet {
         text += `  ${'Set'.padEnd(8)}${'Team A'.padEnd(10)}Team B\n`;
         this.match.sets.forEach((set, i) => { text += `  ${('Set '+(i+1)).padEnd(8)}${String(set.scoreA).padEnd(10)}${set.scoreB}\n`; });
 
-        const errorsA = this.match.allErrors.filter(e => e.team === 'A').length;
-        const errorsB = this.match.allErrors.filter(e => e.team === 'B').length;
-        text += `\n───────────────────────────────────────────\n ERROR SUMMARY\n───────────────────────────────────────────\n`;
-        text += `  ${this.match.teamA.name}: ${errorsA} errors\n  ${this.match.teamB.name}: ${errorsB} errors\n  Total: ${errorsA+errorsB} errors\n`;
+        const errorsA = (this.match.allErrors || []).filter(e => e.team === 'A').length;
+        const errorsB = (this.match.allErrors || []).filter(e => e.team === 'B').length;
+        const actionsA = (this.match.allActions || []).filter(a => a.team === 'A');
+        const actionsB = (this.match.allActions || []).filter(a => a.team === 'B');
+        const positiveA = actionsA.filter(a => a.category === 'positive').length;
+        const negativeA = actionsA.filter(a => a.category === 'negative').length;
+        const positiveB = actionsB.filter(a => a.category === 'positive').length;
+        const negativeB = actionsB.filter(a => a.category === 'negative').length;
+        text += `\n───────────────────────────────────────────\n PERFORMANCE SUMMARY\n───────────────────────────────────────────\n`;
+        text += `  ${this.match.teamA.name}: ${positiveA} winning shots, ${negativeA + errorsA} faults\n`;
+        text += `  ${this.match.teamB.name}: ${positiveB} winning shots, ${negativeB + errorsB} faults\n`;
+        text += `  Total actions: ${actionsA.length + actionsB.length + errorsA + errorsB}\n`;
         text += '═══════════════════════════════════════════\n';
 
         const blob = new Blob([text], { type: 'text/plain' });
@@ -1306,9 +1672,10 @@ class BadmintonScoreSheet {
         ctx.font = '13px Segoe UI';
         ctx.fillText(`${new Date().toLocaleDateString()} | Duration: ${this.getMatchDuration()}`, 300, 350);
 
-        // Errors
-        const totalErrors = this.match.allErrors.length;
-        ctx.fillText(`Total Errors: ${totalErrors}`, 300, 375);
+        // Performance
+        const totalActions = (this.match.allActions || []).length;
+        const totalErrors = (this.match.allErrors || []).length;
+        ctx.fillText(`Total Actions: ${totalActions + totalErrors}`, 300, 375);
 
         // Show preview and download link
         const dataUrl = canvas.toDataURL('image/png');

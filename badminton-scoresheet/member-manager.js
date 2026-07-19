@@ -192,6 +192,72 @@ class MemberManager {
         }
     }
 
+    // ─── Merge Members ────────────────────────────────────────────────────
+
+    /**
+     * Merge one member (fromMemberId) into another (toMemberId).
+     * Updates all match history records, replacing the "from" name with the "to" name.
+     * Deletes the "from" member after merging.
+     * @returns {number} Count of matches updated
+     * @throws {Error} If members not found or same member
+     */
+    mergeMembers(fromMemberId, toMemberId) {
+        const fromMember = this.getMemberById(fromMemberId);
+        const toMember = this.getMemberById(toMemberId);
+        if (!fromMember || !toMember) throw new Error('Member not found.');
+        if (fromMemberId === toMemberId) throw new Error('Cannot merge a member with itself.');
+
+        const fromName = fromMember.name;
+        const toName = toMember.name;
+
+        // Update all match history records
+        const historyKey = this.app.eventManager.getMatchHistoryKey();
+        let history = this.app.getMatchHistory();
+        let updatedCount = 0;
+
+        history = history.map(match => {
+            let modified = false;
+
+            // Check and replace in teamA players
+            match.teamA.players = match.teamA.players.map(p => {
+                if (p === fromName) { modified = true; return toName; }
+                return p;
+            });
+
+            // Check and replace in teamB players
+            match.teamB.players = match.teamB.players.map(p => {
+                if (p === fromName) { modified = true; return toName; }
+                return p;
+            });
+
+            if (modified) {
+                // Regenerate team names
+                match.teamA.name = `${match.teamA.players[0]} / ${match.teamA.players[1]}`;
+                match.teamB.name = `${match.teamB.players[0]} / ${match.teamB.players[1]}`;
+                updatedCount++;
+            }
+
+            return match;
+        });
+
+        // Save updated history
+        localStorage.setItem(historyKey, JSON.stringify(history));
+
+        // Sync modified matches to Firebase
+        if (updatedCount > 0) {
+            history.filter(m => {
+                return m.teamA.players.includes(toName) || m.teamB.players.includes(toName);
+            }).forEach(m => {
+                this.app.sync?.saveMatch(m);
+            });
+        }
+
+        // Delete the "from" member
+        this.deleteMember(fromMemberId);
+
+        return updatedCount;
+    }
+
     // ─── Event Lifecycle ────────────────────────────────────────────────────
 
     /**
@@ -232,6 +298,7 @@ class MemberManager {
             <div class="member-item" data-id="${m.id}">
                 <span class="member-item-name">${m.name}</span>
                 <div class="member-item-actions">
+                    <button class="btn-merge-member" data-id="${m.id}" title="Merge into another member">🔀</button>
                     <button class="btn-edit-member" data-id="${m.id}" title="Edit">✏️</button>
                     <button class="btn-delete-member" data-id="${m.id}" title="Delete">🗑️</button>
                 </div>
@@ -267,6 +334,43 @@ class MemberManager {
                     this.deleteMember(id);
                     this.renderMembersPage();
                     this.app?.populateMemberPickers();
+                }
+            });
+        });
+
+        // Attach merge handlers
+        container.querySelectorAll('.btn-merge-member').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const fromId = e.currentTarget.dataset.id;
+                const fromMember = this.getMemberById(fromId);
+                if (!fromMember) return;
+
+                // Build list of other members for selection
+                const others = this.members.filter(m => m.id !== fromId);
+                if (others.length === 0) {
+                    alert('No other members to merge with.');
+                    return;
+                }
+
+                const options = others.map(m => m.name).join('\n');
+                const targetName = prompt(`Merge "${fromMember.name}" into which member?\n\nAvailable:\n${options}\n\nType the correct name:`);
+                if (!targetName) return;
+
+                const toMember = this.members.find(m => m.name.toLowerCase() === targetName.trim().toLowerCase());
+                if (!toMember) {
+                    alert('Member not found. Please type an exact name from the list.');
+                    return;
+                }
+
+                if (confirm(`Merge "${fromMember.name}" → "${toMember.name}"?\n\nAll match history will be updated. "${fromMember.name}" will be removed.`)) {
+                    try {
+                        const count = this.mergeMembers(fromId, toMember.id);
+                        alert(`Merged! ${count} match(es) updated.`);
+                        this.renderMembersPage();
+                        this.app?.populateMemberPickers();
+                    } catch (err) {
+                        alert(err.message);
+                    }
                 }
             });
         });

@@ -32,6 +32,7 @@ class EventManager {
     /**
      * Initialize the EventManager: load events from localStorage,
      * ensure a default event exists, and set the active event.
+     * If Firebase is available, sync events from cloud first.
      */
     init() {
         this._migrateFromFlatKeys();
@@ -49,6 +50,79 @@ class EventManager {
     }
 
     /**
+     * Async initialization - called AFTER FirebaseSync is ready.
+     * Syncs events list from Firebase to handle multi-device scenarios.
+     */
+    async initFromFirebase() {
+        const db = this.app?.sync?.db;
+        if (!db || !this.app?.sync?.available) return;
+
+        try {
+            // Fetch events list from Firebase
+            const doc = await db.collection('appConfig').doc('events').get();
+            if (doc.exists) {
+                const remoteEvents = doc.data().list || [];
+                if (remoteEvents.length > 0) {
+                    // Merge: use remote events as source of truth for IDs/names
+                    // but keep any local-only events that haven't synced yet
+                    const merged = this._mergeEventLists(this.events, remoteEvents);
+                    this.events = merged;
+                    this._saveEvents();
+                    this._initActiveEvent();
+                    console.log('[EventManager] Synced events from Firebase:', merged.length, 'events');
+                }
+            } else {
+                // No events in Firebase yet - push local events up
+                await this._saveEventsToFirebase();
+            }
+        } catch (e) {
+            console.warn('[EventManager] Failed to sync events from Firebase:', e);
+        }
+    }
+
+    /**
+     * Merge local and remote event lists.
+     * Remote is treated as canonical for existing IDs.
+     * Local-only events (not in remote) are preserved.
+     */
+    _mergeEventLists(local, remote) {
+        const mergedMap = new Map();
+
+        // Add all remote events (canonical)
+        for (const event of remote) {
+            if (event && event.id) {
+                mergedMap.set(event.id, event);
+            }
+        }
+
+        // Add local-only events (not present in remote)
+        for (const event of local) {
+            if (event && event.id && !mergedMap.has(event.id)) {
+                mergedMap.set(event.id, event);
+            }
+        }
+
+        return Array.from(mergedMap.values());
+    }
+
+    /**
+     * Save events list to Firebase (called on create/rename/delete).
+     */
+    async _saveEventsToFirebase() {
+        const db = this.app?.sync?.db;
+        if (!db || !this.app?.sync?.available) return;
+
+        try {
+            await db.collection('appConfig').doc('events').set({
+                list: this.events,
+                lastModified: Date.now()
+            });
+        } catch (e) {
+            console.warn('[EventManager] Failed to save events to Firebase:', e);
+        }
+    }
+
+    /**
      * Creates a default "Morning Batch" event if no events exist.
      */
     ensureDefaultEvent() {
@@ -61,6 +135,7 @@ class EventManager {
             };
             this.events.push(defaultEvent);
             this._saveEvents();
+            // Firebase sync will happen in initFromFirebase() after sync is ready
         }
     }
 
@@ -111,6 +186,7 @@ class EventManager {
 
         this.events.push(event);
         this._saveEvents();
+        this._saveEventsToFirebase();
         this._notifyApp();
         return event;
     }
@@ -133,6 +209,7 @@ class EventManager {
 
         event.name = newName.trim();
         this._saveEvents();
+        this._saveEventsToFirebase();
         this._notifyApp();
     }
 
@@ -243,6 +320,7 @@ class EventManager {
         // Remove the event from the list
         this.events.splice(eventIndex, 1);
         this._saveEvents();
+        this._saveEventsToFirebase();
 
         // Remove all scoped localStorage keys for this event
         localStorage.removeItem(this.getMatchHistoryKey(eventId));
