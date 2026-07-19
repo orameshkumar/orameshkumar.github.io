@@ -1257,8 +1257,8 @@ class BadmintonScoreSheet {
             time: new Date()
         });
 
-        // Voice announcement for the action
-        this.announceAction(team, playerName, actionTypeLabel, category);
+        // Voice announcement for the action (pass scoringTeam for correct score order)
+        this.announceAction(team, playerName, actionTypeLabel, category, scoringTeam);
 
         // Transfer service to the team that gained the point
         this.servingTeam = scoringTeam;
@@ -1280,7 +1280,7 @@ class BadmintonScoreSheet {
      * @param {string} actionTypeLabel
      * @param {string} category - "positive" or "negative"
      */
-    announceAction(team, playerName, actionTypeLabel, category) {
+    announceAction(team, playerName, actionTypeLabel, category, scoringTeam) {
         if (!window.speechSynthesis) return;
         // Voice format: "{Player Name}, {Action Type}" — no team name
         let text;
@@ -1297,28 +1297,30 @@ class BadmintonScoreSheet {
         window.speechSynthesis.cancel();
         window.speechSynthesis.speak(utterance);
 
-        // After a brief pause, announce the current score (scoring team first, then opponent)
-        this.announceScore();
+        // After a brief pause, announce the current score (scoring team's score first)
+        this.announceScore(scoringTeam);
     }
 
     /**
-     * Announces the current match score via TTS after a brief filler pause.
-     * The team that scored (owns service) gets their score announced first.
-     * Format: "{ScoringTeamScore}, {OpponentScore}"
+     * Announces the current match score via TTS.
+     * The team that just scored gets their score announced first, then the opponent's score.
+     * - Positive action by Team A: Team A scored → A's score first, B's score second
+     * - Negative action by Team A: Team B scored → B's score first, A's score second
+     * @param {string} scoringTeam - 'A' or 'B' — the team that just gained the point
      */
-    announceScore() {
+    announceScore(scoringTeam) {
         if (!window.speechSynthesis) return;
         const set = this.getCurrentSet();
-        let servingScore, otherScore;
-        if (this.servingTeam === 'A') {
-            servingScore = set.scoreA;
-            otherScore = set.scoreB;
+        let firstScore, secondScore;
+        if (scoringTeam === 'A') {
+            firstScore = set.scoreA;
+            secondScore = set.scoreB;
         } else {
-            servingScore = set.scoreB;
-            otherScore = set.scoreA;
+            firstScore = set.scoreB;
+            secondScore = set.scoreA;
         }
-        // Direct score announcement — scoring team first
-        const scoreText = `${servingScore} ... ${otherScore}`;
+        // Scoring team's score first, then opponent's score
+        const scoreText = `${firstScore} ... ${secondScore}`;
         const scoreUtterance = new SpeechSynthesisUtterance(scoreText);
         scoreUtterance.rate = 1.0;
         scoreUtterance.pitch = 1.0;
@@ -1502,9 +1504,9 @@ class BadmintonScoreSheet {
         document.getElementById('set-results').innerHTML = setHTML;
 
         // Build per-player performance summary from allActions
-        // Layout: single table, players as columns, action types as rows (vertical text)
-        // Color-coded: green for positive actions, red for negative actions
-        // Summary column at the end
+        // Layout: players as ROWS, action types as COLUMNS (vertically-texted headers)
+        // Color-coded: green columns for positive, red columns for negative
+        // Summary column at the end for each player's totals
         const players = [
             { name: this.match.teamA.players[0], team: 'A', index: 0 },
             { name: this.match.teamA.players[1], team: 'A', index: 1 },
@@ -1520,8 +1522,8 @@ class BadmintonScoreSheet {
         const negativeTypes = [
             { key: 'net', label: 'Net' },
             { key: 'out', label: 'Out' },
-            { key: 'service', label: 'Service' },
-            { key: 'unforced', label: 'Unforced' },
+            { key: 'service', label: 'Svc' },
+            { key: 'unforced', label: 'UF' },
             { key: 'carry', label: 'Carry' }
         ];
 
@@ -1542,56 +1544,53 @@ class BadmintonScoreSheet {
             perfHTML = '<p>No actions recorded</p>';
         } else {
             perfHTML = `<div class="perf-table-wrapper"><table class="perf-table">`;
-            // Header row: Action | Player1 | Player2 | Player3 | Player4 | Summary
-            perfHTML += `<thead><tr><th class="perf-action-col"></th>`;
-            playerCounts.forEach(p => {
-                perfHTML += `<th class="perf-player-col">${p.name}</th>`;
-            });
-            perfHTML += `<th class="perf-summary-col">Total</th></tr></thead>`;
-            perfHTML += `<tbody>`;
 
-            // Positive action rows (green-tinted)
+            // Header row: Player | positive columns... | +Total | negative columns... | -Total
+            perfHTML += `<thead><tr>`;
+            perfHTML += `<th class="perf-player-header">Player</th>`;
+            positiveTypes.forEach(t => {
+                perfHTML += `<th class="perf-col-positive">${t.label}</th>`;
+            });
+            perfHTML += `<th class="perf-col-positive perf-col-total">+</th>`;
+            negativeTypes.forEach(t => {
+                perfHTML += `<th class="perf-col-negative">${t.label}</th>`;
+            });
+            perfHTML += `<th class="perf-col-negative perf-col-total">-</th>`;
+            perfHTML += `</tr></thead>`;
+
+            // Body: one row per player
+            perfHTML += `<tbody>`;
+            playerCounts.forEach(p => {
+                perfHTML += `<tr>`;
+                perfHTML += `<td class="perf-player-name">${p.name}</td>`;
+                positiveTypes.forEach(t => {
+                    const val = p.counts[t.key] || 0;
+                    perfHTML += `<td class="perf-cell perf-cell-positive">${val || '-'}</td>`;
+                });
+                perfHTML += `<td class="perf-cell perf-cell-positive perf-cell-total"><strong>${p.totalPositive}</strong></td>`;
+                negativeTypes.forEach(t => {
+                    const val = p.counts[t.key] || 0;
+                    perfHTML += `<td class="perf-cell perf-cell-negative">${val || '-'}</td>`;
+                });
+                perfHTML += `<td class="perf-cell perf-cell-negative perf-cell-total"><strong>${p.totalNegative}</strong></td>`;
+                perfHTML += `</tr>`;
+            });
+
+            // Summary row: totals across all players
+            perfHTML += `<tr class="perf-summary-row">`;
+            perfHTML += `<td class="perf-player-name"><strong>All</strong></td>`;
             positiveTypes.forEach(t => {
                 const total = playerCounts.reduce((sum, p) => sum + (p.counts[t.key] || 0), 0);
-                perfHTML += `<tr class="perf-row-positive">`;
-                perfHTML += `<td class="perf-action-label"><span class="perf-vertical">${t.label}</span></td>`;
-                playerCounts.forEach(p => {
-                    perfHTML += `<td class="perf-cell perf-cell-positive">${p.counts[t.key] || 0}</td>`;
-                });
-                perfHTML += `<td class="perf-cell perf-cell-summary">${total}</td>`;
-                perfHTML += `</tr>`;
+                perfHTML += `<td class="perf-cell perf-cell-positive"><strong>${total}</strong></td>`;
             });
-
-            // Total positive row
             const grandPositive = playerCounts.reduce((sum, p) => sum + p.totalPositive, 0);
-            perfHTML += `<tr class="perf-row-total-positive">`;
-            perfHTML += `<td class="perf-action-label"><strong>Positive</strong></td>`;
-            playerCounts.forEach(p => {
-                perfHTML += `<td class="perf-cell perf-cell-positive"><strong>${p.totalPositive}</strong></td>`;
-            });
-            perfHTML += `<td class="perf-cell perf-cell-summary"><strong>${grandPositive}</strong></td>`;
-            perfHTML += `</tr>`;
-
-            // Negative action rows (red-tinted)
+            perfHTML += `<td class="perf-cell perf-cell-positive perf-cell-total"><strong>${grandPositive}</strong></td>`;
             negativeTypes.forEach(t => {
                 const total = playerCounts.reduce((sum, p) => sum + (p.counts[t.key] || 0), 0);
-                perfHTML += `<tr class="perf-row-negative">`;
-                perfHTML += `<td class="perf-action-label"><span class="perf-vertical">${t.label}</span></td>`;
-                playerCounts.forEach(p => {
-                    perfHTML += `<td class="perf-cell perf-cell-negative">${p.counts[t.key] || 0}</td>`;
-                });
-                perfHTML += `<td class="perf-cell perf-cell-summary">${total}</td>`;
-                perfHTML += `</tr>`;
+                perfHTML += `<td class="perf-cell perf-cell-negative"><strong>${total}</strong></td>`;
             });
-
-            // Total negative row
             const grandNegative = playerCounts.reduce((sum, p) => sum + p.totalNegative, 0);
-            perfHTML += `<tr class="perf-row-total-negative">`;
-            perfHTML += `<td class="perf-action-label"><strong>Negative</strong></td>`;
-            playerCounts.forEach(p => {
-                perfHTML += `<td class="perf-cell perf-cell-negative"><strong>${p.totalNegative}</strong></td>`;
-            });
-            perfHTML += `<td class="perf-cell perf-cell-summary"><strong>${grandNegative}</strong></td>`;
+            perfHTML += `<td class="perf-cell perf-cell-negative perf-cell-total"><strong>${grandNegative}</strong></td>`;
             perfHTML += `</tr>`;
 
             perfHTML += `</tbody></table></div>`;

@@ -678,124 +678,127 @@ h3 {
 .perf-table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 0.85rem;
+    font-size: 0.82rem;
     text-align: center;
 }
 
 .perf-table thead th {
-    padding: 8px 6px;
-    font-weight: 700;
-    font-size: 0.8rem;
-    color: var(--text-secondary);
-    border-bottom: 2px solid var(--border-color);
-    white-space: nowrap;
-}
-
-.perf-action-col {
-    width: 60px;
-    text-align: left;
-}
-
-.perf-player-col {
-    min-width: 60px;
-}
-
-.perf-summary-col {
-    min-width: 50px;
-    background: rgba(255, 255, 255, 0.03);
-}
-
-.perf-action-label {
-    text-align: left;
-    padding: 6px 8px;
-    font-size: 0.78rem;
+    padding: 8px 4px;
+    font-weight: 600;
+    font-size: 0.7rem;
     color: var(--text-muted);
+    border-bottom: 2px solid var(--border-color);
+    vertical-align: bottom;
     white-space: nowrap;
 }
 
-.perf-vertical {
-    writing-mode: vertical-rl;
-    text-orientation: mixed;
-    transform: rotate(180deg);
-    display: inline-block;
-    font-size: 0.72rem;
-    letter-spacing: 0.5px;
+.perf-player-header {
+    text-align: left;
+    padding-left: 8px;
+    font-size: 0.75rem;
+    min-width: 70px;
 }
 
+/* Positive column headers */
+.perf-col-positive {
+    color: var(--color-positive, #4CAF50);
+    background: rgba(76, 175, 80, 0.04);
+}
+
+/* Negative column headers */
+.perf-col-negative {
+    color: var(--color-negative, #f44336);
+    background: rgba(244, 67, 54, 0.04);
+}
+
+/* Total columns */
+.perf-col-total {
+    border-left: 1px solid var(--border-color);
+    font-weight: 700;
+}
+
+/* Player name cell */
+.perf-player-name {
+    text-align: left;
+    padding: 8px;
+    font-weight: 600;
+    font-size: 0.8rem;
+    color: var(--text-primary);
+    white-space: nowrap;
+    max-width: 90px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Data cells */
 .perf-cell {
     padding: 6px 4px;
     font-weight: 500;
+    min-width: 28px;
 }
 
-/* Positive action cells — green-tinted */
 .perf-cell-positive {
     color: var(--color-positive, #4CAF50);
-    background: rgba(76, 175, 80, 0.06);
+    background: rgba(76, 175, 80, 0.05);
 }
 
-.perf-row-total-positive .perf-cell-positive {
-    border-top: 2px solid var(--color-positive, #4CAF50);
-    background: rgba(76, 175, 80, 0.1);
-}
-
-/* Negative action cells — red-tinted */
 .perf-cell-negative {
     color: var(--color-negative, #f44336);
-    background: rgba(244, 67, 54, 0.06);
+    background: rgba(244, 67, 54, 0.05);
 }
 
-.perf-row-total-negative .perf-cell-negative {
-    border-top: 2px solid var(--color-negative, #f44336);
-    background: rgba(244, 67, 54, 0.1);
-}
-
-/* Summary column */
-.perf-cell-summary {
-    color: var(--text-primary);
-    background: rgba(255, 255, 255, 0.04);
-    font-weight: 600;
+.perf-cell-total {
     border-left: 1px solid var(--border-color);
+    font-weight: 700;
 }
 
-.perf-row-total-positive .perf-cell-summary {
-    color: var(--color-positive, #4CAF50);
-    border-top: 2px solid var(--color-positive, #4CAF50);
+/* Summary row (totals across all players) */
+.perf-summary-row {
+    border-top: 2px solid var(--border-color);
 }
 
-.perf-row-total-negative .perf-cell-summary {
-    color: var(--color-negative, #f44336);
-    border-top: 2px solid var(--color-negative, #f44336);
+.perf-summary-row .perf-cell-positive {
+    background: rgba(76, 175, 80, 0.12);
 }
 
-/* Alternating row separation */
-.perf-row-positive:first-child td,
-.perf-row-negative:first-child td {
-    padding-top: 10px;
+.perf-summary-row .perf-cell-negative {
+    background: rgba(244, 67, 54, 0.12);
+}
+
+.perf-summary-row .perf-player-name {
+    color: var(--text-muted);
 }
 
 /* Light theme adjustments */
+[data-theme="light"] .perf-col-positive {
+    background: rgba(46, 125, 50, 0.04);
+}
+
+[data-theme="light"] .perf-col-negative {
+    background: rgba(198, 40, 40, 0.04);
+}
+
 [data-theme="light"] .perf-cell-positive {
-    background: rgba(46, 125, 50, 0.06);
+    background: rgba(46, 125, 50, 0.05);
 }
 
 [data-theme="light"] .perf-cell-negative {
-    background: rgba(198, 40, 40, 0.06);
-}
-
-[data-theme="light"] .perf-cell-summary {
-    background: rgba(0, 0, 0, 0.02);
+    background: rgba(198, 40, 40, 0.05);
 }
 
 /* Mobile responsive */
 @media (max-width: 480px) {
     .perf-table {
-        font-size: 0.75rem;
-    }
-    .perf-vertical {
-        font-size: 0.65rem;
+        font-size: 0.72rem;
     }
     .perf-cell {
         padding: 4px 2px;
+        min-width: 22px;
+    }
+    .perf-player-name {
+        padding: 6px 4px;
+        font-size: 0.72rem;
+        max-width: 65px;
     }
 }
 
