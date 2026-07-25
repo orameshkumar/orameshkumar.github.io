@@ -545,7 +545,8 @@ class BadmintonScoreSheet {
             setsWon: this.match.setsWon,
             winner: this.match.winner,
             errors: totalErrors + totalActions,
-            duration: this.getMatchDuration()
+            duration: this.getMatchDuration(),
+            allActions: this.match.allActions || []
         };
         history.unshift(record);
         // Keep last 100 matches
@@ -1440,6 +1441,33 @@ class BadmintonScoreSheet {
 
         this.updateServiceDisplay();
         this.renderHistory();
+        this.updateLivePerformance();
+    }
+
+    updateLivePerformance() {
+        if (!this.match || !this.match.allActions) return;
+
+        const players = [
+            { id: 'live-perf-a1', team: 'A', index: 0 },
+            { id: 'live-perf-a2', team: 'A', index: 1 },
+            { id: 'live-perf-b1', team: 'B', index: 0 },
+            { id: 'live-perf-b2', team: 'B', index: 1 }
+        ];
+
+        players.forEach(p => {
+            const el = document.getElementById(p.id);
+            if (!el) return;
+
+            const actions = this.match.allActions.filter(
+                a => a.team === p.team && a.playerIndex === p.index
+            );
+            const pos = actions.filter(a => a.category === 'positive').length;
+            const neg = actions.filter(a => a.category === 'negative').length;
+
+            el.textContent = `+${pos} / -${neg}`;
+            el.classList.toggle('has-positive', pos > 0);
+            el.classList.toggle('has-negative', neg > 0);
+        });
     }
 
     renderHistory() {
@@ -1546,16 +1574,17 @@ class BadmintonScoreSheet {
             perfHTML = `<div class="perf-table-wrapper"><table class="perf-table">`;
 
             // Header row: Player | positive columns... | +Total | negative columns... | -Total
+            // Labels are rendered vertically (bottom-to-top) using .perf-vertical span
             perfHTML += `<thead><tr>`;
             perfHTML += `<th class="perf-player-header">Player</th>`;
             positiveTypes.forEach(t => {
-                perfHTML += `<th class="perf-col-positive">${t.label}</th>`;
+                perfHTML += `<th class="perf-col-positive"><span class="perf-vertical">${t.label}</span></th>`;
             });
-            perfHTML += `<th class="perf-col-positive perf-col-total">+</th>`;
+            perfHTML += `<th class="perf-col-positive perf-col-total"><span class="perf-vertical">+</span></th>`;
             negativeTypes.forEach(t => {
-                perfHTML += `<th class="perf-col-negative">${t.label}</th>`;
+                perfHTML += `<th class="perf-col-negative"><span class="perf-vertical">${t.label}</span></th>`;
             });
-            perfHTML += `<th class="perf-col-negative perf-col-total">-</th>`;
+            perfHTML += `<th class="perf-col-negative perf-col-total"><span class="perf-vertical">-</span></th>`;
             perfHTML += `</tr></thead>`;
 
             // Body: one row per player
@@ -1961,6 +1990,8 @@ class BadmintonScoreSheet {
 
         if (sorted.length === 0) {
             container.innerHTML = dateInfo + '<p style="text-align:center; color:var(--text-muted); padding:40px;">No match data found for this date range.</p>';
+            const perfContainer = document.getElementById('leaderboard-performance');
+            if (perfContainer) perfContainer.innerHTML = '<p style="text-align:center; color:var(--text-muted); padding:20px;">No performance data recorded yet.</p>';
             return;
         }
 
@@ -1978,6 +2009,117 @@ class BadmintonScoreSheet {
         });
         html += '</table>';
         container.innerHTML = html;
+
+        // --- Player Performance Aggregation (same player order as leaderboard) ---
+        this.renderLeaderboardPerformance(filtered, sorted);
+    }
+
+    renderLeaderboardPerformance(filtered, sorted) {
+        const perfContainer = document.getElementById('leaderboard-performance');
+        if (!perfContainer) return;
+
+        const positiveTypes = [
+            { key: 'smash', label: 'Smash' },
+            { key: 'drop', label: 'Drop' },
+            { key: 'placed', label: 'Placed' }
+        ];
+        const negativeTypes = [
+            { key: 'net', label: 'Net' },
+            { key: 'out', label: 'Out' },
+            { key: 'service', label: 'Svc' },
+            { key: 'unforced', label: 'UF' },
+            { key: 'carry', label: 'Carry' }
+        ];
+
+        // Aggregate action counts per player across all filtered matches
+        const playerPerf = {};
+        sorted.forEach(p => {
+            playerPerf[p.name] = {};
+        });
+
+        filtered.forEach(m => {
+            if (!m.allActions || !Array.isArray(m.allActions)) return;
+            const allPlayers = [
+                { name: m.teamA.players[0], team: 'A', index: 0 },
+                { name: m.teamA.players[1], team: 'A', index: 1 },
+                { name: m.teamB.players[0], team: 'B', index: 0 },
+                { name: m.teamB.players[1], team: 'B', index: 1 }
+            ];
+            m.allActions.forEach(action => {
+                const player = allPlayers.find(p => p.team === action.team && p.index === action.playerIndex);
+                if (!player || !playerPerf[player.name]) return;
+                const counts = playerPerf[player.name];
+                counts[action.actionType] = (counts[action.actionType] || 0) + 1;
+            });
+        });
+
+        // Check if any actions exist across all matches
+        const hasAnyActions = Object.values(playerPerf).some(counts => Object.keys(counts).length > 0);
+        if (!hasAnyActions) {
+            perfContainer.innerHTML = '<p style="text-align:center; color:var(--text-muted); padding:20px;">No performance data recorded yet.</p>';
+            return;
+        }
+
+        // Build performance table with vertical headers (same as match summary)
+        let perfHTML = `<div class="perf-table-wrapper"><table class="perf-table">`;
+        perfHTML += `<thead><tr>`;
+        perfHTML += `<th class="perf-player-header">Player</th>`;
+        positiveTypes.forEach(t => {
+            perfHTML += `<th class="perf-col-positive"><span class="perf-vertical">${t.label}</span></th>`;
+        });
+        perfHTML += `<th class="perf-col-positive perf-col-total"><span class="perf-vertical">+</span></th>`;
+        negativeTypes.forEach(t => {
+            perfHTML += `<th class="perf-col-negative"><span class="perf-vertical">${t.label}</span></th>`;
+        });
+        perfHTML += `<th class="perf-col-negative perf-col-total"><span class="perf-vertical">-</span></th>`;
+        perfHTML += `</tr></thead>`;
+
+        perfHTML += `<tbody>`;
+        sorted.forEach(p => {
+            const counts = playerPerf[p.name] || {};
+            const totalPositive = positiveTypes.reduce((sum, t) => sum + (counts[t.key] || 0), 0);
+            const totalNegative = negativeTypes.reduce((sum, t) => sum + (counts[t.key] || 0), 0);
+
+            perfHTML += `<tr>`;
+            perfHTML += `<td class="perf-player-name">${p.name}</td>`;
+            positiveTypes.forEach(t => {
+                const val = counts[t.key] || 0;
+                perfHTML += `<td class="perf-cell perf-cell-positive">${val || '-'}</td>`;
+            });
+            perfHTML += `<td class="perf-cell perf-cell-positive perf-cell-total"><strong>${totalPositive}</strong></td>`;
+            negativeTypes.forEach(t => {
+                const val = counts[t.key] || 0;
+                perfHTML += `<td class="perf-cell perf-cell-negative">${val || '-'}</td>`;
+            });
+            perfHTML += `<td class="perf-cell perf-cell-negative perf-cell-total"><strong>${totalNegative}</strong></td>`;
+            perfHTML += `</tr>`;
+        });
+
+        // Grand total row
+        perfHTML += `<tr class="perf-summary-row">`;
+        perfHTML += `<td class="perf-player-name"><strong>All</strong></td>`;
+        positiveTypes.forEach(t => {
+            const total = sorted.reduce((sum, p) => sum + ((playerPerf[p.name] || {})[t.key] || 0), 0);
+            perfHTML += `<td class="perf-cell perf-cell-positive"><strong>${total}</strong></td>`;
+        });
+        const grandPositive = sorted.reduce((sum, p) => {
+            const counts = playerPerf[p.name] || {};
+            return sum + positiveTypes.reduce((s, t) => s + (counts[t.key] || 0), 0);
+        }, 0);
+        perfHTML += `<td class="perf-cell perf-cell-positive perf-cell-total"><strong>${grandPositive}</strong></td>`;
+        negativeTypes.forEach(t => {
+            const total = sorted.reduce((sum, p) => sum + ((playerPerf[p.name] || {})[t.key] || 0), 0);
+            perfHTML += `<td class="perf-cell perf-cell-negative"><strong>${total}</strong></td>`;
+        });
+        const grandNegative = sorted.reduce((sum, p) => {
+            const counts = playerPerf[p.name] || {};
+            return sum + negativeTypes.reduce((s, t) => s + (counts[t.key] || 0), 0);
+        }, 0);
+        perfHTML += `<td class="perf-cell perf-cell-negative perf-cell-total"><strong>${grandNegative}</strong></td>`;
+        perfHTML += `</tr>`;
+
+        perfHTML += `</tbody></table></div>`;
+        perfContainer.innerHTML = perfHTML;
     }
 
     clearLeaderboardFilters() {

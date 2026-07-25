@@ -107,7 +107,10 @@
                 <div class="action-icons-section">
                     <!-- Team A Player 1 -->
                     <div class="action-icons-player" data-team="A" data-player="0">
-                        <span class="action-player-name" id="action-player-a1-name">A1</span>
+                        <div class="action-player-header">
+                            <span class="action-player-name" id="action-player-a1-name">A1</span>
+                            <span class="live-perf-stats" id="live-perf-a1">+0 / -0</span>
+                        </div>
                         <div class="action-icons-group action-icons-positive">
                             <button class="action-icon-btn" data-action="smash" data-category="positive" title="Smash">
                                 <img src="icons/actions/smash.svg" alt="Smash">
@@ -139,7 +142,10 @@
                     </div>
                     <!-- Team A Player 2 -->
                     <div class="action-icons-player" data-team="A" data-player="1">
-                        <span class="action-player-name" id="action-player-a2-name">A2</span>
+                        <div class="action-player-header">
+                            <span class="action-player-name" id="action-player-a2-name">A2</span>
+                            <span class="live-perf-stats" id="live-perf-a2">+0 / -0</span>
+                        </div>
                         <div class="action-icons-group action-icons-positive">
                             <button class="action-icon-btn" data-action="smash" data-category="positive" title="Smash">
                                 <img src="icons/actions/smash.svg" alt="Smash">
@@ -171,7 +177,10 @@
                     </div>
                     <!-- Team B Player 1 -->
                     <div class="action-icons-player" data-team="B" data-player="0">
-                        <span class="action-player-name" id="action-player-b1-name">B1</span>
+                        <div class="action-player-header">
+                            <span class="action-player-name" id="action-player-b1-name">B1</span>
+                            <span class="live-perf-stats" id="live-perf-b1">+0 / -0</span>
+                        </div>
                         <div class="action-icons-group action-icons-positive">
                             <button class="action-icon-btn" data-action="smash" data-category="positive" title="Smash">
                                 <img src="icons/actions/smash.svg" alt="Smash">
@@ -203,7 +212,10 @@
                     </div>
                     <!-- Team B Player 2 -->
                     <div class="action-icons-player" data-team="B" data-player="1">
-                        <span class="action-player-name" id="action-player-b2-name">B2</span>
+                        <div class="action-player-header">
+                            <span class="action-player-name" id="action-player-b2-name">B2</span>
+                            <span class="live-perf-stats" id="live-perf-b2">+0 / -0</span>
+                        </div>
                         <div class="action-icons-group action-icons-positive">
                             <button class="action-icon-btn" data-action="smash" data-category="positive" title="Smash">
                                 <img src="icons/actions/smash.svg" alt="Smash">
@@ -342,6 +354,8 @@
                 <button class="btn btn-secondary btn-sm" id="btn-leaderboard-clear">Clear</button>
             </div>
             <div id="leaderboard-content" class="leaderboard-content"></div>
+            <h3 style="margin-top:24px;">📊 Player Performance</h3>
+            <div id="leaderboard-performance" class="leaderboard-content"></div>
             <div class="leaderboard-actions">
                 <button class="btn btn-secondary btn-sm" id="btn-print-leaderboard">🖨 Print / PDF</button>
             </div>

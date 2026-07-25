@@ -684,12 +684,24 @@ h3 {
 }
 
 .perf-table thead th {
-    padding: 8px 4px;
+    padding: 4px 2px;
+    padding-top: 40px;
     font-weight: 600;
     font-size: 0.7rem;
     color: var(--text-muted);
     border-bottom: 2px solid var(--border-color);
     vertical-align: bottom;
+    white-space: nowrap;
+    position: relative;
+    height: 60px;
+}
+
+/* Vertical text (90deg, bottom-to-top) for column headers */
+.perf-vertical {
+    writing-mode: vertical-rl;
+    transform: rotate(180deg);
+    font-size: 0.7rem;
+    line-height: 1;
     white-space: nowrap;
 }
 
@@ -1394,6 +1406,35 @@ h3 {
     padding: 2px 8px;
     border-radius: 4px;
     margin-bottom: 2px;
+}
+
+/* Live performance stats during match */
+.action-player-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.live-perf-stats {
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid var(--border-light);
+}
+
+.live-perf-stats.has-positive {
+    color: var(--color-positive);
+}
+
+.live-perf-stats.has-negative {
+    border-color: rgba(244, 67, 54, 0.3);
+}
+
+.live-perf-stats.has-positive.has-negative {
+    color: var(--text-muted);
 }
 
 .action-icons-player[data-team="A"] .action-player-name {

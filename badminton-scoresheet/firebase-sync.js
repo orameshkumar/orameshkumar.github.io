@@ -1,9 +1,10 @@
 /**
  * FirebaseSync - Cloud synchronization layer for SPARK Badminton Doubles Score Sheet
  * 
- * Implements offline-first, dual-write pattern using Firebase Firestore.
+ * Implements offline-first, push-first sync pattern using Firebase Firestore.
  * All data mutations write to localStorage first (synchronous), then to Firestore (async).
- * On startup, fetches Firestore data and merges with localStorage using timestamp-based conflict resolution.
+ * On sync, pushes all local data to Firebase first, then overwrites localStorage with Firebase data.
+ * Firebase is the single source of truth after each sync operation.
  */
 
 const firebaseConfig = {
@@ -23,6 +24,7 @@ class FirebaseSync {
         this._activeWriteTimer = null;
         this._pendingActiveState = null;
         this._retryQueue = this._loadRetryQueue();
+        this._syncing = false;
         this.init();
     }
 
@@ -54,7 +56,7 @@ class FirebaseSync {
             await this.app.eventManager.initFromFirebase();
         }
 
-        await this.loadAndMerge();
+        await this.pushFirstSync();
     }
 
     // ─── Task 2.1: Firebase Initialization ────────────────────────────────────
@@ -97,8 +99,7 @@ class FirebaseSync {
 
     startConnectivityMonitor() {
         window.addEventListener('online', () => {
-            this.setSyncStatus('syncing');
-            this.loadAndMerge();
+            this.pushFirstSync();
         });
 
         window.addEventListener('offline', () => {
@@ -127,100 +128,6 @@ class FirebaseSync {
 
         const titles = { synced: 'All data synced to cloud', syncing: 'Syncing data...', offline: 'Working offline', failed: 'Sync failed - tap Sync to retry' };
         el.title = titles[status] || 'Sync Status';
-    }
-
-    // ─── Task 4.1: mergeMatchHistory ──────────────────────────────────────────
-
-    mergeMatchHistory(local, remote) {
-        const map = new Map();
-
-        // Add all local records to the map
-        if (Array.isArray(local)) {
-            for (const record of local) {
-                if (record && record.id != null) {
-                    map.set(String(record.id), record);
-                }
-            }
-        }
-
-        // Merge remote records - for duplicates, keep later lastModified
-        if (Array.isArray(remote)) {
-            for (const record of remote) {
-                if (!record || record.id == null) continue;
-                const key = String(record.id);
-                const existing = map.get(key);
-
-                if (!existing) {
-                    map.set(key, record);
-                } else {
-                    // Both exist - resolve conflict by lastModified
-                    const existingTime = existing.lastModified || 0;
-                    const remoteTime = record.lastModified || 0;
-
-                    if (remoteTime > existingTime) {
-                        map.set(key, record);
-                    }
-                    // If equal or remote is older, keep existing (local)
-                }
-            }
-        }
-
-        // Convert to array, sort by date descending, cap at 100
-        const merged = Array.from(map.values());
-        merged.sort((a, b) => {
-            const dateA = a.date ? new Date(a.date).getTime() : 0;
-            const dateB = b.date ? new Date(b.date).getTime() : 0;
-            return dateB - dateA;
-        });
-
-        return merged.slice(0, 100);
-    }
-
-    // ─── Task 4.2: mergePlayerRegistry ────────────────────────────────────────
-
-    mergePlayerRegistry(local, remote) {
-        const seen = new Map(); // lowercase -> original casing
-        const result = [];
-
-        const addNames = (arr) => {
-            if (!Array.isArray(arr)) return;
-            for (const name of arr) {
-                if (typeof name !== 'string' || !name.trim()) continue;
-                const lower = name.toLowerCase();
-                if (!seen.has(lower)) {
-                    seen.set(lower, name);
-                    result.push(name);
-                }
-            }
-        };
-
-        // Process local first (first casing encountered wins)
-        addNames(local);
-        addNames(remote);
-
-        // Sort alphabetically (case-insensitive)
-        result.sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
-        return result;
-    }
-
-    // ─── Task 4.3: resolveActiveMatch ─────────────────────────────────────────
-
-    resolveActiveMatch(local, remote) {
-        // If only one exists, use it
-        if (!local && !remote) return null;
-        if (!local) return remote;
-        if (!remote) return local;
-
-        // Both exist - compare lastModified
-        const localTime = local.lastModified || 0;
-        const remoteTime = remote.lastModified || 0;
-
-        // If neither has timestamp, prefer remote (cloud is canonical)
-        if (!localTime && !remoteTime) return remote;
-
-        // Later timestamp wins
-        if (remoteTime >= localTime) return remote;
-        return local;
     }
 
     // ─── Task 6.1: saveMatch ──────────────────────────────────────────────────
@@ -383,19 +290,7 @@ class FirebaseSync {
             return;
         }
 
-        this.setSyncStatus('syncing');
-        this._setSyncButtonState(true);
-
-        try {
-            await this.flushRetryQueue();
-            await this.loadAndMerge();
-            // loadAndMerge sets status to 'synced' on success
-        } catch (error) {
-            console.error('[FirebaseSync] Manual sync failed:', error);
-            this.setSyncStatus('failed');
-        } finally {
-            this._setSyncButtonState(false);
-        }
+        await this.pushFirstSync();
     }
 
     _setSyncButtonState(syncing) {
@@ -405,18 +300,14 @@ class FirebaseSync {
         btn.classList.toggle('syncing', syncing);
     }
 
-    // ─── Task 7.1: loadAndMerge ───────────────────────────────────────────────
+    // ─── Push-First Sync ──────────────────────────────────────────────────────
 
-    async loadAndMerge() {
-        if (!this.available) {
-            this.setSyncStatus('offline');
-            return;
-        }
+    async pushFirstSync() {
+        if (this._syncing) return;
+        this._syncing = true;
 
         this.setSyncStatus('syncing');
-
-        // Flush any pending writes before pulling remote data
-        await this.flushRetryQueue();
+        this._setSyncButtonState(true);
 
         try {
             const eid = this.app?.eventManager?.getActiveEventId();
@@ -425,51 +316,122 @@ class FirebaseSync {
                 return;
             }
 
-            // Fetch all data from Firestore with a 3-second timeout
-            const timeoutPromise = new Promise((_, reject) =>
-                setTimeout(() => reject(new Error('Firestore fetch timeout')), 3000)
-            );
-
-            const fetchPromise = this._fetchFirestoreData(eid);
-            const remoteData = await Promise.race([fetchPromise, timeoutPromise]);
-
-            // Check for first-sync / migration scenario
-            await this.migrateLocalData(remoteData.matches, eid);
-
-            // Merge match history
-            const localMatches = this._getLocalMatchHistory();
-            const mergedMatches = this.mergeMatchHistory(localMatches, remoteData.matches);
-            const matchHistoryKey = this.app?.eventManager?.getMatchHistoryKey() || 'badminton-match-history';
-            localStorage.setItem(matchHistoryKey, JSON.stringify(mergedMatches));
-
-            // Player registry merge disabled — MemberManager now handles member data
-            // Legacy playerRegistry in Firebase is no longer merged to avoid resurrecting deleted members
-
-            // Resolve active match
-            const localActive = this._getLocalActiveMatch();
-            const resolvedActive = this.resolveActiveMatch(localActive, remoteData.activeMatch);
-            if (resolvedActive) {
-                const activeMatchKey = this.app?.eventManager?.getActiveMatchKey() || 'badminton-active-match';
-                localStorage.setItem(activeMatchKey, JSON.stringify(resolvedActive));
-            }
-
-            // Update UI via app methods
-            if (this.app) {
-                if (typeof this.app.loadMatchHistory === 'function') {
-                    this.app.loadMatchHistory();
-                }
-                if (typeof this.app.loadPlayerNames === 'function') {
-                    this.app.loadPlayerNames();
-                }
-                if (resolvedActive && typeof this.app.restoreActiveMatch === 'function') {
-                    this.app.restoreActiveMatch();
-                }
-            }
-
+            await this._pushPhase(eid);
+            await this._pullPhase(eid);
             this.setSyncStatus('synced');
         } catch (error) {
-            console.warn('[FirebaseSync] Load and merge failed, using localStorage:', error.message);
-            this.setSyncStatus('offline');
+            console.error('[FirebaseSync] pushFirstSync failed:', error);
+            this.setSyncStatus('failed');
+        } finally {
+            this._syncing = false;
+            this._setSyncButtonState(false);
+        }
+    }
+
+    // ─── Push Phase ─────────────────────────────────────────────────────────
+
+    async _pushPhase(eventId) {
+        const result = { matchesPushed: false, activePushed: false, registryPushed: false };
+
+        // Flush retry queue first
+        try {
+            await this.flushRetryQueue();
+        } catch (e) {
+            console.warn('[FirebaseSync] Retry queue flush failed:', e);
+        }
+
+        // Push match history in batches of 500
+        try {
+            const localMatches = this._getLocalMatchHistory();
+            if (localMatches && localMatches.length > 0) {
+                const batchSize = 500;
+                for (let i = 0; i < localMatches.length; i += batchSize) {
+                    const batch = this.db.batch();
+                    const chunk = localMatches.slice(i, i + batchSize);
+
+                    for (const record of chunk) {
+                        if (!record || record.id == null) continue;
+                        const docRef = this.db.collection('events').doc(eventId).collection('matches').doc(String(record.id));
+                        batch.set(docRef, { ...record, lastModified: Date.now() });
+                    }
+
+                    await batch.commit();
+                }
+            }
+            result.matchesPushed = true;
+        } catch (e) {
+            console.error('[FirebaseSync] Push match history failed:', e);
+        }
+
+        // Push active match
+        try {
+            const localActive = this._getLocalActiveMatch();
+            if (localActive) {
+                await this.db.collection('events').doc(eventId).collection('appData').doc('activeMatch').set({
+                    ...localActive,
+                    lastModified: Date.now()
+                });
+            }
+            result.activePushed = true;
+        } catch (e) {
+            console.error('[FirebaseSync] Push active match failed:', e);
+        }
+
+        // Push player registry
+        try {
+            const localPlayers = this._getLocalPlayerRegistry();
+            if (localPlayers && localPlayers.length > 0) {
+                await this.db.collection('events').doc(eventId).collection('playerRegistry').doc('data').set({
+                    names: localPlayers,
+                    lastModified: Date.now()
+                });
+            }
+            result.registryPushed = true;
+        } catch (e) {
+            console.error('[FirebaseSync] Push player registry failed:', e);
+        }
+
+        return result;
+    }
+
+    // ─── Pull Phase ─────────────────────────────────────────────────────────
+
+    async _pullPhase(eventId) {
+        // Fetch all data from Firestore with a 5-second timeout
+        const timeoutPromise = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Firestore fetch timeout')), 5000)
+        );
+
+        const fetchPromise = this._fetchFirestoreData(eventId);
+        const remoteData = await Promise.race([fetchPromise, timeoutPromise]);
+
+        // Overwrite localStorage match history
+        const matchHistoryKey = this.app?.eventManager?.getMatchHistoryKey() || 'badminton-match-history';
+        localStorage.setItem(matchHistoryKey, JSON.stringify(remoteData.matches || []));
+
+        // Overwrite localStorage active match (or remove if null)
+        const activeMatchKey = this.app?.eventManager?.getActiveMatchKey() || 'badminton-active-match';
+        if (remoteData.activeMatch) {
+            localStorage.setItem(activeMatchKey, JSON.stringify(remoteData.activeMatch));
+        } else {
+            localStorage.removeItem(activeMatchKey);
+        }
+
+        // Overwrite localStorage player registry
+        const playerNamesKey = this.app?.eventManager?.getPlayerNamesKey() || 'badminton-player-names';
+        localStorage.setItem(playerNamesKey, JSON.stringify(remoteData.players || []));
+
+        // Post-sync UI refresh
+        if (this.app) {
+            if (typeof this.app.loadMatchHistory === 'function') {
+                this.app.loadMatchHistory();
+            }
+            if (typeof this.app.loadPlayerNames === 'function') {
+                this.app.loadPlayerNames();
+            }
+            if (remoteData.activeMatch && typeof this.app.restoreActiveMatch === 'function') {
+                this.app.restoreActiveMatch();
+            }
         }
     }
 
@@ -493,66 +455,6 @@ class FirebaseSync {
         const activeMatch = activeDoc.exists ? activeDoc.data() : null;
 
         return { matches, players, activeMatch };
-    }
-
-    // ─── Task 7.2: First-Sync Detection + Migration ──────────────────────────
-
-    async migrateLocalData(remoteMatches, eventId) {
-        // Skip if migration already done
-        if (localStorage.getItem('firebase-migration-done') === 'true') return;
-
-        // Only migrate if remote is empty and local has data
-        if (remoteMatches && remoteMatches.length > 0) return;
-
-        const localMatches = this._getLocalMatchHistory();
-        if (!localMatches || localMatches.length === 0) return;
-
-        const eid = eventId || this.app?.eventManager?.getActiveEventId();
-        if (!eid) return;
-
-        console.log(`[FirebaseSync] First-sync detected. Migrating ${localMatches.length} matches to Firestore...`);
-
-        try {
-            // Upload matches in batches of 500 (event-scoped)
-            const batchSize = 500;
-            for (let i = 0; i < localMatches.length; i += batchSize) {
-                const batch = this.db.batch();
-                const chunk = localMatches.slice(i, i + batchSize);
-
-                for (const record of chunk) {
-                    if (!record || record.id == null) continue;
-                    const docRef = this.db.collection('events').doc(eid).collection('matches').doc(String(record.id));
-                    batch.set(docRef, { ...record, lastModified: Date.now() });
-                }
-
-                await batch.commit();
-            }
-
-            // Upload player registry (event-scoped)
-            const localPlayers = this._getLocalPlayerRegistry();
-            if (localPlayers && localPlayers.length > 0) {
-                await this.db.collection('events').doc(eid).collection('playerRegistry').doc('data').set({
-                    names: localPlayers,
-                    lastModified: Date.now()
-                });
-            }
-
-            // Upload active match if exists (event-scoped)
-            const localActive = this._getLocalActiveMatch();
-            if (localActive) {
-                await this.db.collection('events').doc(eid).collection('appData').doc('activeMatch').set({
-                    ...localActive,
-                    lastModified: Date.now()
-                });
-            }
-
-            // Mark migration as complete
-            localStorage.setItem('firebase-migration-done', 'true');
-            console.log(`[FirebaseSync] Migration complete. ${localMatches.length} matches uploaded.`);
-        } catch (error) {
-            console.error('[FirebaseSync] Migration failed (will retry on next load):', error);
-            // Do NOT set migration flag - will retry on next load
-        }
     }
 
     // ─── Helper Methods ───────────────────────────────────────────────────────
@@ -587,3 +489,6 @@ class FirebaseSync {
         }
     }
 }
+
+
+if (typeof module !== 'undefined') module.exports = FirebaseSync;
