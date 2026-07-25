@@ -310,6 +310,11 @@ class FirebaseSync {
         this._setSyncButtonState(true);
 
         try {
+            // Sync events list from Firebase first (ensures all events are available)
+            if (this.app?.eventManager?.initFromFirebase) {
+                await this.app.eventManager.initFromFirebase();
+            }
+
             const eid = this.app?.eventManager?.getActiveEventId();
             if (!eid) {
                 this.setSyncStatus('synced');
@@ -428,6 +433,9 @@ class FirebaseSync {
             }
             if (typeof this.app.loadPlayerNames === 'function') {
                 this.app.loadPlayerNames();
+            }
+            if (typeof this.app.renderEventSelectors === 'function') {
+                this.app.renderEventSelectors();
             }
             if (remoteData.activeMatch && typeof this.app.restoreActiveMatch === 'function') {
                 this.app.restoreActiveMatch();
