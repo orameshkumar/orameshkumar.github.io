@@ -737,10 +737,10 @@ h3 {
     font-weight: 600;
     font-size: 0.8rem;
     color: var(--text-primary);
-    white-space: nowrap;
-    max-width: 90px;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    white-space: normal;
+    word-break: break-word;
+    max-width: 120px;
+    min-width: 70px;
 }
 
 /* Data cells */
@@ -763,6 +763,18 @@ h3 {
 .perf-cell-total {
     border-left: 1px solid var(--border-color);
     font-weight: 700;
+}
+
+/* Positive total column — stronger green background */
+.perf-cell-positive.perf-cell-total {
+    background: rgba(76, 175, 80, 0.2);
+    color: #4caf50;
+}
+
+/* Negative total column — stronger red background */
+.perf-cell-negative.perf-cell-total {
+    background: rgba(244, 67, 54, 0.2);
+    color: #f44336;
 }
 
 /* Summary row (totals across all players) */
@@ -799,6 +811,16 @@ h3 {
     background: rgba(198, 40, 40, 0.05);
 }
 
+[data-theme="light"] .perf-cell-positive.perf-cell-total {
+    background: rgba(46, 125, 50, 0.2);
+    color: #2e7d32;
+}
+
+[data-theme="light"] .perf-cell-negative.perf-cell-total {
+    background: rgba(198, 40, 40, 0.2);
+    color: #c62828;
+}
+
 /* Mobile responsive */
 @media (max-width: 480px) {
     .perf-table {
@@ -821,12 +843,12 @@ h3 {
     .perf-player-name {
         padding: 4px 2px;
         font-size: 0.62rem;
-        max-width: 50px;
-        width: 50px;
+        max-width: 70px;
+        width: 70px;
     }
     .perf-player-header {
-        min-width: 50px;
-        width: 50px;
+        min-width: 70px;
+        width: 70px;
     }
     .perf-table-wrapper {
         margin: 0 -8px;
