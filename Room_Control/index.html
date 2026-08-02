@@ -1,0 +1,777 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#1a1a2e">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="RoomCtrl">
+  <title>Room Controller</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <style>
+    :root {
+      --bg: #0f0f1a; --surface: #1a1a2e; --card: #22223b; --card2: #2d2d4e;
+      --border: rgba(255,255,255,0.08); --text: #f0f0f5; --muted: #8888aa;
+      --accent: #4a8fff; --amber: #f0a030; --red: #e05050; --green: #40c080;
+      --radius: 12px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; min-height: 100vh; }
+    #app { max-width: 600px; margin: 0 auto; padding: 0 0 80px; }
+
+    .header { padding: 16px 16px 0; display: flex; align-items: center; justify-content: space-between; }
+    .header h1 { font-size: 20px; font-weight: 600; }
+    .header-right { display: flex; align-items: center; gap: 10px; }
+    .live-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); transition: background 0.4s; }
+    .live-dot.connected { background: var(--green); animation: pulse 2s infinite; }
+    .live-dot.error { background: var(--red); }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.35} }
+    .conn-label { font-size: 12px; color: var(--muted); }
+    .clock { font-size: 13px; color: var(--muted); }
+
+    .bottom-nav { position: fixed; bottom: 0; left: 0; right: 0; background: var(--surface); border-top: 1px solid var(--border); display: flex; z-index: 100; max-width: 600px; margin: 0 auto; }
+    .nav-btn { flex: 1; padding: 10px 0 12px; display: flex; flex-direction: column; align-items: center; gap: 3px; background: none; border: none; color: var(--muted); font-size: 10px; cursor: pointer; }
+    .nav-btn.active { color: var(--accent); }
+    .nav-btn svg { width: 22px; height: 22px; }
+
+    .page { display: none; padding: 12px 16px; }
+    .page.active { display: block; }
+
+    .stats-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 12px 0; }
+    .stat-card { background: var(--card); border-radius: var(--radius); padding: 10px 12px; }
+    .stat-val { font-size: 24px; font-weight: 600; }
+    .stat-lbl { font-size: 11px; color: var(--muted); margin-top: 2px; }
+    .stat-val.green { color: var(--green); }
+    .stat-val.amber { color: var(--amber); }
+    .stat-val.accent { color: var(--accent); }
+
+    .room-card { background: var(--card); border-radius: var(--radius); margin-bottom: 8px; overflow: hidden; border: 1px solid var(--border); transition: border-color 0.25s; }
+    .room-card.ov-on  { border-color: var(--amber); }
+    .room-card.ov-off { border-color: var(--red); }
+    .room-card.sched-on { border-color: var(--accent); }
+    .room-header { display: flex; align-items: center; gap: 10px; padding: 12px 14px; cursor: pointer; user-select: none; }
+    .room-light { width: 12px; height: 12px; border-radius: 50%; background: #333355; flex-shrink: 0; transition: background 0.3s, box-shadow 0.3s; }
+    .room-light.on { background: var(--amber); box-shadow: 0 0 8px var(--amber); }
+    .room-light.forced-off { background: var(--red); }
+    .room-title { flex: 1; font-size: 15px; font-weight: 500; }
+    .room-badge { font-size: 10px; padding: 2px 8px; border-radius: 20px; font-weight: 500; }
+    .badge-auto { background: rgba(255,255,255,0.06); color: var(--muted); }
+    .badge-on   { background: rgba(240,160,48,0.2);  color: var(--amber); }
+    .badge-off  { background: rgba(224,80,80,0.2);   color: var(--red); }
+    .badge-sched { background: rgba(74,143,255,0.2); color: var(--accent); }
+    .chevron { color: var(--muted); transition: transform 0.2s; font-size: 14px; }
+    .chevron.open { transform: rotate(180deg); }
+    .room-body { padding: 0 14px 14px; border-top: 1px solid var(--border); }
+
+    .panel-tabs { display: flex; gap: 4px; padding: 10px 0 8px; }
+    .ptab { padding: 5px 12px; border-radius: 20px; border: 1px solid var(--border); background: transparent; font-size: 12px; color: var(--muted); cursor: pointer; }
+    .ptab.active { background: var(--accent); color: white; border-color: var(--accent); }
+
+    .slot-list { margin-bottom: 8px; }
+    .slot-item { display: flex; align-items: center; gap: 8px; padding: 7px 10px; background: var(--card2); border-radius: 8px; margin-bottom: 4px; font-size: 13px; }
+    .slot-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); flex-shrink: 0; }
+    .slot-time { flex: 1; }
+    .slot-del { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 18px; line-height: 1; padding: 0 2px; }
+    .slot-del:hover { color: var(--red); }
+    .empty-msg { font-size: 13px; color: var(--muted); padding: 6px 0 10px; }
+
+    .day-toggle { display: flex; gap: 6px; margin-bottom: 8px; }
+    .day-toggle button { flex: 1; padding: 5px; border-radius: 8px; border: 1px solid var(--border); background: transparent; font-size: 12px; color: var(--muted); cursor: pointer; }
+    .day-toggle button.active { background: var(--accent); color: white; border-color: var(--accent); }
+
+    .form-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+    .form-row label { font-size: 12px; color: var(--muted); width: 40px; flex-shrink: 0; }
+    .form-row input[type=time] { flex: 1; background: var(--card2); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 13px; padding: 6px 10px; }
+    .add-slot-btn { width: 100%; padding: 8px; border-radius: 8px; border: 1px dashed var(--accent); background: transparent; color: var(--accent); font-size: 13px; cursor: pointer; }
+
+    .ov-note { font-size: 11px; color: var(--muted); background: var(--card2); border-radius: 0; padding: 8px 10px; margin-bottom: 10px; border-left: 3px solid var(--amber); }
+    .ov-btns { display: flex; gap: 6px; }
+    .ov-btn { flex: 1; padding: 10px 6px; border-radius: 8px; border: 1px solid var(--border); background: transparent; font-size: 13px; color: var(--text); cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+    .ov-btn small { font-size: 10px; color: var(--muted); }
+    .ov-btn .ov-icon { font-size: 20px; }
+    .ov-btn.active-on  { border-color: var(--amber); background: rgba(240,160,48,0.15); color: var(--amber); }
+    .ov-btn.active-off { border-color: var(--red);   background: rgba(224,80,80,0.15);  color: var(--red); }
+    .ov-btn.active-auto { border-color: var(--accent); background: rgba(74,143,255,0.1); color: var(--accent); }
+
+    .day-row { display: flex; gap: 4px; margin-bottom: 10px; flex-wrap: wrap; }
+    .day-pill { padding: 4px 8px; border-radius: 20px; border: 1px solid var(--border); background: transparent; font-size: 11px; color: var(--muted); cursor: pointer; }
+    .day-pill.active { background: var(--accent); color: white; border-color: var(--accent); }
+    .apply-btn { width: 100%; padding: 8px; border-radius: 8px; border: 1px solid var(--accent); background: transparent; color: var(--accent); font-size: 13px; cursor: pointer; }
+
+    .seg-row { display: flex; gap: 6px; margin-bottom: 12px; }
+    .seg-btn { flex: 1; padding: 7px 0; border-radius: 8px; border: 1px solid var(--border); background: transparent; font-size: 12px; color: var(--muted); cursor: pointer; }
+    .seg-btn.active { background: var(--accent); color: white; border-color: var(--accent); }
+    .timeline-wrap { background: var(--card); border-radius: var(--radius); padding: 10px; }
+    .tl-legend { display: flex; gap: 12px; margin-bottom: 10px; flex-wrap: wrap; }
+    .tl-legend-item { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--muted); }
+    .tl-legend-dot { width: 10px; height: 10px; border-radius: 2px; }
+
+    .settings-section { background: var(--card); border-radius: var(--radius); margin-bottom: 12px; overflow: hidden; }
+    .settings-title { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; padding: 12px 14px 6px; }
+    .settings-row { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-top: 1px solid var(--border); }
+    .settings-label { flex: 1; font-size: 14px; }
+    .settings-sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+    .settings-input { background: var(--card2); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 13px; padding: 7px 10px; width: 100%; font-family: monospace; }
+    .save-btn { width: 100%; padding: 13px; border-radius: var(--radius); border: none; background: var(--accent); color: white; font-size: 15px; font-weight: 600; cursor: pointer; margin-top: 4px; }
+    .test-btn { width: 100%; padding: 10px; border-radius: var(--radius); border: 1px solid var(--accent); background: transparent; color: var(--accent); font-size: 14px; cursor: pointer; margin-top: 8px; }
+    .status-msg { text-align: center; font-size: 13px; padding: 8px; border-radius: 8px; margin-top: 8px; }
+    .status-msg.ok  { background: rgba(64,192,128,0.15); color: var(--green); }
+    .status-msg.err { background: rgba(224,80,80,0.15);  color: var(--red); }
+
+    .log-wrap { background: var(--card); border-radius: var(--radius); padding: 12px 14px; margin-top: 12px; }
+    .log-title { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 8px; }
+    .log-entry { font-size: 12px; font-family: monospace; padding: 4px 0; border-bottom: 1px solid var(--border); display: flex; gap: 8px; }
+    .log-entry:last-child { border-bottom: none; }
+    .log-time { color: var(--muted); flex-shrink: 0; }
+    .log-cmd { color: var(--accent); }
+    .log-status.ok  { color: var(--green); margin-left: auto; }
+    .log-status.err { color: var(--red);   margin-left: auto; }
+
+    .toast { position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%); background: var(--card); border: 1px solid var(--border); border-radius: 20px; padding: 8px 18px; font-size: 13px; opacity: 0; transition: opacity 0.3s; pointer-events: none; white-space: nowrap; z-index: 200; }
+    .toast.show { opacity: 1; }
+
+    .toggle { position: relative; width: 40px; height: 22px; }
+    .toggle input { opacity: 0; width: 0; height: 0; }
+    .tslider { position: absolute; inset: 0; background: #333355; border-radius: 22px; cursor: pointer; transition: background 0.2s; }
+    .tslider:before { content:''; position:absolute; width:16px; height:16px; left:3px; top:3px; background:white; border-radius:50%; transition:transform 0.2s; }
+    .toggle input:checked + .tslider { background: var(--accent); }
+    .toggle input:checked + .tslider:before { transform: translateX(18px); }
+
+    .section-head { font-size: 13px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin: 16px 0 8px; }
+    .fb-badge { display: inline-flex; align-items: center; gap: 5px; background: rgba(255,160,0,0.12); border: 1px solid rgba(255,160,0,0.3); border-radius: 20px; padding: 3px 10px; font-size: 11px; color: #ffb300; margin-bottom: 12px; }
+    canvas { display: block; }
+    .all-btns { display: flex; gap: 8px; margin-bottom: 12px; }
+    .all-btn { flex: 1; padding: 10px; border-radius: 10px; border: 1px solid var(--border); background: transparent; font-size: 13px; color: var(--text); cursor: pointer; }
+    .all-btn.on  { border-color: var(--amber); color: var(--amber); }
+    .all-btn.off { border-color: var(--red);   color: var(--red); }
+    .all-btn.auto { border-color: var(--accent); color: var(--accent); }
+  </style>
+</head>
+<body>
+<div id="app">
+  <div class="header">
+    <h1>Room Controller</h1>
+    <div class="header-right">
+      <div class="live-dot" id="liveDot"></div>
+      <span class="conn-label" id="connLabel">Connecting…</span>
+      <span class="clock" id="headerClock"></span>
+    </div>
+  </div>
+
+  <!-- Dashboard -->
+  <div class="page active" id="page-dashboard">
+    <div class="stats-row">
+      <div class="stat-card"><div class="stat-val green" id="s-on">0</div><div class="stat-lbl">Lights on</div></div>
+      <div class="stat-card"><div class="stat-val amber" id="s-manual">0</div><div class="stat-lbl">Manual</div></div>
+      <div class="stat-card"><div class="stat-val accent" id="s-slots">0</div><div class="stat-lbl">Slots today</div></div>
+    </div>
+    <div class="all-btns">
+      <button class="all-btn on"   onclick="allRooms(true)">All ON</button>
+      <button class="all-btn off"  onclick="allRooms(false)">All OFF</button>
+      <button class="all-btn auto" onclick="allRooms(null)">All Auto</button>
+    </div>
+    <div class="section-head">Rooms</div>
+    <div id="roomList"></div>
+  </div>
+
+  <!-- Timeline -->
+  <div class="page" id="page-timeline">
+    <div class="seg-row">
+      <button class="seg-btn active" onclick="setTLView('12h',this)">12-hour</button>
+      <button class="seg-btn" onclick="setTLView('day',this)">Full day</button>
+      <button class="seg-btn" onclick="setTLView('tomorrow',this)">Tomorrow</button>
+    </div>
+    <div class="tl-legend">
+      <div class="tl-legend-item"><div class="tl-legend-dot" style="background:#4a8fff"></div>Scheduled</div>
+      <div class="tl-legend-item"><div class="tl-legend-dot" style="background:#f0a030"></div>Manual ON</div>
+      <div class="tl-legend-item"><div class="tl-legend-dot" style="background:#e05050"></div>Manual OFF</div>
+    </div>
+    <div class="timeline-wrap"><canvas id="tlCanvas"></canvas></div>
+    <div class="stats-row" style="margin-top:12px">
+      <div class="stat-card"><div class="stat-val green" id="tl-on">0</div><div class="stat-lbl">On now</div></div>
+      <div class="stat-card"><div class="stat-val accent" id="tl-slots">0</div><div class="stat-lbl">Slots today</div></div>
+      <div class="stat-card"><div class="stat-val amber" id="tl-hours">0h</div><div class="stat-lbl">Total booked</div></div>
+    </div>
+  </div>
+
+  <!-- Settings -->
+  <div class="page" id="page-settings">
+    <div class="fb-badge">🔥 Firebase Realtime Database</div>
+    <div class="settings-section">
+      <div class="settings-title">Firebase config</div>
+      <div class="settings-row" style="flex-direction:column;align-items:stretch;gap:6px">
+        <div class="settings-label">Database URL<div class="settings-sub">e.g. https://your-project-default-rtdb.firebaseio.com</div></div>
+        <input class="settings-input" id="cfg-url" placeholder="https://your-project-default-rtdb.firebaseio.com">
+      </div>
+      <div class="settings-row" style="flex-direction:column;align-items:stretch;gap:6px">
+        <div class="settings-label">API Key<div class="settings-sub">From Firebase project settings</div></div>
+        <input class="settings-input" id="cfg-key" type="password" placeholder="AIzaSy...">
+      </div>
+    </div>
+    <div class="settings-section">
+      <div class="settings-title">Room names</div>
+      <div id="roomNameInputs"></div>
+    </div>
+    <button class="save-btn" onclick="saveSettings()">Save settings</button>
+    <button class="test-btn" onclick="testConnection()">Test Firebase connection</button>
+    <div id="settingsMsg"></div>
+    <div class="log-wrap">
+      <div class="log-title">Activity log</div>
+      <div id="logList"><div style="font-size:12px;color:var(--muted)">No activity yet</div></div>
+    </div>
+  </div>
+</div>
+
+<div class="bottom-nav">
+  <button class="nav-btn active" onclick="showPage('dashboard',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+    Rooms
+  </button>
+  <button class="nav-btn" onclick="showPage('timeline',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+    Timeline
+  </button>
+  <button class="nav-btn" onclick="showPage('settings',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    Settings
+  </button>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── State ────────────────────────────────────────────────────
+const state = {
+  rooms: Array.from({length:6}, (_,i) => ({
+    id: i+1, name: `Room ${i+1}`,
+    override: null,
+    expanded: false, panelTab: 'slot',
+    slots: { 0: [], 1: [] },
+    recurring: { days: [], start: '09:00', end: '10:00' }
+  })),
+  config: { dbUrl: '', apiKey: '' },
+  log: [],
+  schedDay: 0
+};
+const DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+let fbConnected = false;
+let fbListener = null;
+let tlView = '12h';
+
+// ── Persist ──────────────────────────────────────────────────
+function persist() {
+  localStorage.setItem('rc_fb', JSON.stringify({
+    rooms: state.rooms, config: state.config, log: state.log.slice(0,30)
+  }));
+}
+
+function hydrate() {
+  try {
+    const d = JSON.parse(localStorage.getItem('rc_fb') || '{}');
+    if (d.rooms) d.rooms.forEach((r,i) => Object.assign(state.rooms[i], r));
+    if (d.config) Object.assign(state.config, d.config);
+    if (d.log) state.log = d.log;
+  } catch(e) {}
+}
+
+// ── Firebase REST helpers ────────────────────────────────────
+function fbUrl(path) {
+  return `${state.config.dbUrl}${path}.json?auth=${state.config.apiKey}`;
+}
+
+async function fbSet(path, value) {
+  if (!state.config.dbUrl) { showToast('Set Firebase URL in Settings'); return false; }
+  try {
+    const res = await fetch(fbUrl(path), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(value)
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return true;
+  } catch(e) {
+    addLog('error', e.message);
+    setConnStatus(false);
+    return false;
+  }
+}
+
+async function fbGet(path) {
+  try {
+    const res = await fetch(fbUrl(path));
+    if (!res.ok) throw new Error(await res.text());
+    return await res.json();
+  } catch(e) {
+    addLog('error', e.message);
+    setConnStatus(false);
+    return null;
+  }
+}
+
+// ── Firebase SSE listener (real-time) ───────────────────────
+function startFbListener() {
+  if (!state.config.dbUrl || !state.config.apiKey) return;
+  if (fbListener) { fbListener.close(); fbListener = null; }
+  const url = `${state.config.dbUrl}/rooms.json?auth=${state.config.apiKey}`;
+  const es = new EventSource(url);
+  fbListener = es;
+
+  es.addEventListener('put', e => {
+    try {
+      const d = JSON.parse(e.data);
+      if (d.data) syncFromFirebase(d.data);
+      setConnStatus(true);
+    } catch(err) {}
+  });
+
+  es.addEventListener('patch', e => {
+    try {
+      const d = JSON.parse(e.data);
+      if (d.data) syncFromFirebase(d.data);
+    } catch(err) {}
+  });
+
+  es.onerror = () => setConnStatus(false);
+}
+
+function syncFromFirebase(data) {
+  // data is { room1: {...}, room2: {...}, ... }
+  Object.keys(data || {}).forEach(key => {
+    const idx = parseInt(key.replace('room','')) - 1;
+    if (idx < 0 || idx >= 6) return;
+    const r = data[key];
+    // Only sync override from Firebase (ESP32 can also write status back)
+    if (r.override !== undefined) state.rooms[idx].override = r.override;
+    if (r.lightOn  !== undefined) {
+      // ESP32 confirmed state — update local
+    }
+  });
+  renderDashboard();
+  persist();
+}
+
+// ── Write full room state to Firebase ───────────────────────
+async function pushRoom(idx) {
+  const r = state.rooms[idx];
+  const payload = {
+    override: r.override,          // null / true / false
+    slots: r.slots[0] || [],       // today's slots
+    slotsT: r.slots[1] || [],      // tomorrow's slots
+    name: r.name,
+    updatedAt: Date.now()
+  };
+  const ok = await fbSet(`/rooms/room${r.id}`, payload);
+  addLog(ok ? 'ok' : 'error', `room${r.id} → Firebase`);
+  setConnStatus(ok);
+  return ok;
+}
+
+async function pushAllRooms() {
+  const payload = {};
+  state.rooms.forEach(r => {
+    payload[`room${r.id}`] = {
+      override: r.override,
+      slots: r.slots[0] || [],
+      slotsT: r.slots[1] || [],
+      name: r.name,
+      updatedAt: Date.now()
+    };
+  });
+  const ok = await fbSet('/rooms', payload);
+  addLog(ok ? 'ok' : 'error', 'all_rooms → Firebase');
+  return ok;
+}
+
+// ── Light state logic ────────────────────────────────────────
+function toMins(t) { const [h,m]=t.split(':').map(Number); return h*60+m; }
+function nowMins()  { const n=new Date(); return n.getHours()*60+n.getMinutes(); }
+
+function isScheduledNow(room) {
+  const nm = nowMins();
+  return (room.slots[0]||[]).some(s => nm >= toMins(s.s) && nm < toMins(s.e));
+}
+
+function getLightState(room) {
+  if (room.override === true)  return { on: true,  source: 'manual-on' };
+  if (room.override === false) return { on: false, source: 'manual-off' };
+  const sched = isScheduledNow(room);
+  return { on: sched, source: sched ? 'schedule' : 'off' };
+}
+
+// ── Schedule auto-check ──────────────────────────────────────
+let lastChecked = {};
+function checkSchedules() {
+  state.rooms.forEach(room => {
+    if (room.override !== null) return;
+    const wasOn = lastChecked[room.id] || false;
+    const isOn  = isScheduledNow(room);
+    if (isOn !== wasOn) {
+      lastChecked[room.id] = isOn;
+      pushRoom(room.id - 1);
+      addLog('ok', `${room.name} schedule → ${isOn?'ON':'OFF'}`);
+    }
+  });
+}
+
+// ── Room actions ─────────────────────────────────────────────
+function toggleRoom(id) {
+  state.rooms.forEach(r => { if (r.id !== id) r.expanded = false; });
+  const r = state.rooms.find(x => x.id === id);
+  r.expanded = !r.expanded;
+  renderDashboard();
+}
+
+function setPanelTab(id, tab) {
+  state.rooms.find(r => r.id === id).panelTab = tab;
+  renderDashboard();
+}
+
+function setSchedDay(d) { state.schedDay = d; renderDashboard(); }
+
+function addSlot(id) {
+  const r = state.rooms.find(x => x.id === id);
+  const s = document.getElementById(`ns_${id}`).value;
+  const e = document.getElementById(`ne_${id}`).value;
+  if (!s || !e || s >= e) { showToast('Invalid time range'); return; }
+  if (!r.slots[state.schedDay]) r.slots[state.schedDay] = [];
+  r.slots[state.schedDay].push({ s, e });
+  r.slots[state.schedDay].sort((a,b) => a.s.localeCompare(b.s));
+  persist(); pushRoom(id-1); renderDashboard();
+}
+
+function deleteSlot(id, idx) {
+  const r = state.rooms.find(x => x.id === id);
+  r.slots[state.schedDay].splice(idx, 1);
+  persist(); pushRoom(id-1); renderDashboard();
+}
+
+function toggleDay(id, day) {
+  const r = state.rooms.find(x => x.id === id);
+  const i = r.recurring.days.indexOf(day);
+  if (i > -1) r.recurring.days.splice(i, 1); else r.recurring.days.push(day);
+  renderDashboard();
+}
+
+function setRecurring(id, field, val) {
+  state.rooms.find(r => r.id === id).recurring[field] = val;
+}
+
+function applyRecurring(id) {
+  const r = state.rooms.find(x => x.id === id);
+  if (!r.recurring.days.length) { showToast('Select at least one day'); return; }
+  const today = new Date().getDay();
+  [0,1].forEach(day => {
+    const d = (today + day) % 7;
+    if (r.recurring.days.includes(d)) {
+      if (!r.slots[day]) r.slots[day] = [];
+      const exists = r.slots[day].some(sl => sl.s === r.recurring.start && sl.e === r.recurring.end);
+      if (!exists) { r.slots[day].push({ s: r.recurring.start, e: r.recurring.end }); r.slots[day].sort((a,b) => a.s.localeCompare(b.s)); }
+    }
+  });
+  persist(); pushRoom(id-1); renderDashboard(); showToast('Recurring applied');
+}
+
+async function setOverride(id, val) {
+  const r = state.rooms.find(x => x.id === id);
+  r.override = val;
+  persist(); renderDashboard();
+  await pushRoom(id - 1);
+}
+
+async function allRooms(val) {
+  state.rooms.forEach(r => r.override = val);
+  persist(); renderDashboard();
+  await pushAllRooms();
+  showToast(val === true ? 'All ON' : val === false ? 'All OFF' : 'All Auto');
+}
+
+// ── Render Dashboard ─────────────────────────────────────────
+function renderDashboard() {
+  let onCount=0, manualCount=0, slotCount=0;
+  state.rooms.forEach(r => {
+    if (getLightState(r).on) onCount++;
+    if (r.override !== null) manualCount++;
+    slotCount += (r.slots[0]||[]).length;
+  });
+  document.getElementById('s-on').textContent = onCount;
+  document.getElementById('s-manual').textContent = manualCount;
+  document.getElementById('s-slots').textContent = slotCount;
+  document.getElementById('roomList').innerHTML = state.rooms.map(renderRoomCard).join('');
+}
+
+function renderRoomCard(r) {
+  const ls = getLightState(r);
+  let cardCls = 'room-card';
+  if (r.override === true) cardCls += ' ov-on';
+  else if (r.override === false) cardCls += ' ov-off';
+  else if (ls.on) cardCls += ' sched-on';
+
+  let dotCls = 'room-light' + (ls.on ? ' on' : r.override === false ? ' forced-off' : '');
+  let badgeCls = 'room-badge badge-auto', badgeTxt = 'Auto';
+  if (r.override === true)  { badgeCls = 'room-badge badge-on';   badgeTxt = 'Manual ON'; }
+  if (r.override === false) { badgeCls = 'room-badge badge-off';  badgeTxt = 'Manual OFF'; }
+  if (r.override === null && ls.on) { badgeCls = 'room-badge badge-sched'; badgeTxt = 'Active'; }
+
+  const slots = r.slots[state.schedDay] || [];
+  let body = '';
+
+  if (r.expanded) {
+    const ptabs = ['slot','recurring','override'].map(t =>
+      `<button class="ptab${r.panelTab===t?' active':''}" onclick="setPanelTab(${r.id},'${t}')">${
+        t==='slot'?'Slots':t==='recurring'?'Recurring':'Override'
+      }</button>`
+    ).join('');
+
+    if (r.panelTab === 'slot') {
+      const slotItems = slots.length
+        ? slots.map((s,i) => `<div class="slot-item">
+            <div class="slot-dot"></div>
+            <span class="slot-time">${s.s} – ${s.e}</span>
+            <button class="slot-del" onclick="deleteSlot(${r.id},${i})">×</button>
+          </div>`).join('')
+        : `<div class="empty-msg">No slots yet</div>`;
+      body = `<div class="panel-tabs">${ptabs}</div>
+        <div class="day-toggle">
+          <button class="${state.schedDay===0?'active':''}" onclick="setSchedDay(0)">Today</button>
+          <button class="${state.schedDay===1?'active':''}" onclick="setSchedDay(1)">Tomorrow</button>
+        </div>
+        <div class="slot-list">${slotItems}</div>
+        <div class="form-row"><label>Start</label><input type="time" id="ns_${r.id}" value="09:00"></div>
+        <div class="form-row"><label>End</label><input type="time" id="ne_${r.id}" value="10:00"></div>
+        <button class="add-slot-btn" onclick="addSlot(${r.id})">+ Add slot</button>`;
+
+    } else if (r.panelTab === 'recurring') {
+      const dayPills = DAYS.map((d,i) =>
+        `<button class="day-pill${r.recurring.days.includes(i)?' active':''}" onclick="toggleDay(${r.id},${i})">${d}</button>`
+      ).join('');
+      body = `<div class="panel-tabs">${ptabs}</div>
+        <div class="day-row">${dayPills}</div>
+        <div class="form-row"><label>Start</label><input type="time" id="rs_${r.id}" value="${r.recurring.start}" onchange="setRecurring(${r.id},'start',this.value)"></div>
+        <div class="form-row"><label>End</label><input type="time" id="re_${r.id}" value="${r.recurring.end}" onchange="setRecurring(${r.id},'end',this.value)"></div>
+        <button class="apply-btn" onclick="applyRecurring(${r.id})">Apply to today & tomorrow</button>`;
+
+    } else {
+      const ovOn = r.override===true, ovOff = r.override===false, ovNone = r.override===null;
+      body = `<div class="panel-tabs">${ptabs}</div>
+        <div class="ov-note">Manual override always wins. Schedule is ignored while active.</div>
+        <div class="ov-btns">
+          <button class="ov-btn${ovOn?' active-on':''}" onclick="setOverride(${r.id},true)">
+            <span class="ov-icon">💡</span>Force ON<small>Always on</small>
+          </button>
+          <button class="ov-btn${ovOff?' active-off':''}" onclick="setOverride(${r.id},false)">
+            <span class="ov-icon">🔴</span>Force OFF<small>Always off</small>
+          </button>
+          <button class="ov-btn${ovNone?' active-auto':''}" onclick="setOverride(${r.id},null)">
+            <span class="ov-icon">⟳</span>Auto<small>By schedule</small>
+          </button>
+        </div>`;
+    }
+  }
+
+  return `<div class="${cardCls}">
+    <div class="room-header" onclick="toggleRoom(${r.id})">
+      <div class="${dotCls}"></div>
+      <span class="room-title">${r.name}</span>
+      <span class="${badgeCls}">${badgeTxt}</span>
+      <span class="chevron${r.expanded?' open':''}">⌄</span>
+    </div>
+    ${r.expanded ? `<div class="room-body">${body}</div>` : ''}
+  </div>`;
+}
+
+// ── Timeline ─────────────────────────────────────────────────
+function setTLView(v, el) {
+  tlView = v;
+  document.querySelectorAll('#page-timeline .seg-btn').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+  renderTimeline();
+}
+
+function renderTimeline() {
+  const canvas = document.getElementById('tlCanvas');
+  const wrap = canvas.parentElement;
+  const W = wrap.clientWidth - 20;
+  const ROW_H=34, LABEL_W=56, TOP_H=22, BOT=4;
+  const H = TOP_H + state.rooms.length * ROW_H + BOT;
+  canvas.width=W; canvas.height=H;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0,0,W,H);
+
+  const now = new Date();
+  const nowM = now.getHours()*60+now.getMinutes();
+  let rS, rE, day;
+  if (tlView==='12h')      { rS=Math.floor(Math.max(0,nowM-60)/60)*60; rE=rS+720; day=0; }
+  else if (tlView==='day') { rS=0; rE=1440; day=0; }
+  else                     { rS=0; rE=1440; day=1; }
+  const range=rE-rS, chartW=W-LABEL_W;
+  const xFor=m=>LABEL_W+((m-rS)/range)*chartW;
+
+  const ticks=range<=720?7:13;
+  for (let i=0;i<ticks;i++) {
+    const m=rS+Math.round((i/(ticks-1))*range);
+    const x=xFor(m);
+    ctx.strokeStyle='rgba(255,255,255,0.06)'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(x,TOP_H); ctx.lineTo(x,H-BOT); ctx.stroke();
+    if (m%60===0) {
+      const h=Math.floor(m/60);
+      const lbl=`${h===0?12:(h>12?h-12:h)}${h<12?'am':'pm'}`;
+      ctx.fillStyle='rgba(136,136,170,0.8)'; ctx.font='9px -apple-system,sans-serif'; ctx.textAlign='center';
+      ctx.fillText(lbl, x, 11);
+    }
+  }
+
+  state.rooms.forEach((room,i) => {
+    const y=TOP_H+i*ROW_H;
+    const ls=getLightState(room);
+    ctx.fillStyle=i%2===0?'rgba(255,255,255,0.02)':'transparent';
+    ctx.fillRect(LABEL_W,y,chartW,ROW_H);
+    ctx.fillStyle='rgba(136,136,170,0.85)'; ctx.font='11px -apple-system,sans-serif'; ctx.textAlign='right';
+    ctx.fillText(room.name, LABEL_W-10, y+ROW_H/2+4);
+
+    if (room.override===true)  { ctx.fillStyle='rgba(240,160,48,0.1)';  ctx.fillRect(LABEL_W,y+2,chartW,ROW_H-4); }
+    if (room.override===false) { ctx.fillStyle='rgba(224,80,80,0.1)';   ctx.fillRect(LABEL_W,y+2,chartW,ROW_H-4); }
+
+    (room.slots[day]||[]).forEach(sl => {
+      const sM=toMins(sl.s), eM=toMins(sl.e);
+      if (eM<=rS||sM>=rE) return;
+      const cS=Math.max(sM,rS), cE=Math.min(eM,rE);
+      const x1=xFor(cS), x2=xFor(cE);
+      const barH=18, barY=y+(ROW_H-barH)/2;
+      ctx.fillStyle=room.override===true?'#f0a030':room.override===false?'#e05050':'#4a8fff';
+      ctx.beginPath(); ctx.roundRect(x1,barY,Math.max(x2-x1,3),barH,3); ctx.fill();
+    });
+
+    ctx.fillStyle=ls.on?'#f0a030':'rgba(255,255,255,0.12)';
+    ctx.beginPath(); ctx.arc(LABEL_W-4,y+ROW_H/2,4,0,Math.PI*2); ctx.fill();
+  });
+
+  if (day===0 && nowM>=rS && nowM<=rE) {
+    const nx=xFor(nowM);
+    ctx.strokeStyle='#e05050'; ctx.lineWidth=1.5;
+    ctx.beginPath(); ctx.moveTo(nx,TOP_H); ctx.lineTo(nx,H-BOT); ctx.stroke();
+    ctx.fillStyle='#e05050'; ctx.font='bold 9px -apple-system,sans-serif'; ctx.textAlign='center';
+    ctx.fillText(now.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}), nx, 10);
+  }
+
+  let tlOn=0,tlSlots=0,tlMins=0;
+  state.rooms.forEach(r => {
+    if (getLightState(r).on) tlOn++;
+    (r.slots[0]||[]).forEach(s => { tlSlots++; tlMins+=toMins(s.e)-toMins(s.s); });
+  });
+  document.getElementById('tl-on').textContent=tlOn;
+  document.getElementById('tl-slots').textContent=tlSlots;
+  document.getElementById('tl-hours').textContent=(Math.round(tlMins/60*10)/10)+'h';
+}
+
+// ── Settings ─────────────────────────────────────────────────
+function renderSettings() {
+  document.getElementById('cfg-url').value = state.config.dbUrl;
+  document.getElementById('cfg-key').value = state.config.apiKey;
+  document.getElementById('roomNameInputs').innerHTML = state.rooms.map(r =>
+    `<div class="settings-row" style="flex-direction:column;align-items:stretch;gap:4px">
+      <div class="settings-label" style="font-size:12px;color:var(--muted)">Room ${r.id}</div>
+      <input class="settings-input" id="rname_${r.id}" value="${r.name}" style="font-family:-apple-system,sans-serif">
+    </div>`
+  ).join('');
+  renderLog();
+}
+
+function saveSettings() {
+  state.config.dbUrl  = document.getElementById('cfg-url').value.trim().replace(/\/$/, '');
+  state.config.apiKey = document.getElementById('cfg-key').value.trim();
+  state.rooms.forEach(r => {
+    const el = document.getElementById(`rname_${r.id}`);
+    if (el) r.name = el.value.trim() || `Room ${r.id}`;
+  });
+  persist();
+  startFbListener();
+  const msg = document.getElementById('settingsMsg');
+  msg.className='status-msg ok'; msg.textContent='Settings saved — connecting…';
+  setTimeout(() => msg.textContent='', 3000);
+}
+
+async function testConnection() {
+  const msg = document.getElementById('settingsMsg');
+  msg.className='status-msg ok'; msg.textContent='Testing…';
+  const val = await fbGet('/rooms/room1/name');
+  if (val !== null) {
+    msg.className='status-msg ok'; msg.textContent='✓ Firebase connected!';
+    setConnStatus(true);
+  } else {
+    msg.className='status-msg err'; msg.textContent='✗ Connection failed — check URL and API key';
+    setConnStatus(false);
+  }
+}
+
+// ── Log ───────────────────────────────────────────────────────
+function addLog(status, msg) {
+  const now = new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+  state.log.unshift({ time: now, msg, status });
+  if (state.log.length > 30) state.log.pop();
+  renderLog();
+}
+
+function renderLog() {
+  const el = document.getElementById('logList');
+  if (!el) return;
+  el.innerHTML = state.log.length
+    ? state.log.map(l => `<div class="log-entry">
+        <span class="log-time">${l.time}</span>
+        <span class="log-cmd">${l.msg}</span>
+        <span class="log-status ${l.status}">${l.status==='ok'?'✓':'✗'}</span>
+      </div>`).join('')
+    : '<div style="font-size:12px;color:var(--muted)">No activity yet</div>';
+}
+
+// ── Connection status ─────────────────────────────────────────
+function setConnStatus(ok) {
+  fbConnected = ok;
+  const dot = document.getElementById('liveDot');
+  const lbl = document.getElementById('connLabel');
+  dot.className = 'live-dot ' + (ok ? 'connected' : 'error');
+  lbl.textContent = ok ? 'Live' : 'Offline';
+}
+
+// ── Navigation ────────────────────────────────────────────────
+function showPage(name, btn) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById(`page-${name}`).classList.add('active');
+  btn.classList.add('active');
+  if (name === 'dashboard') renderDashboard();
+  if (name === 'timeline')  renderTimeline();
+  if (name === 'settings')  renderSettings();
+}
+
+// ── Toast ─────────────────────────────────────────────────────
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+// ── Clock ─────────────────────────────────────────────────────
+function updateClock() {
+  document.getElementById('headerClock').textContent =
+    new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+}
+
+// ── Boot ──────────────────────────────────────────────────────
+hydrate();
+updateClock();
+setInterval(updateClock, 10000);
+setInterval(checkSchedules, 60000);
+setInterval(() => {
+  if (document.getElementById('page-dashboard').classList.contains('active')) renderDashboard();
+  if (document.getElementById('page-timeline').classList.contains('active'))  renderTimeline();
+}, 30000);
+
+if (state.config.dbUrl && state.config.apiKey) startFbListener();
+renderDashboard();
+
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
+</script>
+</body>
+</html>
