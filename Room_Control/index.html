@@ -430,14 +430,53 @@ function setPanelTab(id, tab) {
 
 function setSchedDay(d) { state.schedDay = d; renderDashboard(); }
 
+// ── Overlap detection helpers ─────────────────────────────────
+function toMinsStr(t) { const [h,m]=t.split(':').map(Number); return h*60+m; }
+
+function slotsOverlap(s1, e1, s2, e2) {
+  return toMinsStr(s1) < toMinsStr(e2) && toMinsStr(s2) < toMinsStr(e1);
+}
+
+// Merge overlapping/adjacent slots — same logic as ESP32
+function mergeSlots(slots) {
+  if (!slots || slots.length < 2) return slots;
+  const sorted = [...slots].sort((a,b) => a.s.localeCompare(b.s));
+  const merged = [sorted[0]];
+  for (let i = 1; i < sorted.length; i++) {
+    const last = merged[merged.length - 1];
+    if (toMinsStr(sorted[i].s) <= toMinsStr(last.e)) {
+      // Overlap or adjacent — extend end if needed
+      if (toMinsStr(sorted[i].e) > toMinsStr(last.e)) last.e = sorted[i].e;
+    } else {
+      merged.push(sorted[i]);
+    }
+  }
+  return merged;
+}
+
 function addSlot(id) {
   const r = state.rooms.find(x => x.id === id);
   const s = document.getElementById(`ns_${id}`).value;
   const e = document.getElementById(`ne_${id}`).value;
   if (!s || !e || s >= e) { showToast('Invalid time range'); return; }
   if (!r.slots[state.schedDay]) r.slots[state.schedDay] = [];
-  r.slots[state.schedDay].push({ s, e });
-  r.slots[state.schedDay].sort((a,b) => a.s.localeCompare(b.s));
+
+  // Check for overlaps with existing slots
+  const existing = r.slots[state.schedDay];
+  const overlapping = existing.filter(sl => slotsOverlap(s, e, sl.s, sl.e));
+
+  if (overlapping.length > 0) {
+    // Show warning but still add — slots will be merged
+    const overlapTimes = overlapping.map(sl => `${sl.s}–${sl.e}`).join(', ');
+    showToast(`⚠️ Overlaps with ${overlapTimes} — slots merged`);
+  }
+
+  // Add the new slot
+  existing.push({ s, e });
+
+  // Merge overlapping/adjacent slots automatically
+  r.slots[state.schedDay] = mergeSlots(existing);
+
   persist(); pushRoom(id-1); renderDashboard();
 }
 
@@ -462,15 +501,26 @@ function applyRecurring(id) {
   const r = state.rooms.find(x => x.id === id);
   if (!r.recurring.days.length) { showToast('Select at least one day'); return; }
   const today = new Date().getDay();
+  let anyOverlap = false;
   [0,1].forEach(day => {
     const d = (today + day) % 7;
     if (r.recurring.days.includes(d)) {
       if (!r.slots[day]) r.slots[day] = [];
-      const exists = r.slots[day].some(sl => sl.s === r.recurring.start && sl.e === r.recurring.end);
-      if (!exists) { r.slots[day].push({ s: r.recurring.start, e: r.recurring.end }); r.slots[day].sort((a,b) => a.s.localeCompare(b.s)); }
+      const exists = r.slots[day].some(sl =>
+        sl.s === r.recurring.start && sl.e === r.recurring.end);
+      if (!exists) {
+        // Check for overlap before adding
+        const overlapping = r.slots[day].filter(sl =>
+          slotsOverlap(r.recurring.start, r.recurring.end, sl.s, sl.e));
+        if (overlapping.length > 0) anyOverlap = true;
+        r.slots[day].push({ s: r.recurring.start, e: r.recurring.end });
+        // Merge after adding
+        r.slots[day] = mergeSlots(r.slots[day]);
+      }
     }
   });
-  persist(); pushRoom(id-1); renderDashboard(); showToast('Recurring applied');
+  persist(); pushRoom(id-1); renderDashboard();
+  showToast(anyOverlap ? '⚠️ Overlap detected — slots merged' : 'Recurring applied');
 }
 
 async function setOverride(id, val) {
