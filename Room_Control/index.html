@@ -458,26 +458,21 @@ function addSlot(id) {
   const r = state.rooms.find(x => x.id === id);
   const s = document.getElementById(`ns_${id}`).value;
   const e = document.getElementById(`ne_${id}`).value;
+  const recurring = document.getElementById(`nr_${id}`)?.checked || false;
   if (!s || !e || s >= e) { showToast('Invalid time range'); return; }
   if (!r.slots[state.schedDay]) r.slots[state.schedDay] = [];
 
-  // Check for overlaps with existing slots
   const existing = r.slots[state.schedDay];
   const overlapping = existing.filter(sl => slotsOverlap(s, e, sl.s, sl.e));
-
   if (overlapping.length > 0) {
-    // Show warning but still add — slots will be merged
-    const overlapTimes = overlapping.map(sl => `${sl.s}–${sl.e}`).join(', ');
+    const overlapTimes = overlapping.map(sl => `${sl.s}\u2013${sl.e}`).join(', ');
     showToast(`⚠️ Overlaps with ${overlapTimes} — slots merged`);
   }
 
-  // Add the new slot
-  existing.push({ s, e });
-
-  // Merge overlapping/adjacent slots automatically
+  existing.push({ s, e, recurring });
   r.slots[state.schedDay] = mergeSlots(existing);
-
   persist(); pushRoom(id-1); renderDashboard();
+  showToast(recurring ? '✓ Recurring slot added' : '✓ One-time slot added');
 }
 
 function deleteSlot(id, idx) {
@@ -577,8 +572,9 @@ function renderRoomCard(r) {
     if (r.panelTab === 'slot') {
       const slotItems = slots.length
         ? slots.map((s,i) => `<div class="slot-item">
-            <div class="slot-dot"></div>
+            <div class="slot-dot" style="background:${s.recurring?'var(--green)':'var(--accent)'}"></div>
             <span class="slot-time">${s.s} – ${s.e}</span>
+            <span style="font-size:10px;padding:1px 6px;border-radius:10px;background:${s.recurring?'rgba(64,192,128,0.15)':'rgba(74,143,255,0.12)'};color:${s.recurring?'var(--green)':'var(--accent)'}">${s.recurring?'recurring':'one-time'}</span>
             <button class="slot-del" onclick="deleteSlot(${r.id},${i})">×</button>
           </div>`).join('')
         : `<div class="empty-msg">No slots yet</div>`;
@@ -590,6 +586,11 @@ function renderRoomCard(r) {
         <div class="slot-list">${slotItems}</div>
         <div class="form-row"><label>Start</label><input type="time" id="ns_${r.id}" value="09:00"></div>
         <div class="form-row"><label>End</label><input type="time" id="ne_${r.id}" value="10:00"></div>
+        <div class="form-row" style="margin-bottom:10px;${state.schedDay===1?'opacity:0.3;pointer-events:none':''}">
+          <label style="width:auto;color:var(--muted);font-size:12px">Recurring</label>
+          <input type="checkbox" id="nr_${r.id}" style="width:16px;height:16px;accent-color:var(--green)" ${state.schedDay===1?'disabled':''}>
+          <span style="font-size:12px;color:var(--muted)">${state.schedDay===1?'Today only (recurring not available for tomorrow)':'Repeat daily'}</span>
+        </div>
         <button class="add-slot-btn" onclick="addSlot(${r.id})">+ Add slot</button>`;
 
     } else if (r.panelTab === 'recurring') {
