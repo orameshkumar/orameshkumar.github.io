@@ -206,77 +206,73 @@ async function fbPut(path, value) {
 
 // ── Load today's slots ────────────────────────────────────────
 async function loadSlots() {
-  if (loadingSlots) return;  // prevent duplicate concurrent calls
+  if (loadingSlots) return;
   loadingSlots = true;
-  try {
-  allRooms = [];  // always reset before loading fresh data
-  const today = todayStr();
-  const nm    = nowMins();
-
-  // Read admin seed
-  const seedVal = await fbGet('/config/adminSeed');
-  if (seedVal) adminSeed = String(seedVal);
-
-  // Read room names first
-  let rooms;
-  try {
-    rooms = await fbGet('/rooms');
-  } catch(e) { rooms = null; }
-  if (!rooms) {
-    document.getElementById('loadingState').innerHTML =
-      '<div style="color:var(--red)">Could not connect to Firebase.<br>Check your internet connection and try again.</div>';
-    return;
-  }
-
-  // Fetch each room's slots directly — Firebase nested nodes
-  // require direct path fetch rather than parent fetch
   allRooms = [];
-  const roomKeys = Object.keys(rooms).sort();
 
-  for (const key of roomKeys) {
-    const room = rooms[key];
-    const roomName = room.name || key;
-    const roomId   = parseInt(key.replace('room',''));
+  const showError = (msg) => {
+    document.getElementById('loadingState').style.display = 'none';
+    document.getElementById('slotList').style.display = 'block';
+    document.getElementById('slotList').innerHTML =
+      `<div class="no-slots">${msg}</div>`;
+    loadingSlots = false;
+  };
 
-    // Fetch slots directly from Firebase path
-    // Try fetching full room node to see what fields exist
-    const fullRoom = await fbGet('/rooms/' + key);
-    let rawSlots = await fbGet('/rooms/' + key + '/slots');
+  try {
+    const today = todayStr();
+    const nm    = nowMins();
 
-    // Normalize: Firebase returns array as object {"0":{...},"1":{...}}
-    let slotsArr = [];
-    if (!rawSlots) {
-      slotsArr = [];
-    } else if (Array.isArray(rawSlots)) {
-      slotsArr = rawSlots;
-    } else {
-      slotsArr = Object.keys(rawSlots)
-        .sort((a, b) => parseInt(a) - parseInt(b))
-        .map(k => rawSlots[k]);
+    // Read admin seed
+    const seedVal = await fbGet('/config/adminSeed');
+    if (seedVal) adminSeed = String(seedVal);
+
+    // Read rooms list for names
+    const rooms = await fbGet('/rooms');
+    if (!rooms) { showError('Could not connect to Firebase.<br>Check your internet connection.'); return; }
+
+    const roomKeys = Object.keys(rooms).sort();
+
+    for (const key of roomKeys) {
+      const room    = rooms[key];
+      const roomId  = parseInt(key.replace('room', ''));
+      const roomName = room.name || key;
+
+      // Fetch slots directly — Firebase stores as nested object {"0":{...}}
+      const rawSlots = await fbGet('/rooms/' + key + '/slots');
+
+      // Normalize to array
+      let slotsArr = [];
+      if (!rawSlots) {
+        slotsArr = [];
+      } else if (Array.isArray(rawSlots)) {
+        slotsArr = rawSlots;
+      } else {
+        slotsArr = Object.keys(rawSlots)
+          .sort((a, b) => parseInt(a) - parseInt(b))
+          .map(k => rawSlots[k]);
+      }
+
+      // Only valid slots with s and e fields
+      const slots = slotsArr.filter(s => s && s.s && s.e);
+
+      // Show all slots not yet ended, except tomorrow's
+      const todaySlots = [];
+      slots.forEach((sl, originalIndex) => {
+        if (sl.date === tomorrowStr()) return; // skip tomorrow
+        if (toMins(sl.e) <= nm) return;        // skip ended
+        todaySlots.push({ ...sl, origIdx: originalIndex, roomKey: key });
+      });
+
+      if (todaySlots.length > 0) {
+        allRooms.push({ id: roomId, name: roomName, slots: todaySlots });
+      }
     }
 
-    // Filter valid slots
-    const slots = slotsArr.filter(s => s && s.s && s.e);
+    document.getElementById('loadingState').style.display = 'none';
+    renderSlots();
 
-    // Filter: show slots that haven't ended yet
-    // Only exclude slots explicitly dated for tomorrow
-    // All other slots (today, no-date, recurring) are shown
-    const todaySlots = slots.reduce((acc, sl, originalIndex) => {
-      const isTomorrow = sl.date === tomorrowStr();
-      const notEnded   = toMins(sl.e) > nm;
-      if (isTomorrow) return acc;   // exclude tomorrow's slots
-      if (!notEnded) return acc;    // exclude ended slots
-      acc.push({ ...sl, origIdx: originalIndex, roomKey: key });
-      return acc;
-    }, []);
-
-    if (todaySlots.length > 0) {
-      allRooms.push({ id: roomId, name: roomName, slots: todaySlots });
-    }
-  }
-  document.getElementById('loadingState').style.display = 'none';
-  renderSlots();
   } catch(e) {
+    showError('Error loading slots. Please refresh the page.');
   } finally {
     loadingSlots = false;
   }
@@ -499,6 +495,15 @@ loadSlots();
 
 // Auto-refresh every 30 seconds
 setInterval(loadSlots, 30000);
+
+// Safety timeout — if page still shows loading after 10 sec, retry
+setTimeout(() => {
+  const ls = document.getElementById('loadingState');
+  if (ls && ls.style.display !== 'none') {
+    loadingSlots = false; // reset guard
+    loadSlots();          // retry
+  }
+}, 10000);
 
 // Reload slots whenever page becomes visible again (user switches back to tab/app)
 document.addEventListener('visibilitychange', () => {
