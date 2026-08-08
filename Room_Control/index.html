@@ -580,10 +580,19 @@ async function fbGet(path) {
 
 // ── Firebase SSE listener (real-time) ───────────────────────
 function startFbListener() {
-  if (!state.config.dbUrl || !state.config.apiKey) return;
+  if (!state.config.dbUrl) return;
   if (fbListener) { fbListener.close(); fbListener = null; }
+  // Firebase SSE requires Accept: text/event-stream header
+  // EventSource sends this automatically but some browsers need the explicit param
   const url = `${state.config.dbUrl}/rooms.json`;
-  const es = new EventSource(url);
+  let es;
+  try {
+    es = new EventSource(url);
+  } catch(e) {
+    console.warn('SSE not supported — falling back to polling');
+    startPolling();
+    return;
+  }
   fbListener = es;
 
   es.addEventListener('put', e => {
@@ -601,7 +610,16 @@ function startFbListener() {
     } catch(err) {}
   });
 
-  es.onerror = () => setConnStatus(false);
+  es.onerror = (err) => {
+    setConnStatus(false);
+    // If SSE fails repeatedly, switch to polling
+    if (fbListener) {
+      fbListener.close();
+      fbListener = null;
+    }
+    console.warn('SSE error — switching to polling fallback');
+    startPolling();
+  };
 }
 
 // Track when PWA last wrote override to prevent immediate sync overwrite
@@ -645,6 +663,20 @@ function syncFromFirebase(data) {
   });
   renderDashboard();
   persist();
+}
+
+// ── Polling fallback when SSE fails ──────────────────────────
+let pollingInterval = null;
+function startPolling() {
+  if (pollingInterval) return; // already polling
+  pollingInterval = setInterval(async () => {
+    if (!state.config.dbUrl) return;
+    try {
+      const data = await fbGet('/rooms');
+      if (data) syncFromFirebase(data);
+    } catch(e) {}
+  }, 5000); // poll every 5 seconds as fallback
+  console.log('SSE fallback: polling every 5 seconds');
 }
 
 // ── Write full room state to Firebase ───────────────────────

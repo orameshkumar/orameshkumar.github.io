@@ -1,8 +1,5 @@
-const CACHE = 'roomctrl-fb-v5';
-const ASSETS = [
-  './',
-  './index.html',
-  './activate.html',
+const CACHE = 'roomctrl-fb-v6';
+const STATIC_ASSETS = [
   './manifest.json',
   './icons/icon-192.png',
   './icons/icon-512.png',
@@ -10,7 +7,7 @@ const ASSETS = [
 ];
 
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)));
+  e.waitUntil(caches.open(CACHE).then(c => c.addAll(STATIC_ASSETS)));
   self.skipWaiting();
 });
 
@@ -24,19 +21,30 @@ self.addEventListener('activate', e => {
 });
 
 self.addEventListener('fetch', e => {
-  // Only cache GET requests — Cache API does not support PUT/PATCH/POST/DELETE
+  // Only handle GET requests
   if (e.request.method !== 'GET') return;
 
-  // Never cache Firebase requests — always live data
+  // Never cache Firebase requests
   if (e.request.url.includes('firebaseio.com')) return;
 
-  // HTML pages — network first so updates are picked up immediately
+  // NEVER cache activate.html — always fetch fresh from network
+  // This ensures slot data is always current
+  if (e.request.url.includes('activate.html')) {
+    e.respondWith(
+      fetch(e.request, { cache: 'no-store' })
+        .catch(() => new Response('Activation page unavailable offline. Please connect to internet.', {
+          headers: { 'Content-Type': 'text/plain' }
+        }))
+    );
+    return;
+  }
+
+  // index.html — network first, cache fallback
   if (e.request.destination === 'document' ||
       e.request.url.endsWith('index.html') ||
-      e.request.url.endsWith('activate.html') ||
       e.request.url.endsWith('/')) {
     e.respondWith(
-      fetch(e.request)
+      fetch(e.request, { cache: 'no-store' })
         .then(res => {
           const clone = res.clone();
           caches.open(CACHE).then(c => c.put(e.request, clone));
@@ -47,7 +55,7 @@ self.addEventListener('fetch', e => {
     return;
   }
 
-  // All other GET assets — cache first, network fallback
+  // Static assets — cache first
   e.respondWith(
     caches.match(e.request).then(cached =>
       cached || fetch(e.request).then(res => {
