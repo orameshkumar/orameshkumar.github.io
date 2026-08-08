@@ -208,7 +208,7 @@ async function loadSlots() {
   } catch(e) { rooms = null; }
   if (!rooms) {
     document.getElementById('loadingState').innerHTML =
-      '<div style="color:var(--red)">Could not connect to Firebase.<br>Check your internet connection and try again.</div>';
+      '<div style="color:var(--red)">Could not connect to Firebase.<br>URL: ' + FIREBASE_URL + '<br>Check your internet connection and try again.</div>';
     return;
   }
 
@@ -218,7 +218,19 @@ async function loadSlots() {
 
   roomKeys.forEach(key => {
     const room = rooms[key];
-    const slots = room.slots || [];
+
+    // Firebase can return slots as array OR object with numeric keys
+    // Normalize to array in both cases
+    let rawSlots = room.slots || [];
+    if (!Array.isArray(rawSlots)) {
+      // Convert object {0:{...}, 1:{...}} to array
+      rawSlots = Object.values(rawSlots);
+    }
+    // Filter out null/undefined entries
+    const slots = rawSlots.filter(s => s && s.s && s.e);
+
+    console.log(`[activate] ${key}: ${slots.length} slots found`);
+    slots.forEach((s,i) => console.log(`  [${i}] ${s.s}-${s.e} code=${s.code} activatedAt=${s.activatedAt} date=${s.date}`));
 
     // Filter: only today's slots that haven't ended yet
     // origIdx must be the index in the ORIGINAL slots array (for Firebase write)
@@ -257,9 +269,15 @@ function renderSlots() {
   container.style.display = 'block';
 
   if (allRooms.length === 0) {
+    const nm2 = nowMins();
+    const h = Math.floor(nm2/60).toString().padStart(2,'0');
+    const m = (nm2%60).toString().padStart(2,'0');
     container.innerHTML = `<div class="no-slots">
       No slots available for today.<br>
-      <span style="font-size:12px;color:var(--muted);margin-top:8px;display:block">Check back when slots are scheduled.</span>
+      <span style="font-size:12px;color:var(--muted);margin-top:8px;display:block">
+        Current time: ${h}:${m} · Date: ${todayStr()}<br>
+        Slots only show if: created for today, not yet ended, and not expired.
+      </span>
     </div>`;
     return;
   }
@@ -390,17 +408,14 @@ async function pinSubmit() {
       // ── Correct code ─────────────────────────────────────────
       updatePinDots('ok');
 
-      const roomData = await fbGet(`/rooms/${selectedSlot.roomKey}`);
-      if (roomData && roomData.slots && roomData.slots[selectedSlot.origIdx] !== undefined) {
-        roomData.slots[selectedSlot.origIdx].activatedAt = Date.now();
-        roomData.slots[selectedSlot.origIdx].activatedBy = isAdmin ? 'admin' : 'slot';
-        roomData.slots[selectedSlot.origIdx].attempts    = 0;
-        roomData.slots[selectedSlot.origIdx].lockedUntil = null;
-        // Write activatedAt to Firebase — ESP32 polls this
-        // Do NOT set override=true — relay only turns ON when slot TIME arrives
-        // ESP32 isInSlot() checks both time AND activated flag
-        await fbPut(`/rooms/${selectedSlot.roomKey}/slots`, roomData.slots);
-      }
+      // Write activatedAt directly to the specific slot field
+      // Use targeted path to avoid overwriting other slots
+      const slotBasePath = `/rooms/${selectedSlot.roomKey}/slots/${selectedSlot.origIdx}`;
+      await fbPut(slotBasePath + '/activatedAt', Date.now());
+      await fbPut(slotBasePath + '/activatedBy', isAdmin ? 'admin' : 'slot');
+      await fbPut(slotBasePath + '/attempts',    0);
+      await fbPut(slotBasePath + '/lockedUntil', null);
+      console.log('[activate] Written activatedAt to', slotBasePath);
 
       // Update local state immediately so UI reflects activation now
       const localRoom = allRooms.find(r => r.id === selectedRoom.id);
@@ -428,28 +443,24 @@ async function pinSubmit() {
       // ── Wrong code ───────────────────────────────────────────
       updatePinDots('error');
 
-      const roomData = await fbGet(`/rooms/${selectedSlot.roomKey}`);
-      if (roomData && roomData.slots && roomData.slots[selectedSlot.origIdx] !== undefined) {
-        const attempts = (roomData.slots[selectedSlot.origIdx].attempts || 0) + 1;
-        roomData.slots[selectedSlot.origIdx].attempts = attempts;
+      const slotPath2 = `/rooms/${selectedSlot.roomKey}/slots/${selectedSlot.origIdx}`;
+      // Read current attempts count directly
+      const currentAttempts = await fbGet(slotPath2 + '/attempts') || 0;
+      const attempts = currentAttempts + 1;
+      await fbPut(slotPath2 + '/attempts', attempts);
 
-        if (attempts >= 3) {
-          const lockUntil = Date.now() + 5 * 60 * 1000;
-          roomData.slots[selectedSlot.origIdx].lockedUntil = lockUntil;
-          await fbPut(`/rooms/${selectedSlot.roomKey}/slots`, roomData.slots);
-          setTimeout(() => {
-            document.getElementById('pinOverlay').classList.remove('show');
-            pinValue = ''; updatePinDots(); loadSlots();
-          }, 800);
-          document.getElementById('pinError').textContent =
-            '3 attempts reached — locked for 5 minutes';
-        } else {
-          await fbPut(`/rooms/${selectedSlot.roomKey}/slots`, roomData.slots);
-          document.getElementById('pinError').textContent =
-            `Wrong code — ${3 - attempts} attempt${3-attempts===1?'':'s'} remaining`;
-        }
+      if (attempts >= 3) {
+        const lockUntil = Date.now() + 5 * 60 * 1000;
+        await fbPut(slotPath2 + '/lockedUntil', lockUntil);
+        setTimeout(() => {
+          document.getElementById('pinOverlay').classList.remove('show');
+          pinValue = ''; updatePinDots(); loadSlots();
+        }, 800);
+        document.getElementById('pinError').textContent =
+          '3 attempts reached — locked for 5 minutes';
       } else {
-        document.getElementById('pinError').textContent = 'Could not verify — try again';
+        document.getElementById('pinError').textContent =
+          `Wrong code — ${3 - attempts} attempt${3-attempts===1?'':'s'} remaining`;
       }
 
       setTimeout(() => { pinValue = ''; updatePinDots(); }, 600);
