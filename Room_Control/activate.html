@@ -181,13 +181,11 @@ function getAdminCode(seed) {
 // ── Firebase REST ─────────────────────────────────────────────
 async function fbGet(path) {
   try {
-    const url = FIREBASE_URL + path + '.json';
-    const res = await fetch(url);
-    if (!res.ok) {
-      return null;
-    }
-    const data = await res.json();
-    return data;
+    // Add timestamp to bust any HTTP cache layer
+    const url = FIREBASE_URL + path + '.json?nc=' + Date.now();
+    const res = await fetch(url, { cache: 'no-store' });
+    if (!res.ok) return null;
+    return await res.json();
   } catch(e) {
     return null;
   }
@@ -205,8 +203,16 @@ async function fbPut(path, value) {
 }
 
 // ── Load today's slots ────────────────────────────────────────
+// Returns true if user is actively interacting — don't interrupt
+function userIsBusy() {
+  const pinOpen     = document.getElementById('pinOverlay')?.classList.contains('show');
+  const successOpen = document.getElementById('successOverlay')?.classList.contains('show');
+  return pinOpen || successOpen;
+}
+
 async function loadSlots() {
   if (loadingSlots) return;
+  if (userIsBusy()) return;  // don't refresh while PIN pad is open
   loadingSlots = true;
   allRooms = [];
 
@@ -238,7 +244,7 @@ async function loadSlots() {
       const roomName = room.name || key;
 
       // Fetch slots directly — Firebase stores as nested object {"0":{...}}
-      const rawSlots = await fbGet('/rooms/' + key + '/slots');
+      const rawSlots = await fbGet('/rooms/' + key + '/slots');  // always fresh
 
       // Normalize to array
       let slotsArr = [];
@@ -276,28 +282,6 @@ async function loadSlots() {
   } finally {
     loadingSlots = false;
   }
-}
-
-// ── Lightweight status refresh — only updates activatedAt fields ──
-// Much faster than full loadSlots() — just checks current slot states
-async function refreshStatus() {
-  if (!allRooms.length) { loadingSlots = false; loadSlots(); return; }
-  try {
-    let changed = false;
-    for (const room of allRooms) {
-      for (const sl of room.slots) {
-        const path = `/rooms/${sl.roomKey}/slots/${sl.origIdx}/activatedAt`;
-        const val  = await fbGet(path);
-        const newActivated = (val !== null && val !== undefined);
-        const wasActivated = !!sl.activatedAt;
-        if (newActivated !== wasActivated) {
-          sl.activatedAt = newActivated ? val : null;
-          changed = true;
-        }
-      }
-    }
-    if (changed) renderSlots();
-  } catch(e) {}
 }
 
 // ── Render slots ──────────────────────────────────────────────
@@ -515,7 +499,7 @@ document.getElementById('headerDate').textContent =
 
 loadSlots();
 
-// Safety timeout — if still loading after 10 sec, retry
+// Safety timeout — if still showing loading after 10 sec, retry once
 setTimeout(() => {
   const ls = document.getElementById('loadingState');
   if (ls && ls.style.display !== 'none') {
@@ -524,19 +508,16 @@ setTimeout(() => {
   }
 }, 10000);
 
-// Full reload every 60 seconds (catches new slots, expired slots etc)
-setInterval(() => { loadingSlots = false; loadSlots(); }, 60000);
+// Full refresh every 10 seconds — always fresh from Firebase, no cache
+setInterval(() => { loadingSlots = false; loadSlots(); }, 10000);
 
-// Lightweight status check every 5 seconds (catches activatedAt changes fast)
-setInterval(() => refreshStatus(), 5000);
-
-// Firebase SSE — instant push when any slot changes
+// Firebase SSE — instant full refresh when any data changes
 (function startSSE() {
   try {
     const es = new EventSource(FIREBASE_URL + '/rooms.json');
-    es.addEventListener('put',   () => refreshStatus());
-    es.addEventListener('patch', () => refreshStatus());
-    es.onerror = () => es.close();
+    es.addEventListener('put',   () => { loadingSlots = false; loadSlots(); });
+    es.addEventListener('patch', () => { loadingSlots = false; loadSlots(); });
+    es.onerror = () => es.close(); // polling handles it
   } catch(e) {}
 })();
 
