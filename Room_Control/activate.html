@@ -201,67 +201,66 @@ async function loadSlots() {
   const seedVal = await fbGet('/config/adminSeed');
   if (seedVal) adminSeed = String(seedVal);
 
-  // Read all rooms
+  // Read room names first
   let rooms;
   try {
     rooms = await fbGet('/rooms');
   } catch(e) { rooms = null; }
   if (!rooms) {
     document.getElementById('loadingState').innerHTML =
-      '<div style="color:var(--red)">Could not connect to Firebase.<br>URL: ' + FIREBASE_URL + '<br>Check your internet connection and try again.</div>';
+      '<div style="color:var(--red)">Could not connect to Firebase.<br>Check your internet connection and try again.</div>';
     return;
   }
 
-  // Build today's slot list per room
+  // Fetch each room's slots directly — Firebase nested nodes
+  // require direct path fetch rather than parent fetch
   allRooms = [];
   const roomKeys = Object.keys(rooms).sort();
 
-  roomKeys.forEach(key => {
+  for (const key of roomKeys) {
     const room = rooms[key];
+    const roomName = room.name || key;
+    const roomId   = parseInt(key.replace('room',''));
 
-    // Firebase stores arrays as objects with numeric keys: {"0":{...},"1":{...}}
-    // Must sort by key to preserve slot order
-    let rawSlots = room.slots;
+    // Fetch slots directly from Firebase path
+    let rawSlots = null;
+    try {
+      rawSlots = await fbGet('/rooms/' + key + '/slots');
+    } catch(e) { rawSlots = null; }
+
+    console.log(`[activate] ${key} slots raw:`, JSON.stringify(rawSlots));
+
+    // Normalize: Firebase returns array as object {"0":{...},"1":{...}}
+    let slotsArr = [];
     if (!rawSlots) {
-      rawSlots = [];
-    } else if (!Array.isArray(rawSlots)) {
-      // Sort numeric keys to preserve order: "0","1","2"...
-      rawSlots = Object.keys(rawSlots)
+      slotsArr = [];
+    } else if (Array.isArray(rawSlots)) {
+      slotsArr = rawSlots;
+    } else {
+      slotsArr = Object.keys(rawSlots)
         .sort((a, b) => parseInt(a) - parseInt(b))
         .map(k => rawSlots[k]);
     }
-    // Filter out null/undefined entries
-    const slots = rawSlots.filter(s => s && s.s && s.e);
 
-    console.log(`[activate] ${key}: rawSlots=`, JSON.stringify(room.slots));
-    console.log(`[activate] ${key}: ${slots.length} slots after normalize`);
-    slots.forEach((s,i) => console.log(`  [${i}] ${s.s}-${s.e} code=${s.code} activatedAt=${s.activatedAt} date=${s.date}`));
+    // Filter valid slots
+    const slots = slotsArr.filter(s => s && s.s && s.e);
+    console.log(`[activate] ${key}: ${slots.length} valid slots`);
+    slots.forEach((s,i) => console.log(`  slot[${i}] ${s.s}-${s.e} code=${s.code} activated=${s.activatedAt}`));
 
-    // Filter: only today's slots that haven't ended yet
-    // origIdx must be the index in the ORIGINAL slots array (for Firebase write)
+    // Filter: today's slots not yet ended
     const todaySlots = slots.reduce((acc, sl, originalIndex) => {
-      // Show if: recurring, OR date matches today, OR no date set (legacy slots)
-      // Explicitly exclude tomorrow's dated slots
       const isTomorrow = sl.date === tomorrowStr();
-      const isToday = !isTomorrow && (
-                      sl.recurring ||
-                      sl.date === today ||
-                      !sl.date);  // slots without date field treated as today
+      const isToday = !isTomorrow && (sl.recurring || sl.date === today || !sl.date);
       if (!isToday) return acc;
-      // Must not have ended yet
       if (toMins(sl.e) <= nm) return acc;
       acc.push({ ...sl, origIdx: originalIndex, roomKey: key });
       return acc;
     }, []);
 
     if (todaySlots.length > 0) {
-      allRooms.push({
-        id: parseInt(key.replace('room','')),
-        name: room.name || key,
-        slots: todaySlots
-      });
+      allRooms.push({ id: roomId, name: roomName, slots: todaySlots });
     }
-  });
+  }
 
   document.getElementById('loadingState').style.display = 'none';
   renderSlots();
