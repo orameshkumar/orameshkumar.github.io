@@ -231,6 +231,9 @@ async function loadSlots() {
     const roomId   = parseInt(key.replace('room',''));
 
     // Fetch slots directly from Firebase path
+    // Try fetching full room node to see what fields exist
+    const fullRoom = await fbGet('/rooms/' + key);
+    console.log(`[activate] ${key} fullRoom keys:`, fullRoom ? Object.keys(fullRoom).join(', ') : 'NULL');
     let rawSlots = await fbGet('/rooms/' + key + '/slots');
     console.log(`[activate] ${key}/slots → `, rawSlots === null ? 'NULL' : rawSlots === undefined ? 'UNDEFINED' : JSON.stringify(rawSlots).substring(0,100));
 
@@ -495,8 +498,22 @@ document.getElementById('headerDate').textContent =
 
 loadSlots();
 
-// Auto-refresh every 60 seconds
-setInterval(loadSlots, 60000);
+// Auto-refresh every 30 seconds
+setInterval(loadSlots, 30000);
+
+// Reload slots whenever page becomes visible again (user switches back to tab/app)
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') {
+    console.log('[activate] Page visible — reloading slots');
+    loadSlots();
+  }
+});
+
+// Also reload when page gets focus (PWA coming to foreground)
+window.addEventListener('focus', loadSlots);
+window.addEventListener('pageshow', e => {
+  if (e.persisted) loadSlots(); // restored from back/forward cache
+});
 </script>
 </body>
 </html>

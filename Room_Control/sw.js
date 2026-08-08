@@ -1,4 +1,4 @@
-const CACHE = 'roomctrl-fb-v4';
+const CACHE = 'roomctrl-fb-v5';
 const ASSETS = [
   './',
   './index.html',
