@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#1a1a2e">
   <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="RoomCtrl">
   <title>Room Controller</title>
@@ -380,22 +381,32 @@ function showQR() {
   document.getElementById('printQrBtn').style.display = 'block';
   document.getElementById('qrUrlText').textContent = activateUrl;
 
-  // Generate QR only once
+  // Generate QR only once — wait for QRCode library to load if needed
   if (!qrGenerated) {
     document.getElementById('qrCanvas').innerHTML = '';
-    try {
-      new QRCode(document.getElementById('qrCanvas'), {
-        text: activateUrl,
-        width: 160, height: 160,
-        colorDark: '#000000',
-        colorLight: '#ffffff',
-        correctLevel: QRCode.CorrectLevel.M
-      });
-      qrGenerated = true;
-    } catch(e) {
-      document.getElementById('qrCanvas').innerHTML =
-        '<div style="color:var(--red);font-size:12px;padding:10px">QR library not loaded.<br>Check internet connection.</div>';
-    }
+    const tryGenerate = () => {
+      if (typeof QRCode === 'undefined') {
+        document.getElementById('qrCanvas').innerHTML =
+          '<div style="color:var(--muted);font-size:12px;padding:10px">Loading QR library…</div>';
+        setTimeout(tryGenerate, 500);
+        return;
+      }
+      try {
+        document.getElementById('qrCanvas').innerHTML = '';
+        new QRCode(document.getElementById('qrCanvas'), {
+          text: activateUrl,
+          width: 160, height: 160,
+          colorDark: '#000000',
+          colorLight: '#ffffff',
+          correctLevel: QRCode.CorrectLevel.M
+        });
+        qrGenerated = true;
+      } catch(e) {
+        document.getElementById('qrCanvas').innerHTML =
+          '<div style="color:var(--red);font-size:12px;padding:10px">QR library not loaded.<br>Check internet connection.</div>';
+      }
+    };
+    tryGenerate();
   }
 }
 
@@ -403,30 +414,25 @@ function printQR() {
   const baseUrl = window.location.href.replace('index.html','').replace(/\/$/, '');
   const activateUrl = baseUrl + '/activate.html';
   const win = window.open('', '_blank');
-  win.document.write(`<!DOCTYPE html><html><head><title>Room Controller QR</title>
-    <style>
-      body { font-family: -apple-system,sans-serif; text-align:center; padding:40px; }
-      h2 { font-size:22px; margin-bottom:4px; }
-      p { color:#666; font-size:14px; margin-bottom:20px; }
-      .url { font-size:12px; color:#999; margin-top:12px; word-break:break-all; }
-      @media print { button { display:none; } }
-    </style>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-  </head><body>
-    <h2>Room Controller</h2>
-    <p>Scan to activate your room slot</p>
-    <div id="qr" style="display:inline-block;background:white;padding:12px;border:1px solid #ddd;border-radius:8px"></div>
-    <div class="url">${activateUrl}</div>
-    <br><button onclick="window.print()">Print</button>
-    <script>
-      new QRCode(document.getElementById('qr'), {
-        text: '${activateUrl}', width:200, height:200,
-        colorDark:'#000000', colorLight:'#ffffff',
-        correctLevel: QRCode.CorrectLevel.M
-      });
-      setTimeout(() => window.print(), 800);
-    </script>
-  </body></html>`);
+  // Use string concat to avoid </script> inside template literal breaking parser
+  const scriptTag = '<scr' + 'ipt src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></' + 'script>';
+  const inlineScript = '<scr' + 'ipt>window.onload=function(){new QRCode(document.getElementById("qr"),{text:"' + activateUrl + '",width:200,height:200,colorDark:"#000000",colorLight:"#ffffff",correctLevel:QRCode.CorrectLevel.M});setTimeout(function(){window.print();},800);};</' + 'script>';
+  win.document.write(
+    '<!DOCTYPE html><html><head><title>Room Controller QR</title>' +
+    '<style>body{font-family:-apple-system,sans-serif;text-align:center;padding:40px;}' +
+    'h2{font-size:22px;margin-bottom:4px;}p{color:#666;font-size:14px;margin-bottom:20px;}' +
+    '.url{font-size:12px;color:#999;margin-top:12px;word-break:break-all;}' +
+    '@media print{button{display:none;}}</style>' +
+    scriptTag +
+    '</head><body>' +
+    '<h2>Room Controller</h2>' +
+    '<p>Scan to activate your room slot</p>' +
+    '<div id="qr" style="display:inline-block;background:white;padding:12px;border:1px solid #ddd;border-radius:8px"></div>' +
+    '<div class="url">' + activateUrl + '</div>' +
+    '<br><button onclick="window.print()">Print</button>' +
+    inlineScript +
+    '</body></html>'
+  );
   win.document.close();
 }
 
@@ -917,8 +923,8 @@ function renderRoomCard(r) {
       ).join('');
       body = `<div class="panel-tabs">${ptabs}</div>
         <div class="day-row">${dayPills}</div>
-        <div class="form-row"><label>Start</label><input type="time" id="rs_${r.id}" value="${r.recurring.start}" onchange="setRecurring(${r.id},'start',this.value)"></div>
-        <div class="form-row"><label>End</label><input type="time" id="re_${r.id}" value="${r.recurring.end}" onchange="setRecurring(${r.id},'end',this.value)"></div>
+        <div class="form-row"><label>Start</label><input type="time" id="rs_${r.id}" value="${r.recurring.start||'09:00'}" onchange="setRecurring(${r.id},'start',this.value)"></div>
+        <div class="form-row"><label>End</label><input type="time" id="re_${r.id}" value="${r.recurring.end||'10:00'}" onchange="setRecurring(${r.id},'end',this.value)"></div>
         <button class="apply-btn" onclick="applyRecurring(${r.id})">Apply to today & tomorrow</button>`;
 
     } else {

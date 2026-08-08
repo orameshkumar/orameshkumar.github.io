@@ -195,10 +195,13 @@ async function loadSlots() {
   if (seedVal) adminSeed = String(seedVal);
 
   // Read all rooms
-  const rooms = await fbGet('/rooms');
+  let rooms;
+  try {
+    rooms = await fbGet('/rooms');
+  } catch(e) { rooms = null; }
   if (!rooms) {
     document.getElementById('loadingState').innerHTML =
-      '<div style="color:var(--red)">Could not connect to Firebase.<br>Check your connection.</div>';
+      '<div style="color:var(--red)">Could not connect to Firebase.<br>Check your internet connection and try again.</div>';
     return;
   }
 
@@ -357,73 +360,67 @@ async function pinSubmit() {
   const isAdmin   = pinValue === adminCode;
   const isSlot    = pinValue === slotCode;
 
-  if (isAdmin || isSlot) {
-    // ── Correct code ───────────────────────────────────────────
-    updatePinDots('ok');
+  try {
+    if (isAdmin || isSlot) {
+      // ── Correct code ─────────────────────────────────────────
+      updatePinDots('ok');
 
-    // Update slot in Firebase
-    const path = `/rooms/${selectedSlot.roomKey}/slots`;
-    const roomData = await fbGet(`/rooms/${selectedSlot.roomKey}`);
-    if (roomData && roomData.slots) {
-      roomData.slots[selectedSlot.origIdx].activatedAt = Date.now();
-      roomData.slots[selectedSlot.origIdx].activatedBy = isAdmin ? 'admin' : 'slot';
-      roomData.slots[selectedSlot.origIdx].attempts    = 0;
-      roomData.slots[selectedSlot.origIdx].lockedUntil = null;
-      // Also set override to null so schedule+activation controls relay
-      await fbPut(`/rooms/${selectedSlot.roomKey}/slots`, roomData.slots);
-      // Trigger relay via override
-      await fbPut(`/rooms/${selectedSlot.roomKey}/override`, true);
-    }
-
-    // Show success
-    setTimeout(() => {
-      document.getElementById('pinOverlay').classList.remove('show');
-      document.getElementById('successSub').textContent =
-        `${selectedRoom.name} · ${selectedSlot.s} – ${selectedSlot.e}`;
-      document.getElementById('successOverlay').classList.add('show');
+      const roomData = await fbGet(`/rooms/${selectedSlot.roomKey}`);
+      if (roomData && roomData.slots && roomData.slots[selectedSlot.origIdx] !== undefined) {
+        roomData.slots[selectedSlot.origIdx].activatedAt = Date.now();
+        roomData.slots[selectedSlot.origIdx].activatedBy = isAdmin ? 'admin' : 'slot';
+        roomData.slots[selectedSlot.origIdx].attempts    = 0;
+        roomData.slots[selectedSlot.origIdx].lockedUntil = null;
+        await fbPut(`/rooms/${selectedSlot.roomKey}/slots`, roomData.slots);
+        await fbPut(`/rooms/${selectedSlot.roomKey}/override`, true);
+      }
 
       setTimeout(() => {
-        document.getElementById('successOverlay').classList.remove('show');
-        loadSlots(); // Refresh slot list
-      }, 2500);
-    }, 400);
-
-  } else {
-    // ── Wrong code ─────────────────────────────────────────────
-    updatePinDots('error');
-
-    // Increment attempts in Firebase
-    const roomData = await fbGet(`/rooms/${selectedSlot.roomKey}`);
-    if (roomData && roomData.slots) {
-      const attempts = (roomData.slots[selectedSlot.origIdx].attempts || 0) + 1;
-      roomData.slots[selectedSlot.origIdx].attempts = attempts;
-
-      if (attempts >= 3) {
-        // Lock for 5 minutes
-        const lockUntil = Date.now() + 5 * 60 * 1000;
-        roomData.slots[selectedSlot.origIdx].lockedUntil = lockUntil;
-        await fbPut(`/rooms/${selectedSlot.roomKey}/slots`, roomData.slots);
-
+        document.getElementById('pinOverlay').classList.remove('show');
+        document.getElementById('successSub').textContent =
+          `${selectedRoom.name} · ${selectedSlot.s} – ${selectedSlot.e}`;
+        document.getElementById('successOverlay').classList.add('show');
         setTimeout(() => {
-          document.getElementById('pinOverlay').classList.remove('show');
-          pinValue = '';
-          updatePinDots();
+          document.getElementById('successOverlay').classList.remove('show');
           loadSlots();
-        }, 800);
-        document.getElementById('pinError').textContent =
-          '3 attempts reached — locked for 5 minutes';
+        }, 2500);
+      }, 400);
+
+    } else {
+      // ── Wrong code ───────────────────────────────────────────
+      updatePinDots('error');
+
+      const roomData = await fbGet(`/rooms/${selectedSlot.roomKey}`);
+      if (roomData && roomData.slots && roomData.slots[selectedSlot.origIdx] !== undefined) {
+        const attempts = (roomData.slots[selectedSlot.origIdx].attempts || 0) + 1;
+        roomData.slots[selectedSlot.origIdx].attempts = attempts;
+
+        if (attempts >= 3) {
+          const lockUntil = Date.now() + 5 * 60 * 1000;
+          roomData.slots[selectedSlot.origIdx].lockedUntil = lockUntil;
+          await fbPut(`/rooms/${selectedSlot.roomKey}/slots`, roomData.slots);
+          setTimeout(() => {
+            document.getElementById('pinOverlay').classList.remove('show');
+            pinValue = ''; updatePinDots(); loadSlots();
+          }, 800);
+          document.getElementById('pinError').textContent =
+            '3 attempts reached — locked for 5 minutes';
+        } else {
+          await fbPut(`/rooms/${selectedSlot.roomKey}/slots`, roomData.slots);
+          document.getElementById('pinError').textContent =
+            `Wrong code — ${3 - attempts} attempt${3-attempts===1?'':'s'} remaining`;
+        }
       } else {
-        await fbPut(`/rooms/${selectedSlot.roomKey}/slots`, roomData.slots);
-        document.getElementById('pinError').textContent =
-          `Wrong code — ${3 - attempts} attempt${3-attempts===1?'':'s'} remaining`;
+        document.getElementById('pinError').textContent = 'Could not verify — try again';
       }
+
+      setTimeout(() => { pinValue = ''; updatePinDots(); }, 600);
     }
 
-    // Reset PIN after error
-    setTimeout(() => {
-      pinValue = '';
-      updatePinDots();
-    }, 600);
+  } catch(err) {
+    console.error('PIN submit error:', err);
+    document.getElementById('pinError').textContent = 'Network error — please try again';
+    setTimeout(() => { pinValue = ''; updatePinDots(); }, 600);
   }
 }
 
