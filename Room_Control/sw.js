@@ -1,4 +1,4 @@
-const CACHE = 'roomctrl-fb-v3';
+const CACHE = 'roomctrl-fb-v4';
 const ASSETS = [
   './',
   './index.html',
@@ -24,7 +24,13 @@ self.addEventListener('activate', e => {
 });
 
 self.addEventListener('fetch', e => {
+  // Only cache GET requests — Cache API does not support PUT/PATCH/POST/DELETE
+  if (e.request.method !== 'GET') return;
+
+  // Never cache Firebase requests — always live data
   if (e.request.url.includes('firebaseio.com')) return;
+
+  // HTML pages — network first so updates are picked up immediately
   if (e.request.destination === 'document' ||
       e.request.url.endsWith('index.html') ||
       e.request.url.endsWith('activate.html') ||
@@ -40,6 +46,8 @@ self.addEventListener('fetch', e => {
     );
     return;
   }
+
+  // All other GET assets — cache first, network fallback
   e.respondWith(
     caches.match(e.request).then(cached =>
       cached || fetch(e.request).then(res => {

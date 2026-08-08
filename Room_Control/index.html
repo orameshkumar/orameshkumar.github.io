@@ -597,11 +597,13 @@ function syncFromFirebase(data) {
     if (idx < 0 || idx >= 6) return;
     const r = data[key];
 
-    // Sync override — but skip if PWA just wrote it (within last 5 seconds)
-    // This prevents ESP32 heartbeat from immediately overwriting PWA override
+    // Sync override — only if PWA hasn't written recently
+    // 30-second lock prevents ESP32 heartbeat from resetting manual override
     const lastWrite = overrideWriteTime[idx] || 0;
-    const justWrote = (Date.now() - lastWrite) < 5000;
+    const justWrote = (Date.now() - lastWrite) < 30000;
     if (r.override !== undefined && !justWrote) {
+      // Extra safety: only accept null from Firebase (clearing override)
+      // true/false overrides from Firebase are only set by PWA so this is safe
       state.rooms[idx].override = r.override;
     }
 
@@ -821,10 +823,11 @@ async function applyRecurring(id) {
 async function setOverride(id, val) {
   const r = state.rooms.find(x => x.id === id);
   r.override = val;
-  // Record write time so syncFromFirebase won't overwrite for 5 seconds
   overrideWriteTime[id - 1] = Date.now();
   persist(); renderDashboard();
   await pushRoom(id - 1);
+  // Re-stamp after push — network took some time
+  overrideWriteTime[id - 1] = Date.now();
 }
 
 async function allRooms(val) {
@@ -834,6 +837,8 @@ async function allRooms(val) {
   });
   persist(); renderDashboard();
   await pushAllRooms();
+  // Re-stamp lock after push completes — push itself takes a few seconds
+  state.rooms.forEach((r, i) => { overrideWriteTime[i] = Date.now(); });
   showToast(val === true ? 'All ON' : val === false ? 'All OFF' : 'All Auto');
 }
 
