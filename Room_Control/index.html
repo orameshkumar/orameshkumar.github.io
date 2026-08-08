@@ -325,6 +325,14 @@ let fbListener = null;
 let tlView = '12h';
 
 // ── Code helpers ─────────────────────────────────────────────
+// Normalize Firebase slots — converts object {0:{...}} to array [{...}]
+function normalizeSlots(slots) {
+  if (!slots) return [];
+  if (Array.isArray(slots)) return slots;
+  // Firebase converted array to object with numeric keys
+  return Object.keys(slots).sort((a,b) => parseInt(a)-parseInt(b)).map(k => slots[k]).filter(Boolean);
+}
+
 function generate4DigitCode() {
   return String(Math.floor(1000 + Math.random() * 9000));
 }
@@ -502,7 +510,14 @@ function persist() {
 function hydrate() {
   try {
     const d = JSON.parse(localStorage.getItem('rc_fb') || '{}');
-    if (d.rooms) d.rooms.forEach((r,i) => Object.assign(state.rooms[i], r));
+    if (d.rooms) d.rooms.forEach((r,i) => {
+      Object.assign(state.rooms[i], r);
+      // Normalize slots — Firebase/localStorage may store as object {0:[...]}
+      if (state.rooms[i].slots) {
+        state.rooms[i].slots[0] = normalizeSlots(state.rooms[i].slots[0]);
+        state.rooms[i].slots[1] = normalizeSlots(state.rooms[i].slots[1]);
+      }
+    });
     if (d.config) Object.assign(state.config, d.config);
     if (d.log) state.log = d.log;
   } catch(e) {}
@@ -611,9 +626,10 @@ function syncFromFirebase(data) {
     if (r.lightOn !== undefined) state.rooms[idx].lightOn = r.lightOn;
 
     // Sync slot activation state — catches activations from activate.html
-    // Updates: activatedAt, activatedBy, attempts, lockedUntil per slot
-    if (r.slots && Array.isArray(r.slots)) {
-      r.slots.forEach((fbSlot, si) => {
+    // Normalize Firebase slots (may be object with numeric keys)
+    const fbSlots = normalizeSlots(r.slots);
+    if (fbSlots.length > 0) {
+      fbSlots.forEach((fbSlot, si) => {
         const localSlot = state.rooms[idx].slots[0] && state.rooms[idx].slots[0][si];
         if (!localSlot) return;
         // Only sync activation fields — don't overwrite time/code/recurring
@@ -634,10 +650,13 @@ async function pushRoom(idx) {
   const r = state.rooms[idx];
   // Use PATCH not PUT — only update fields PWA owns
   // This preserves lightOn, lastSeen written by ESP32
+  // Normalize slots to array before sending (safety check)
+  const todaySlots    = normalizeSlots(r.slots[0]);
+  const tomorrowSlots = normalizeSlots(r.slots[1]);
   const payload = {
     override: r.override,          // null / true / false
-    slots: r.slots[0] || [],       // today's slots
-    slotsT: r.slots[1] || [],      // tomorrow's slots
+    slots:  todaySlots,            // today's slots (always array)
+    slotsT: tomorrowSlots,         // tomorrow's slots (always array)
     name: r.name,
     updatedAt: Date.now()
   };

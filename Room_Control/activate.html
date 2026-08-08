@@ -219,17 +219,22 @@ async function loadSlots() {
   roomKeys.forEach(key => {
     const room = rooms[key];
 
-    // Firebase can return slots as array OR object with numeric keys
-    // Normalize to array in both cases
-    let rawSlots = room.slots || [];
-    if (!Array.isArray(rawSlots)) {
-      // Convert object {0:{...}, 1:{...}} to array
-      rawSlots = Object.values(rawSlots);
+    // Firebase stores arrays as objects with numeric keys: {"0":{...},"1":{...}}
+    // Must sort by key to preserve slot order
+    let rawSlots = room.slots;
+    if (!rawSlots) {
+      rawSlots = [];
+    } else if (!Array.isArray(rawSlots)) {
+      // Sort numeric keys to preserve order: "0","1","2"...
+      rawSlots = Object.keys(rawSlots)
+        .sort((a, b) => parseInt(a) - parseInt(b))
+        .map(k => rawSlots[k]);
     }
     // Filter out null/undefined entries
     const slots = rawSlots.filter(s => s && s.s && s.e);
 
-    console.log(`[activate] ${key}: ${slots.length} slots found`);
+    console.log(`[activate] ${key}: rawSlots=`, JSON.stringify(room.slots));
+    console.log(`[activate] ${key}: ${slots.length} slots after normalize`);
     slots.forEach((s,i) => console.log(`  [${i}] ${s.s}-${s.e} code=${s.code} activatedAt=${s.activatedAt} date=${s.date}`));
 
     // Filter: only today's slots that haven't ended yet
