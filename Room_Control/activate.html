@@ -278,6 +278,28 @@ async function loadSlots() {
   }
 }
 
+// ── Lightweight status refresh — only updates activatedAt fields ──
+// Much faster than full loadSlots() — just checks current slot states
+async function refreshStatus() {
+  if (!allRooms.length) { loadingSlots = false; loadSlots(); return; }
+  try {
+    let changed = false;
+    for (const room of allRooms) {
+      for (const sl of room.slots) {
+        const path = `/rooms/${sl.roomKey}/slots/${sl.origIdx}/activatedAt`;
+        const val  = await fbGet(path);
+        const newActivated = (val !== null && val !== undefined);
+        const wasActivated = !!sl.activatedAt;
+        if (newActivated !== wasActivated) {
+          sl.activatedAt = newActivated ? val : null;
+          changed = true;
+        }
+      }
+    }
+    if (changed) renderSlots();
+  } catch(e) {}
+}
+
 // ── Render slots ──────────────────────────────────────────────
 function renderSlots() {
   const nm  = nowMins();
@@ -493,35 +515,47 @@ document.getElementById('headerDate').textContent =
 
 loadSlots();
 
-// Auto-refresh every 30 seconds
-setInterval(loadSlots, 30000);
-
-// Safety timeout — if page still shows loading after 10 sec, retry
+// Safety timeout — if still loading after 10 sec, retry
 setTimeout(() => {
   const ls = document.getElementById('loadingState');
   if (ls && ls.style.display !== 'none') {
-    loadingSlots = false; // reset guard
-    loadSlots();          // retry
+    loadingSlots = false;
+    loadSlots();
   }
 }, 10000);
 
-// Reload slots whenever page becomes visible again (user switches back to tab/app)
-document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible') {
-    loadSlots();
-  }
-});
+// Full reload every 60 seconds (catches new slots, expired slots etc)
+setInterval(() => { loadingSlots = false; loadSlots(); }, 60000);
 
-// Also reload when page gets focus (PWA coming to foreground)
+// Lightweight status check every 5 seconds (catches activatedAt changes fast)
+setInterval(() => refreshStatus(), 5000);
+
+// Firebase SSE — instant push when any slot changes
+(function startSSE() {
+  try {
+    const es = new EventSource(FIREBASE_URL + '/rooms.json');
+    es.addEventListener('put',   () => refreshStatus());
+    es.addEventListener('patch', () => refreshStatus());
+    es.onerror = () => es.close();
+  } catch(e) {}
+})();
+
+// Reload slots whenever page becomes visible again (user switches back to tab/app)
+// Refresh handlers — all use scheduleRefresh to debounce
 let refreshTimer = null;
 function scheduleRefresh() {
   if (refreshTimer) clearTimeout(refreshTimer);
-  refreshTimer = setTimeout(() => { refreshTimer = null; loadSlots(); }, 300);
+  refreshTimer = setTimeout(() => {
+    refreshTimer = null;
+    loadingSlots = false; // reset guard before refresh
+    loadSlots();
+  }, 300);
 }
-window.addEventListener('focus', scheduleRefresh);
-window.addEventListener('pageshow', e => {
-  if (e.persisted) loadSlots(); // restored from back/forward cache
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') scheduleRefresh();
 });
+window.addEventListener('focus', scheduleRefresh);
+window.addEventListener('pageshow', e => { if (e.persisted) scheduleRefresh(); });
 </script>
 </body>
 </html>
