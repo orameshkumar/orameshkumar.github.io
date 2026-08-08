@@ -257,7 +257,7 @@ async function loadSlots() {
 
     // Filter valid slots
     const slots = slotsArr.filter(s => s && s.s && s.e);
-    slots.forEach((s,i) => console.log(`  slot[${i}] ${s.s}-${s.e} code=${s.code} activated=${s.activatedAt}`));
+    slots.forEach((s,i) =>
 
     // Filter: show slots that haven't ended yet
     // Only exclude slots explicitly dated for tomorrow
@@ -276,12 +276,11 @@ async function loadSlots() {
     }
   }
   allRooms.forEach(r => {
-    r.slots.forEach(s => console.log(`    ${s.s}-${s.e} activated=${s.activatedAt} date=${s.date}`));
+    r.slots.forEach(s =>
   });
   document.getElementById('loadingState').style.display = 'none';
   renderSlots();
   } catch(e) {
-    console.error('loadSlots error:', e);
   } finally {
     loadingSlots = false;
   }
