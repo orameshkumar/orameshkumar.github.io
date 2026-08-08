@@ -99,6 +99,16 @@
     .day-pill { padding: 4px 8px; border-radius: 20px; border: 1px solid var(--border); background: transparent; font-size: 11px; color: var(--muted); cursor: pointer; }
     .day-pill.active { background: var(--accent); color: white; border-color: var(--accent); }
     .apply-btn { width: 100%; padding: 8px; border-radius: 8px; border: 1px solid var(--accent); background: transparent; color: var(--accent); font-size: 13px; cursor: pointer; }
+    .copy-section { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
+    .copy-title { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px; }
+    .copy-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 5px; margin-bottom: 8px; }
+    .copy-room-btn { padding: 7px 4px; border-radius: 8px; border: 1px solid var(--border); background: transparent; font-size: 12px; color: var(--muted); cursor: pointer; text-align: center; }
+    .copy-room-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .copy-room-btn.selected { border-color: var(--accent); background: rgba(74,143,255,0.15); color: var(--accent); }
+    .copy-day-row { display: flex; gap: 6px; margin-bottom: 8px; }
+    .copy-day-btn { flex: 1; padding: 6px; border-radius: 8px; border: 1px solid var(--border); background: transparent; font-size: 12px; color: var(--muted); cursor: pointer; }
+    .copy-day-btn.active { background: var(--accent); color: white; border-color: var(--accent); }
+    .copy-btn { width: 100%; padding: 8px; border-radius: 8px; border: 1px solid var(--green); background: transparent; color: var(--green); font-size: 13px; cursor: pointer; }
 
     .seg-row { display: flex; gap: 6px; margin-bottom: 12px; }
     .seg-btn { flex: 1; padding: 7px 0; border-radius: 8px; border: 1px solid var(--border); background: transparent; font-size: 12px; color: var(--muted); cursor: pointer; }
@@ -129,6 +139,9 @@
     .log-status.ok  { color: var(--green); margin-left: auto; }
     .log-status.err { color: var(--red);   margin-left: auto; }
 
+    .update-banner { position: fixed; top: 0; left: 0; right: 0; background: var(--accent); color: white; padding: 10px 16px; display: flex; align-items: center; justify-content: space-between; font-size: 13px; z-index: 300; transform: translateY(-100%); transition: transform 0.3s; }
+    .update-banner.show { transform: translateY(0); }
+    .update-btn { background: white; color: var(--accent); border: none; border-radius: 6px; padding: 4px 12px; font-size: 12px; font-weight: 600; cursor: pointer; }
     .toast { position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%); background: var(--card); border: 1px solid var(--border); border-radius: 20px; padding: 8px 18px; font-size: 13px; opacity: 0; transition: opacity 0.3s; pointer-events: none; white-space: nowrap; z-index: 200; }
     .toast.show { opacity: 1; }
 
@@ -151,6 +164,10 @@
 </head>
 <body>
 <div id="app">
+<div class="update-banner" id="updateBanner">
+  New version available!
+  <button class="update-btn" onclick="applyUpdate()">Update now</button>
+</div>
   <div class="header">
     <h1>Room Controller</h1>
     <div class="header-right">
@@ -417,7 +434,7 @@ function checkSchedules() {
 
 // ── Room actions ─────────────────────────────────────────────
 function toggleRoom(id) {
-  state.rooms.forEach(r => { if (r.id !== id) r.expanded = false; });
+  // Do NOT collapse other rooms — user may want multiple open
   const r = state.rooms.find(x => x.id === id);
   r.expanded = !r.expanded;
   renderDashboard();
@@ -532,6 +549,84 @@ async function allRooms(val) {
   showToast(val === true ? 'All ON' : val === false ? 'All OFF' : 'All Auto');
 }
 
+// ── Copy slots state ─────────────────────────────────────────
+const copyState = { selectedRooms: [], sources: ['today','tomorrow','recurring'] };
+
+function toggleCopyRoom(id) {
+  const idx = copyState.selectedRooms.indexOf(id);
+  if (idx > -1) copyState.selectedRooms.splice(idx, 1);
+  else copyState.selectedRooms.push(id);
+  renderDashboard();
+}
+
+function toggleCopySource(src) {
+  const idx = copyState.sources.indexOf(src);
+  if (idx > -1) {
+    if (copyState.sources.length === 1) return; // keep at least one
+    copyState.sources.splice(idx, 1);
+  } else {
+    copyState.sources.push(src);
+  }
+  renderDashboard();
+}
+
+function copySlots(fromId) {
+  if (copyState.selectedRooms.length === 0) { showToast('Select at least one target room'); return; }
+  if (copyState.sources.length === 0) { showToast('Select at least one source'); return; }
+
+  const fromRoom = state.rooms.find(r => r.id === fromId);
+
+  // Collect what to copy based on selected sources
+  const copyToday     = copyState.sources.includes('today');
+  const copyTomorrow  = copyState.sources.includes('tomorrow');
+  const copyRecurring = copyState.sources.includes('recurring');
+
+  // Get today slots — optionally filter to recurring only or non-recurring only
+  const todaySlots     = copyToday
+    ? (fromRoom.slots[0] || []).filter(s => copyRecurring ? true : !s.recurring)
+    : [];
+  const recurringSlots = copyRecurring && !copyToday
+    ? (fromRoom.slots[0] || []).filter(s => s.recurring)
+    : [];
+  const tomorrowSlots  = copyTomorrow ? (fromRoom.slots[1] || []) : [];
+
+  const allCopySlots = [...todaySlots, ...recurringSlots, ...tomorrowSlots];
+
+  if (allCopySlots.length === 0) {
+    showToast('No slots found for selected sources'); return;
+  }
+
+  let copied = 0;
+  copyState.selectedRooms.forEach(toId => {
+    if (toId === fromId) return;
+    const toRoom = state.rooms.find(r => r.id === toId);
+
+    // Copy today + recurring slots → day 0
+    const day0slots = [...todaySlots, ...recurringSlots];
+    if (day0slots.length > 0) {
+      if (!toRoom.slots[0]) toRoom.slots[0] = [];
+      day0slots.forEach(sl => toRoom.slots[0].push({...sl}));
+      toRoom.slots[0] = mergeSlots(toRoom.slots[0]);
+    }
+
+    // Copy tomorrow slots → day 1
+    if (tomorrowSlots.length > 0) {
+      if (!toRoom.slots[1]) toRoom.slots[1] = [];
+      tomorrowSlots.forEach(sl => toRoom.slots[1].push({...sl}));
+      toRoom.slots[1] = mergeSlots(toRoom.slots[1]);
+    }
+
+    pushRoom(toId - 1);
+    copied++;
+  });
+
+  persist();
+  copyState.selectedRooms = [];
+  renderDashboard();
+  const srcLabel = copyState.sources.join(' + ');
+  showToast(`✓ Copied ${allCopySlots.length} slots to ${copied} room${copied>1?'s':''}`);
+}
+
 // ── Render Dashboard ─────────────────────────────────────────
 function renderDashboard() {
   let onCount=0, manualCount=0, slotCount=0;
@@ -591,7 +686,21 @@ function renderRoomCard(r) {
           <input type="checkbox" id="nr_${r.id}" style="width:16px;height:16px;accent-color:var(--green)" ${state.schedDay===1?'disabled':''}>
           <span style="font-size:12px;color:var(--muted)">${state.schedDay===1?'Today only (recurring not available for tomorrow)':'Repeat daily'}</span>
         </div>
-        <button class="add-slot-btn" onclick="addSlot(${r.id})">+ Add slot</button>`;
+        <button class="add-slot-btn" onclick="addSlot(${r.id})">+ Add slot</button>
+        <div class="copy-section">
+          <div class="copy-title">Copy slots to other rooms</div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:6px">Select what to copy:</div>
+          <div class="copy-day-row">
+            <button class="copy-day-btn${copyState.sources.includes('today')?' active':''}" onclick="toggleCopySource('today')">Today</button>
+            <button class="copy-day-btn${copyState.sources.includes('tomorrow')?' active':''}" onclick="toggleCopySource('tomorrow')">Tomorrow</button>
+            <button class="copy-day-btn${copyState.sources.includes('recurring')?' active':''}" onclick="toggleCopySource('recurring')" style="border-color:var(--green);${copyState.sources.includes('recurring')?'background:var(--green);color:white;':'color:var(--green);'}">Recurring</button>
+          </div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:6px">Copy to:</div>
+          <div class="copy-grid">${state.rooms.filter(x=>x.id!==r.id).map(x=>`
+            <button class="copy-room-btn${copyState.selectedRooms.includes(x.id)?' selected':''}" onclick="toggleCopyRoom(${x.id})">${x.name}</button>
+          `).join('')}</div>
+          <button class="copy-btn" onclick="copySlots(${r.id})">Copy slots →</button>
+        </div>\`;`
 
     } else if (r.panelTab === 'recurring') {
       const dayPills = DAYS.map((d,i) =>
@@ -815,14 +924,46 @@ updateClock();
 setInterval(updateClock, 10000);
 setInterval(checkSchedules, 60000);
 setInterval(() => {
-  if (document.getElementById('page-dashboard').classList.contains('active')) renderDashboard();
+  // Only auto-refresh dashboard if NO room is currently expanded (user not editing)
+  const anyExpanded = state.rooms.some(r => r.expanded);
+  if (!anyExpanded && document.getElementById('page-dashboard').classList.contains('active')) renderDashboard();
   if (document.getElementById('page-timeline').classList.contains('active'))  renderTimeline();
 }, 30000);
 
 if (state.config.dbUrl && state.config.apiKey) startFbListener();
 renderDashboard();
 
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
+// Service worker registration with update detection
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').then(reg => {
+    // Check for updates every 60 seconds
+    setInterval(() => reg.update(), 60000);
+
+    // New service worker waiting — show update banner
+    reg.addEventListener('updatefound', () => {
+      const newWorker = reg.installing;
+      newWorker.addEventListener('statechange', () => {
+        if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+          document.getElementById('updateBanner').classList.add('show');
+          window._newWorker = newWorker;
+        }
+      });
+    });
+  }).catch(() => {});
+
+  // After update applied — reload to use new version
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    window.location.reload();
+  });
+}
+
+function applyUpdate() {
+  if (window._newWorker) {
+    window._newWorker.postMessage('skipWaiting');
+  } else {
+    window.location.reload();
+  }
+}
 </script>
 </body>
 </html>
