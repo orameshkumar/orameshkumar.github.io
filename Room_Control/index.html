@@ -165,8 +165,10 @@
     .code-refresh-btn { padding: 6px 10px; border-radius: 8px; border: 1px solid var(--border); background: transparent; color: var(--muted); font-size: 16px; cursor: pointer; }
     .code-refresh-btn:hover { color: var(--amber); border-color: var(--amber); }
     .slot-status { font-size: 11px; padding: 2px 8px; border-radius: 6px; font-weight: 500; }
-    .slot-status.active { background: rgba(64,192,128,0.15); color: var(--green); }
-    .slot-status.locked { background: rgba(224,80,80,0.15); color: var(--red); }
+    .slot-status.active   { background: rgba(64,192,128,0.15); color: var(--green); }
+    .slot-status.locked   { background: rgba(224,80,80,0.15); color: var(--red); }
+    .slot-status.waiting  { background: rgba(240,160,48,0.15); color: var(--amber); }
+    .slot-status.expired  { background: rgba(136,136,136,0.15); color: var(--muted); text-decoration: line-through; }
     .slot-activate-btn { padding: 3px 10px; border-radius: 6px; border: 1px solid var(--green); background: transparent; color: var(--green); font-size: 11px; cursor: pointer; white-space: nowrap; }
     .slot-deactivate-btn { padding: 3px 10px; border-radius: 6px; border: 1px solid var(--red); background: transparent; color: var(--red); font-size: 11px; cursor: pointer; white-space: nowrap; }
     /* QR section */
@@ -353,6 +355,18 @@ function editSlotCode(roomId, slotIdx) {
   renderDashboard();
 }
 
+function toggleCodeInput(id, requireCode) {
+  const row = document.getElementById('codeRow_' + id);
+  if (row) {
+    row.style.opacity    = requireCode ? '1' : '0.3';
+    row.style.pointerEvents = requireCode ? '' : 'none';
+    const input = document.getElementById('nc_' + id);
+    if (input) {
+      if (!requireCode) input.value = '';  // clear code when disabled
+    }
+  }
+}
+
 function refreshCode(id) {
   const el = document.getElementById('nc_' + id);
   if (el) {
@@ -399,8 +413,9 @@ async function deactivateSlot(roomId, slotIdx) {
   const slot = r.slots[0][slotIdx];
   slot.activatedAt = null;
   slot.activatedBy = null;
-  slot.attempts = 0;
+  slot.attempts    = 0;
   slot.lockedUntil = null;
+  slot.expired     = false;  // clear expired flag on manual deactivate
   persist();
   await pushRoom(roomId - 1);
   renderDashboard();
@@ -577,6 +592,7 @@ function syncFromFirebase(data) {
         if (fbSlot.activatedBy  !== undefined) localSlot.activatedBy  = fbSlot.activatedBy;
         if (fbSlot.attempts     !== undefined) localSlot.attempts     = fbSlot.attempts;
         if (fbSlot.lockedUntil  !== undefined) localSlot.lockedUntil  = fbSlot.lockedUntil;
+        if (fbSlot.expired      !== undefined) localSlot.expired      = fbSlot.expired;
       });
     }
   });
@@ -690,12 +706,16 @@ function addSlot(id) {
   const r = state.rooms.find(x => x.id === id);
   const s = document.getElementById(`ns_${id}`).value;
   const e = document.getElementById(`ne_${id}`).value;
-  const recurring = document.getElementById(`nr_${id}`)?.checked || false;
-  // Use custom code if entered (must be exactly 4 digits), else auto-generate
+  const recurring   = document.getElementById(`nr_${id}`)?.checked || false;
+  const requireCode = document.getElementById(`nq_${id}`)?.checked !== false;
+  // If code not required → auto-approved slot (no code needed)
+  // If code required → use custom code or auto-generate one
   const codeInput = (document.getElementById(`nc_${id}`)?.value || '').trim();
-  const slotCode  = (codeInput.length === 4 && /^[0-9]{4}$/.test(codeInput))
-    ? codeInput
-    : generate4DigitCode();
+  const slotCode  = requireCode
+    ? ((codeInput.length === 4 && /^[0-9]{4}$/.test(codeInput))
+        ? codeInput
+        : generate4DigitCode())
+    : null;  // null = no code = auto-approved
   if (!s || !e || s >= e) { showToast('Invalid time range'); return; }
   if (!r.slots[state.schedDay]) r.slots[state.schedDay] = [];
 
@@ -708,7 +728,7 @@ function addSlot(id) {
 
   existing.push({
     s, e, recurring,
-    code: slotCode,   // 4-digit activation code (custom or auto-generated)
+    code: slotCode,         // null = auto-approved, string = requires code
     activatedAt: null,
     activatedBy: null,
     attempts: 0,
@@ -723,7 +743,11 @@ function addSlot(id) {
   const codeEl = document.getElementById(`nc_${id}`);
   if (codeEl) codeEl.value = '';
   persist(); pushRoom(id-1); renderDashboard();
-  const codeMsg = codeInput.length === 4 ? ` (code: ${slotCode})` : ` (code: ${slotCode} auto)`;
+  const codeMsg = !requireCode
+    ? ' (auto-approved)'
+    : codeInput.length === 4
+      ? ` (code: ${slotCode})`
+      : ` (code: ${slotCode} auto)`;
   showToast((recurring ? '✓ Recurring' : '✓ One-time') + ' slot added' + codeMsg);
 }
 
@@ -920,28 +944,31 @@ function renderRoomCard(r) {
             const now = new Date();
             const nm = now.getHours()*60+now.getMinutes();
             const ss = toMinsStr(s.s), se = toMinsStr(s.e);
-            const isActive = !!s.activatedAt;
-            const isLocked = s.lockedUntil && Date.now() < s.lockedUntil;
-            const lockMins = isLocked ? Math.ceil((s.lockedUntil - Date.now())/60000) : 0;
-                        const dotCol   = s.recurring ? 'var(--green)' : 'var(--accent)';
+            const isActive   = !!s.activatedAt;
+            const isExpired  = !!s.expired;
+            const isLocked   = !!(s.lockedUntil && Date.now() < s.lockedUntil);
+            const lockMins   = isLocked ? Math.ceil((s.lockedUntil - Date.now())/60000) : 0;
+            const inSlotNow  = nm >= ss && nm < se;
+            const isWaiting  = !isActive && !isExpired && !!s.code && inSlotNow;
+            const dotCol   = s.recurring ? 'var(--green)' : 'var(--accent)';
             const badgeBg  = s.recurring ? 'rgba(64,192,128,0.15)' : 'rgba(74,143,255,0.12)';
             const badgeCol = s.recurring ? 'var(--green)' : 'var(--accent)';
             const badgeTxt = s.recurring ? 'recurring' : 'one-time';
-            return `<div class="slot-item" style="flex-wrap:wrap;gap:5px">
-              <div class="slot-dot" style="background:${dotCol}"></div>
+            return `<div class="slot-item" style="flex-wrap:wrap;gap:5px${isExpired ? ';opacity:0.5' : ''}">
+              <div class="slot-dot" style="background:${isActive ? 'var(--green)' : isExpired ? 'var(--muted)' : isWaiting ? 'var(--amber)' : dotCol}"></div>
               <span class="slot-time">${s.s} – ${s.e}</span>
               <span style="font-size:10px;padding:1px 6px;border-radius:10px;background:${badgeBg};color:${badgeCol}">${badgeTxt}</span>
-              <span style="font-size:10px;padding:1px 6px;border-radius:10px;background:${s.recurring?'rgba(64,192,128,0.15)':'rgba(74,143,255,0.12)'};color:${s.recurring?'var(--green)':'var(--accent)'}">${s.recurring?'recurring':'one-time'}</span>
-              <span class="slot-code" id="slotcode_${r.id}_${i}" onclick="editSlotCode(${r.id},${i})" title="Tap to change code" style="cursor:pointer">${s.code||'----'}</span>
-              ${isActive ? `<span class="slot-status active">✓ Active</span>` : ''}
-              ${isLocked ? `<span class="slot-status locked">🔒 ${lockMins}min</span>` : ''}
+              ${s.code ? `<span class="slot-code" id="slotcode_${r.id}_${i}" onclick="editSlotCode(${r.id},${i})" title="Tap to change code" style="cursor:pointer">${s.code}</span>` : `<span style="font-size:11px;padding:2px 7px;border-radius:6px;background:rgba(64,192,128,0.15);color:var(--green);font-weight:600">Auto</span>`}
+              ${isActive   ? `<span class="slot-status active">✓ Active</span>` : ''}
+              ${isWaiting  ? `<span class="slot-status waiting">⏳ Waiting</span>` : ''}
+              ${isExpired  ? `<span class="slot-status expired">Expired</span>` : ''}
+              ${isLocked   ? `<span class="slot-status locked">🔒 ${lockMins}min</span>` : ''}
               <div style="display:flex;gap:5px;margin-left:auto">
-                ${!isActive && !isLocked ? `<button class="slot-activate-btn" onclick="activateSlot(${r.id},${i})">Activate</button>` : ''}
+                ${!isActive && !isLocked && !isExpired ? `<button class="slot-activate-btn" onclick="activateSlot(${r.id},${i})">Activate</button>` : ''}
                 ${isActive ? `<button class="slot-deactivate-btn" onclick="deactivateSlot(${r.id},${i})">Deactivate</button>` : ''}
                 <button class="slot-del" onclick="deleteSlot(${r.id},${i})">×</button>
               </div>
-            </div>`;
-          }).join('')
+            </div>`;}).join('')
         : `<div class="empty-msg">No slots yet</div>`;
       body = `<div class="panel-tabs">${ptabs}</div>
         <div class="day-toggle">
@@ -951,7 +978,13 @@ function renderRoomCard(r) {
         <div class="slot-list">${slotItems}</div>
         <div class="form-row"><label>Start</label><input type="time" id="ns_${r.id}" value="09:00"></div>
         <div class="form-row"><label>End</label><input type="time" id="ne_${r.id}" value="10:00"></div>
-        <div class="code-input-row">
+        <div class="form-row" style="margin-bottom:8px">
+          <label style="width:auto;color:var(--muted);font-size:12px">Require code</label>
+          <input type="checkbox" id="nq_${r.id}" style="width:16px;height:16px;accent-color:var(--amber)"
+            onchange="toggleCodeInput(${r.id},this.checked)" checked>
+          <span style="font-size:12px;color:var(--muted)">Activation code required</span>
+        </div>
+        <div class="code-input-row" id="codeRow_${r.id}">
           <label>Code</label>
           <input class="code-input" type="text" id="nc_${r.id}" maxlength="4" placeholder="----"
             oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,4)"

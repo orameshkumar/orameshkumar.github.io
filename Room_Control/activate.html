@@ -256,26 +256,41 @@ function renderSlots() {
 
   container.innerHTML = allRooms.map(room => {
     const slotCards = room.slots.map((sl, si) => {
-      const isActive = !!sl.activatedAt;
-      const isLocked = sl.lockedUntil && Date.now() < sl.lockedUntil;
-      const lockMins = isLocked ? Math.ceil((sl.lockedUntil - Date.now()) / 60000) : 0;
-      const isCurrent = toMins(sl.s) <= nm && toMins(sl.e) > nm;
+      const isActive   = !!sl.activatedAt;
+      const isExpired  = !!sl.expired;
+      const isLocked   = !!(sl.lockedUntil && Date.now() < sl.lockedUntil);
+      const lockMins   = isLocked ? Math.ceil((sl.lockedUntil - Date.now()) / 60000) : 0;
+      const isCurrent  = toMins(sl.s) <= nm && toMins(sl.e) > nm;
+      const isWaiting  = !isActive && !isExpired && !!sl.code && isCurrent;
 
+      const isAutoApproved = !sl.code; // no code = auto-approved slot
       let cardClass = 'slot-card';
       let dotClass  = 'slot-dot pending';
-      let badge     = `<span class="slot-status-badge badge-tap">Tap to activate</span>`;
+      let badge     = isAutoApproved
+        ? `<span class="slot-status-badge" style="background:rgba(64,192,128,0.12);color:var(--green)">⚡ Auto</span>`
+        : `<span class="slot-status-badge badge-tap">Tap to activate</span>`;
 
-      if (isActive) {
+      if (isActive || isAutoApproved) {
         cardClass += ' active';
         dotClass   = 'slot-dot active';
-        badge      = `<span class="slot-status-badge badge-active">✓ Active</span>`;
+        badge      = isAutoApproved
+          ? `<span class="slot-status-badge" style="background:rgba(64,192,128,0.12);color:var(--green)">⚡ Auto active</span>`
+          : `<span class="slot-status-badge badge-active">✓ Active</span>`;
+      } else if (isExpired) {
+        cardClass += ' locked';
+        dotClass   = 'slot-dot locked';
+        badge      = `<span class="slot-status-badge" style="background:rgba(136,136,136,0.15);color:#888">Expired</span>`;
+      } else if (isWaiting) {
+        dotClass   = 'slot-dot';
+        badge      = `<span class="slot-status-badge" style="background:rgba(240,160,48,0.15);color:#f0a030">⏳ Waiting</span>`;
       } else if (isLocked) {
         cardClass += ' locked';
         dotClass   = 'slot-dot locked';
         badge      = `<span class="slot-status-badge badge-locked">🔒 Locked ${lockMins}min</span>`;
       }
 
-      const onclick = (!isActive && !isLocked)
+      // Auto-approved and expired slots don't need PIN pad
+      const onclick = (!isActive && !isLocked && !isAutoApproved && !isExpired)
         ? `onclick="selectSlot(${room.id}, ${si})"`
         : '';
 
@@ -371,9 +386,22 @@ async function pinSubmit() {
         roomData.slots[selectedSlot.origIdx].activatedBy = isAdmin ? 'admin' : 'slot';
         roomData.slots[selectedSlot.origIdx].attempts    = 0;
         roomData.slots[selectedSlot.origIdx].lockedUntil = null;
+        // Write activatedAt to Firebase — ESP32 polls this
+        // Do NOT set override=true — relay only turns ON when slot TIME arrives
+        // ESP32 isInSlot() checks both time AND activated flag
         await fbPut(`/rooms/${selectedSlot.roomKey}/slots`, roomData.slots);
-        await fbPut(`/rooms/${selectedSlot.roomKey}/override`, true);
       }
+
+      // Update local state immediately so UI reflects activation now
+      const localRoom = allRooms.find(r => r.id === selectedRoom.id);
+      if (localRoom) {
+        const localSlot = localRoom.slots.find(
+          sl => sl.s === selectedSlot.s && sl.e === selectedSlot.e
+        );
+        if (localSlot) localSlot.activatedAt = Date.now();
+      }
+      // Re-render immediately to show ✓ Active badge
+      renderSlots();
 
       setTimeout(() => {
         document.getElementById('pinOverlay').classList.remove('show');
@@ -382,8 +410,8 @@ async function pinSubmit() {
         document.getElementById('successOverlay').classList.add('show');
         setTimeout(() => {
           document.getElementById('successOverlay').classList.remove('show');
-          loadSlots();
-        }, 2500);
+          loadSlots(); // Full refresh from Firebase
+        }, 2000);
       }, 400);
 
     } else {
