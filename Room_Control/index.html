@@ -158,6 +158,12 @@
     canvas { display: block; }
     /* Slot activation styles */
     .slot-code { font-size: 11px; font-family: monospace; background: rgba(240,160,48,0.15); color: var(--amber); padding: 2px 7px; border-radius: 6px; font-weight: 700; letter-spacing: 2px; }
+    .code-input-row { display: flex; gap: 6px; align-items: center; margin-bottom: 8px; }
+    .code-input-row label { font-size: 12px; color: var(--muted); width: 40px; flex-shrink: 0; }
+    .code-input { width: 80px; background: var(--card2); border: 1px solid var(--amber); border-radius: 8px; color: var(--amber); font-size: 16px; font-family: monospace; font-weight: 700; letter-spacing: 4px; padding: 6px 10px; text-align: center; }
+    .code-input:focus { outline: none; border-color: var(--amber); box-shadow: 0 0 0 2px rgba(240,160,48,0.2); }
+    .code-refresh-btn { padding: 6px 10px; border-radius: 8px; border: 1px solid var(--border); background: transparent; color: var(--muted); font-size: 16px; cursor: pointer; }
+    .code-refresh-btn:hover { color: var(--amber); border-color: var(--amber); }
     .slot-status { font-size: 11px; padding: 2px 8px; border-radius: 6px; font-weight: 500; }
     .slot-status.active { background: rgba(64,192,128,0.15); color: var(--green); }
     .slot-status.locked { background: rgba(224,80,80,0.15); color: var(--red); }
@@ -321,6 +327,41 @@ function generate4DigitCode() {
   return String(Math.floor(1000 + Math.random() * 9000));
 }
 
+function editSlotCode(roomId, slotIdx) {
+  const r = state.rooms.find(x => x.id === roomId);
+  const slot = r.slots[state.schedDay][slotIdx];
+  const current = slot.code || '';
+  const newCode = prompt(`Change activation code for ${r.name} ${slot.s}-${slot.e}\n\nEnter new 4-digit code (or leave blank to auto-generate):`, current);
+  if (newCode === null) return; // cancelled
+  const trimmed = newCode.trim();
+  if (trimmed === '') {
+    slot.code = generate4DigitCode();
+    showToast('New code: ' + slot.code + ' (auto-generated)');
+  } else if (/^[0-9]{4}$/.test(trimmed)) {
+    slot.code = trimmed;
+    showToast('Code updated to: ' + slot.code);
+  } else {
+    showToast('Invalid code — must be exactly 4 digits'); return;
+  }
+  // Reset activation if code changed
+  slot.activatedAt = null;
+  slot.activatedBy = null;
+  slot.attempts    = 0;
+  slot.lockedUntil = null;
+  persist();
+  pushRoom(roomId - 1);
+  renderDashboard();
+}
+
+function refreshCode(id) {
+  const el = document.getElementById('nc_' + id);
+  if (el) {
+    el.value = generate4DigitCode();
+    el.style.borderColor = 'var(--green)';
+    setTimeout(() => el.style.borderColor = '', 1000);
+  }
+}
+
 function getAdminCode(seed) {
   const now = new Date();
   const dateNum = now.getFullYear() * 10000 +
@@ -416,7 +457,7 @@ function printQR() {
   const win = window.open('', '_blank');
   // Use string concat to avoid </script> inside template literal breaking parser
   const scriptTag = '<scr' + 'ipt src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></' + 'script>';
-  const inlineScript = '<scr' + 'ipt>window.onload=function(){new QRCode(document.getElementById("qr"),{text:"' + activateUrl + '",width:200,height:200,colorDark:"#000000",colorLight:"#ffffff",correctLevel:QRCode.CorrectLevel.M});setTimeout(function(){window.print();},800);};</' + 'script>';
+  const inlineScript = '<scr' + 'ipt>window.onload=function(){new QRCode(document.getElementById("qr"),{text:"' + activateUrl + '",width:200,height:200,colorDark:"#000000",colorLight:"#ffffff",correctLevel:2});setTimeout(function(){window.print();},800);};</' + 'script>';
   win.document.write(
     '<!DOCTYPE html><html><head><title>Room Controller QR</title>' +
     '<style>body{font-family:-apple-system,sans-serif;text-align:center;padding:40px;}' +
@@ -650,6 +691,11 @@ function addSlot(id) {
   const s = document.getElementById(`ns_${id}`).value;
   const e = document.getElementById(`ne_${id}`).value;
   const recurring = document.getElementById(`nr_${id}`)?.checked || false;
+  // Use custom code if entered (must be exactly 4 digits), else auto-generate
+  const codeInput = (document.getElementById(`nc_${id}`)?.value || '').trim();
+  const slotCode  = (codeInput.length === 4 && /^[0-9]{4}$/.test(codeInput))
+    ? codeInput
+    : generate4DigitCode();
   if (!s || !e || s >= e) { showToast('Invalid time range'); return; }
   if (!r.slots[state.schedDay]) r.slots[state.schedDay] = [];
 
@@ -662,7 +708,7 @@ function addSlot(id) {
 
   existing.push({
     s, e, recurring,
-    code: generate4DigitCode(),   // 4-digit activation code
+    code: slotCode,   // 4-digit activation code (custom or auto-generated)
     activatedAt: null,
     activatedBy: null,
     attempts: 0,
@@ -673,8 +719,12 @@ function addSlot(id) {
     })()
   });
   r.slots[state.schedDay] = mergeSlots(existing);
+  // Clear code input field after adding
+  const codeEl = document.getElementById(`nc_${id}`);
+  if (codeEl) codeEl.value = '';
   persist(); pushRoom(id-1); renderDashboard();
-  showToast(recurring ? '✓ Recurring slot added' : '✓ One-time slot added');
+  const codeMsg = codeInput.length === 4 ? ` (code: ${slotCode})` : ` (code: ${slotCode} auto)`;
+  showToast((recurring ? '✓ Recurring' : '✓ One-time') + ' slot added' + codeMsg);
 }
 
 function deleteSlot(id, idx) {
@@ -858,11 +908,11 @@ function renderRoomCard(r) {
   let body = '';
 
   if (r.expanded) {
-    const ptabs = ['slot','recurring','override'].map(t =>
-      `<button class="ptab${r.panelTab===t?' active':''}" onclick="setPanelTab(${r.id},'${t}')">${
-        t==='slot'?'Slots':t==='recurring'?'Recurring':'Override'
-      }</button>`
-    ).join('');
+    const ptabs = ['slot','recurring','override'].map(t => {
+      const pActive = r.panelTab===t ? ' active' : '';
+      const pLabel  = t==='slot'?'Slots':t==='recurring'?'Recurring':'Override';
+      return `<button class="ptab${pActive}" onclick="setPanelTab(${r.id},'${t}')">${pLabel}</button>`;
+    }).join('');
 
     if (r.panelTab === 'slot') {
       const slotItems = slots.length
@@ -873,11 +923,16 @@ function renderRoomCard(r) {
             const isActive = !!s.activatedAt;
             const isLocked = s.lockedUntil && Date.now() < s.lockedUntil;
             const lockMins = isLocked ? Math.ceil((s.lockedUntil - Date.now())/60000) : 0;
+                        const dotCol   = s.recurring ? 'var(--green)' : 'var(--accent)';
+            const badgeBg  = s.recurring ? 'rgba(64,192,128,0.15)' : 'rgba(74,143,255,0.12)';
+            const badgeCol = s.recurring ? 'var(--green)' : 'var(--accent)';
+            const badgeTxt = s.recurring ? 'recurring' : 'one-time';
             return `<div class="slot-item" style="flex-wrap:wrap;gap:5px">
-              <div class="slot-dot" style="background:${s.recurring?'var(--green)':'var(--accent)'}"></div>
+              <div class="slot-dot" style="background:${dotCol}"></div>
               <span class="slot-time">${s.s} – ${s.e}</span>
+              <span style="font-size:10px;padding:1px 6px;border-radius:10px;background:${badgeBg};color:${badgeCol}">${badgeTxt}</span>
               <span style="font-size:10px;padding:1px 6px;border-radius:10px;background:${s.recurring?'rgba(64,192,128,0.15)':'rgba(74,143,255,0.12)'};color:${s.recurring?'var(--green)':'var(--accent)'}">${s.recurring?'recurring':'one-time'}</span>
-              <span class="slot-code">${s.code||'----'}</span>
+              <span class="slot-code" id="slotcode_${r.id}_${i}" onclick="editSlotCode(${r.id},${i})" title="Tap to change code" style="cursor:pointer">${s.code||'----'}</span>
               ${isActive ? `<span class="slot-status active">✓ Active</span>` : ''}
               ${isLocked ? `<span class="slot-status locked">🔒 ${lockMins}min</span>` : ''}
               <div style="display:flex;gap:5px;margin-left:auto">
@@ -890,25 +945,35 @@ function renderRoomCard(r) {
         : `<div class="empty-msg">No slots yet</div>`;
       body = `<div class="panel-tabs">${ptabs}</div>
         <div class="day-toggle">
-          <button class="${state.schedDay===0?'active':''}" onclick="setSchedDay(0)">Today</button>
-          <button class="${state.schedDay===1?'active':''}" onclick="setSchedDay(1)">Tomorrow</button>
+          <button class="${state.schedDay===0 ? 'active' : ''}" onclick="setSchedDay(0)">Today</button>
+          <button class="${state.schedDay===1 ? 'active' : ''}" onclick="setSchedDay(1)">Tomorrow</button>
         </div>
         <div class="slot-list">${slotItems}</div>
         <div class="form-row"><label>Start</label><input type="time" id="ns_${r.id}" value="09:00"></div>
         <div class="form-row"><label>End</label><input type="time" id="ne_${r.id}" value="10:00"></div>
-        <div class="form-row" style="margin-bottom:10px;${state.schedDay===1?'opacity:0.3;pointer-events:none':''}">
+        <div class="code-input-row">
+          <label>Code</label>
+          <input class="code-input" type="text" id="nc_${r.id}" maxlength="4" placeholder="----"
+            oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,4)"
+            title="4-digit activation code">
+          <button class="code-refresh-btn" onclick="refreshCode(${r.id})" title="Generate random code">🔄</button>
+          <span style="font-size:11px;color:var(--muted)">Leave blank to auto-generate</span>
+        </div>
+        <div class="form-row" style="margin-bottom:10px" id="recurringRow_${r.id}">
           <label style="width:auto;color:var(--muted);font-size:12px">Recurring</label>
           <input type="checkbox" id="nr_${r.id}" style="width:16px;height:16px;accent-color:var(--green)" ${state.schedDay===1?'disabled':''}>
-          <span style="font-size:12px;color:var(--muted)">${state.schedDay===1?'Today only (recurring not available for tomorrow)':'Repeat daily'}</span>
+          <span style="font-size:12px;color:var(--muted)">${state.schedDay===1 ? 'Today only' : 'Repeat daily'}</span>
         </div>
         <button class="add-slot-btn" onclick="addSlot(${r.id})">+ Add slot</button>
         <div class="copy-section">
           <div class="copy-title">Copy slots to other rooms</div>
           <div style="font-size:11px;color:var(--muted);margin-bottom:6px">Select what to copy:</div>
           <div class="copy-day-row">
-            <button class="copy-day-btn${copyState.sources.includes('today')?' active':''}" onclick="toggleCopySource('today')">Today</button>
-            <button class="copy-day-btn${copyState.sources.includes('tomorrow')?' active':''}" onclick="toggleCopySource('tomorrow')">Tomorrow</button>
-            <button class="copy-day-btn${copyState.sources.includes('recurring')?' active':''}" onclick="toggleCopySource('recurring')" style="border-color:var(--green);${copyState.sources.includes('recurring')?'background:var(--green);color:white;':'color:var(--green);'}">Recurring</button>
+            <button class="copy-day-btn${copyState.sources.includes('today') ? ' active' : ''}" onclick="toggleCopySource('today')">Today</button>
+            <button class="copy-day-btn${copyState.sources.includes('tomorrow') ? ' active' : ''}" onclick="toggleCopySource('tomorrow')">Tomorrow</button>
+            const recActive = copyState.sources.includes('recurring');
+            const recStyle  = recActive ? 'background:var(--green);color:white;' : 'color:var(--green);';
+            <button class="copy-day-btn${copyState.sources.includes('recurring') ? ' active' : ''}" onclick="toggleCopySource('recurring')" style="border-color:var(--green);${recStyle}">Recurring</button>
           </div>
           <div style="font-size:11px;color:var(--muted);margin-bottom:6px">Copy to:</div>
           <div class="copy-grid">${state.rooms.filter(x=>x.id!==r.id).map(x=>`
@@ -921,10 +986,12 @@ function renderRoomCard(r) {
       const dayPills = DAYS.map((d,i) =>
         `<button class="day-pill${r.recurring.days.includes(i)?' active':''}" onclick="toggleDay(${r.id},${i})">${d}</button>`
       ).join('');
+      const rStart = r.recurring.start || '09:00';
+      const rEnd   = r.recurring.end   || '10:00';
       body = `<div class="panel-tabs">${ptabs}</div>
         <div class="day-row">${dayPills}</div>
-        <div class="form-row"><label>Start</label><input type="time" id="rs_${r.id}" value="${r.recurring.start||'09:00'}" onchange="setRecurring(${r.id},'start',this.value)"></div>
-        <div class="form-row"><label>End</label><input type="time" id="re_${r.id}" value="${r.recurring.end||'10:00'}" onchange="setRecurring(${r.id},'end',this.value)"></div>
+        <div class="form-row"><label>Start</label><input type="time" id="rs_${r.id}" value="${rStart}" onchange="setRecurring(${r.id},'start',this.value)"></div>
+        <div class="form-row"><label>End</label><input type="time" id="re_${r.id}" value="${rEnd}" onchange="setRecurring(${r.id},'end',this.value)"></div>
         <button class="apply-btn" onclick="applyRecurring(${r.id})">Apply to today & tomorrow</button>`;
 
     } else {
