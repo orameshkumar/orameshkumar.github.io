@@ -409,12 +409,20 @@ function toMinsStr(t) {
 async function activateSlot(roomId, slotIdx) {
   const r = state.rooms.find(x => x.id === roomId);
   const slot = r.slots[0][slotIdx];
-  slot.activatedAt = Date.now();
+  const now = Date.now();
+  slot.activatedAt = now;
   slot.activatedBy = 'admin';
-  r.override = null; // ensure auto mode so slot controls relay
+  r.override = null;
   persist();
-  await pushRoom(roomId - 1);
   renderDashboard();
+  // Write directly to specific slot field — avoids array overwrite issue
+  const base = `/rooms/room${roomId}/slots/${slotIdx}`;
+  await fbPatch(base, {
+    activatedAt: now,
+    activatedBy: 'admin',
+    attempts: 0,
+    lockedUntil: null
+  });
   showToast('✓ Slot activated');
 }
 
@@ -425,10 +433,18 @@ async function deactivateSlot(roomId, slotIdx) {
   slot.activatedBy = null;
   slot.attempts    = 0;
   slot.lockedUntil = null;
-  slot.expired     = false;  // clear expired flag on manual deactivate
+  slot.expired     = false;
   persist();
-  await pushRoom(roomId - 1);
   renderDashboard();
+  // Write directly to specific slot field
+  const base = `/rooms/room${roomId}/slots/${slotIdx}`;
+  await fbPatch(base, {
+    activatedAt: null,
+    activatedBy: null,
+    attempts: 0,
+    lockedUntil: null,
+    expired: false
+  });
   showToast('Slot deactivated');
 }
 
@@ -589,7 +605,6 @@ function startFbListener() {
   try {
     es = new EventSource(url);
   } catch(e) {
-    console.warn('SSE not supported — falling back to polling');
     startPolling();
     return;
   }
@@ -617,7 +632,6 @@ function startFbListener() {
       fbListener.close();
       fbListener = null;
     }
-    console.warn('SSE error — switching to polling fallback');
     startPolling();
   };
 }
@@ -653,6 +667,9 @@ function syncFromFirebase(data) {
         const localSlot = state.rooms[idx].slots[0] && state.rooms[idx].slots[0][si];
         if (!localSlot) return;
         // Only sync activation fields — don't overwrite time/code/recurring
+        // Sync activation fields from Firebase
+        // For activatedAt: Firebase is the source of truth
+        // (targeted writes from activate.html and activateSlot use direct paths)
         if (fbSlot.activatedAt  !== undefined) localSlot.activatedAt  = fbSlot.activatedAt;
         if (fbSlot.activatedBy  !== undefined) localSlot.activatedBy  = fbSlot.activatedBy;
         if (fbSlot.attempts     !== undefined) localSlot.attempts     = fbSlot.attempts;
@@ -676,7 +693,6 @@ function startPolling() {
       if (data) syncFromFirebase(data);
     } catch(e) {}
   }, 5000); // poll every 5 seconds as fallback
-  console.log('SSE fallback: polling every 5 seconds');
 }
 
 // ── Write full room state to Firebase ───────────────────────
@@ -986,7 +1002,6 @@ async function copySlots(fromId) {
         slots: slotsToWrite,
         updatedAt: Date.now()
       });
-      console.log(`Copied ${slotsToWrite.length} slots to room${toId}`, slotsToWrite);
     }
     copied++;
   }

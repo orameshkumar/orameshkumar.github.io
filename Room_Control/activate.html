@@ -147,6 +147,7 @@ let adminSeed    = '1234';
 let selectedRoom = null;
 let selectedSlot = null;
 let pinValue     = '';
+let loadingSlots = false;  // prevent duplicate concurrent loads
 
 // ── Helpers ───────────────────────────────────────────────────
 function toMins(t) { const [h,m]=t.split(':').map(Number); return h*60+m; }
@@ -183,13 +184,11 @@ async function fbGet(path) {
     const url = FIREBASE_URL + path + '.json';
     const res = await fetch(url);
     if (!res.ok) {
-      console.warn(`[fbGet] FAILED ${path} status=${res.status}`);
       return null;
     }
     const data = await res.json();
     return data;
   } catch(e) {
-    console.error(`[fbGet] ERROR ${path}`, e.message);
     return null;
   }
 }
@@ -207,6 +206,10 @@ async function fbPut(path, value) {
 
 // ── Load today's slots ────────────────────────────────────────
 async function loadSlots() {
+  if (loadingSlots) return;  // prevent duplicate concurrent calls
+  loadingSlots = true;
+  try {
+  allRooms = [];  // always reset before loading fresh data
   const today = todayStr();
   const nm    = nowMins();
 
@@ -238,9 +241,7 @@ async function loadSlots() {
     // Fetch slots directly from Firebase path
     // Try fetching full room node to see what fields exist
     const fullRoom = await fbGet('/rooms/' + key);
-    console.log(`[activate] ${key} fullRoom keys:`, fullRoom ? Object.keys(fullRoom).join(', ') : 'NULL');
     let rawSlots = await fbGet('/rooms/' + key + '/slots');
-    console.log(`[activate] ${key}/slots → `, rawSlots === null ? 'NULL' : rawSlots === undefined ? 'UNDEFINED' : JSON.stringify(rawSlots).substring(0,100));
 
     // Normalize: Firebase returns array as object {"0":{...},"1":{...}}
     let slotsArr = [];
@@ -256,7 +257,6 @@ async function loadSlots() {
 
     // Filter valid slots
     const slots = slotsArr.filter(s => s && s.s && s.e);
-    console.log(`[activate] ${key}: ${slots.length} valid slots`);
     slots.forEach((s,i) => console.log(`  slot[${i}] ${s.s}-${s.e} code=${s.code} activated=${s.activatedAt}`));
 
     // Filter: show slots that haven't ended yet
@@ -265,7 +265,6 @@ async function loadSlots() {
     const todaySlots = slots.reduce((acc, sl, originalIndex) => {
       const isTomorrow = sl.date === tomorrowStr();
       const notEnded   = toMins(sl.e) > nm;
-      console.log(`  filter slot[${originalIndex}] ${sl.s}-${sl.e} date="${sl.date}" isTomorrow=${isTomorrow} notEnded=${notEnded}`);
       if (isTomorrow) return acc;   // exclude tomorrow's slots
       if (!notEnded) return acc;    // exclude ended slots
       acc.push({ ...sl, origIdx: originalIndex, roomKey: key });
@@ -276,14 +275,16 @@ async function loadSlots() {
       allRooms.push({ id: roomId, name: roomName, slots: todaySlots });
     }
   }
-
-  console.log(`[activate] allRooms to display (${allRooms.length} rooms):`);
   allRooms.forEach(r => {
-    console.log(`  ${r.name} (${r.slots.length} slots):`);
     r.slots.forEach(s => console.log(`    ${s.s}-${s.e} activated=${s.activatedAt} date=${s.date}`));
   });
   document.getElementById('loadingState').style.display = 'none';
   renderSlots();
+  } catch(e) {
+    console.error('loadSlots error:', e);
+  } finally {
+    loadingSlots = false;
+  }
 }
 
 // ── Render slots ──────────────────────────────────────────────
@@ -439,7 +440,6 @@ async function pinSubmit() {
       await fbPut(slotBasePath + '/activatedBy', isAdmin ? 'admin' : 'slot');
       await fbPut(slotBasePath + '/attempts',    0);
       await fbPut(slotBasePath + '/lockedUntil', null);
-      console.log('[activate] Written activatedAt to', slotBasePath);
 
       // Update local state immediately so UI reflects activation now
       const localRoom = allRooms.find(r => r.id === selectedRoom.id);
@@ -491,7 +491,6 @@ async function pinSubmit() {
     }
 
   } catch(err) {
-    console.error('PIN submit error:', err);
     document.getElementById('pinError').textContent = 'Network error — please try again';
     setTimeout(() => { pinValue = ''; updatePinDots(); }, 600);
   }
@@ -509,13 +508,17 @@ setInterval(loadSlots, 30000);
 // Reload slots whenever page becomes visible again (user switches back to tab/app)
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') {
-    console.log('[activate] Page visible — reloading slots');
     loadSlots();
   }
 });
 
 // Also reload when page gets focus (PWA coming to foreground)
-window.addEventListener('focus', loadSlots);
+let refreshTimer = null;
+function scheduleRefresh() {
+  if (refreshTimer) clearTimeout(refreshTimer);
+  refreshTimer = setTimeout(() => { refreshTimer = null; loadSlots(); }, 300);
+}
+window.addEventListener('focus', scheduleRefresh);
 window.addEventListener('pageshow', e => {
   if (e.persisted) loadSlots(); // restored from back/forward cache
 });
