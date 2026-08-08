@@ -9,6 +9,7 @@
   <meta name="apple-mobile-web-app-title" content="RoomCtrl">
   <title>Room Controller</title>
   <link rel="manifest" href="manifest.json">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <link rel="apple-touch-icon" href="icons/icon-192.png">
   <style>
     :root {
@@ -155,6 +156,21 @@
     .section-head { font-size: 13px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin: 16px 0 8px; }
     .fb-badge { display: inline-flex; align-items: center; gap: 5px; background: rgba(255,160,0,0.12); border: 1px solid rgba(255,160,0,0.3); border-radius: 20px; padding: 3px 10px; font-size: 11px; color: #ffb300; margin-bottom: 12px; }
     canvas { display: block; }
+    /* Slot activation styles */
+    .slot-code { font-size: 11px; font-family: monospace; background: rgba(240,160,48,0.15); color: var(--amber); padding: 2px 7px; border-radius: 6px; font-weight: 700; letter-spacing: 2px; }
+    .slot-status { font-size: 11px; padding: 2px 8px; border-radius: 6px; font-weight: 500; }
+    .slot-status.active { background: rgba(64,192,128,0.15); color: var(--green); }
+    .slot-status.locked { background: rgba(224,80,80,0.15); color: var(--red); }
+    .slot-activate-btn { padding: 3px 10px; border-radius: 6px; border: 1px solid var(--green); background: transparent; color: var(--green); font-size: 11px; cursor: pointer; white-space: nowrap; }
+    .slot-deactivate-btn { padding: 3px 10px; border-radius: 6px; border: 1px solid var(--red); background: transparent; color: var(--red); font-size: 11px; cursor: pointer; white-space: nowrap; }
+    /* QR section */
+    .qr-section { background: var(--card); border-radius: var(--radius); padding: 16px; margin-bottom: 12px; text-align: center; }
+    .qr-box { display: inline-block; background: white; padding: 12px; border-radius: 8px; margin: 10px 0; }
+    .qr-url { font-size: 11px; color: var(--muted); word-break: break-all; margin-top: 4px; }
+    .admin-code-box { background: var(--card2); border-radius: var(--radius); padding: 14px; margin-bottom: 12px; text-align: center; }
+    .admin-code-val { font-size: 36px; font-weight: 700; font-family: monospace; color: var(--amber); letter-spacing: 6px; }
+    .admin-code-lbl { font-size: 11px; color: var(--muted); margin-top: 4px; }
+    .print-btn { width: 100%; padding: 10px; border-radius: var(--radius); border: 1px solid var(--accent); background: transparent; color: var(--accent); font-size: 14px; cursor: pointer; margin-bottom: 8px; }
     .all-btns { display: flex; gap: 8px; margin-bottom: 12px; }
     .all-btn { flex: 1; padding: 10px; border-radius: 10px; border: 1px solid var(--border); background: transparent; font-size: 13px; color: var(--text); cursor: pointer; }
     .all-btn.on  { border-color: var(--amber); color: var(--amber); }
@@ -228,6 +244,24 @@
       </div>
     </div>
     <div class="settings-section">
+      <div class="settings-title">Access control</div>
+      <div class="settings-row" style="flex-direction:column;align-items:stretch;gap:6px">
+        <div class="settings-label">Admin seed<div class="settings-sub">Used to generate daily admin code</div></div>
+        <input class="settings-input" id="cfg-seed" placeholder="1234" style="font-family:monospace;letter-spacing:2px">
+      </div>
+    </div>
+    <div class="admin-code-box">
+      <div class="admin-code-lbl">Today's admin code</div>
+      <div class="admin-code-val" id="adminCodeDisplay">----</div>
+      <div class="admin-code-lbl" id="adminCodeDate"></div>
+    </div>
+    <div class="qr-section">
+      <div class="settings-title" style="padding:0 0 8px">Activation page QR code</div>
+      <div class="qr-box"><div id="qrCanvas"></div></div>
+      <div class="qr-url" id="qrUrlText"></div>
+      <button class="print-btn" onclick="printQR()">🖨️ Print QR code</button>
+    </div>
+    <div class="settings-section">
       <div class="settings-title">Room names</div>
       <div id="roomNameInputs"></div>
     </div>
@@ -268,7 +302,7 @@ const state = {
     slots: { 0: [], 1: [] },
     recurring: { days: [], start: '09:00', end: '10:00' }
   })),
-  config: { dbUrl: '', apiKey: '' },
+  config: { dbUrl: '', apiKey: '', adminSeed: '1234' },
   log: [],
   schedDay: 0
 };
@@ -276,6 +310,105 @@ const DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 let fbConnected = false;
 let fbListener = null;
 let tlView = '12h';
+
+// ── Code helpers ─────────────────────────────────────────────
+function generate4DigitCode() {
+  return String(Math.floor(1000 + Math.random() * 9000));
+}
+
+function getAdminCode(seed) {
+  const now = new Date();
+  const dateNum = now.getFullYear() * 10000 +
+                  (now.getMonth() + 1) * 100 +
+                  now.getDate();
+  return String((dateNum * parseInt(seed || 1234)) % 10000).padStart(4, '0');
+}
+
+function todayStr() {
+  const d = new Date();
+  return d.getFullYear() + '-' +
+    String(d.getMonth()+1).padStart(2,'0') + '-' +
+    String(d.getDate()).padStart(2,'0');
+}
+
+function toMinsStr(t) {
+  const [h,m] = t.split(':').map(Number); return h*60+m;
+}
+
+// ── Slot activation ───────────────────────────────────────────
+async function activateSlot(roomId, slotIdx) {
+  const r = state.rooms.find(x => x.id === roomId);
+  const slot = r.slots[0][slotIdx];
+  slot.activatedAt = Date.now();
+  slot.activatedBy = 'admin';
+  r.override = null; // ensure auto mode so slot controls relay
+  persist();
+  await pushRoom(roomId - 1);
+  renderDashboard();
+  showToast('✓ Slot activated');
+}
+
+async function deactivateSlot(roomId, slotIdx) {
+  const r = state.rooms.find(x => x.id === roomId);
+  const slot = r.slots[0][slotIdx];
+  slot.activatedAt = null;
+  slot.activatedBy = null;
+  slot.attempts = 0;
+  slot.lockedUntil = null;
+  persist();
+  await pushRoom(roomId - 1);
+  renderDashboard();
+  showToast('Slot deactivated');
+}
+
+// ── QR code ───────────────────────────────────────────────────
+let qrGenerated = false;
+function renderQR() {
+  const baseUrl = window.location.href.replace('index.html','').replace(/\/$/, '');
+  const activateUrl = baseUrl + '/activate.html';
+  document.getElementById('qrUrlText').textContent = activateUrl;
+  if (!qrGenerated && document.getElementById('qrCanvas')) {
+    document.getElementById('qrCanvas').innerHTML = '';
+    new QRCode(document.getElementById('qrCanvas'), {
+      text: activateUrl,
+      width: 160, height: 160,
+      colorDark: '#000000', colorLight: '#ffffff',
+      correctLevel: QRCode.CorrectLevel.M
+    });
+    qrGenerated = true;
+  }
+}
+
+function printQR() {
+  const baseUrl = window.location.href.replace('index.html','').replace(/\/$/, '');
+  const activateUrl = baseUrl + '/activate.html';
+  const win = window.open('', '_blank');
+  win.document.write(`<!DOCTYPE html><html><head><title>Room Controller QR</title>
+    <style>
+      body { font-family: -apple-system,sans-serif; text-align:center; padding:40px; }
+      h2 { font-size:22px; margin-bottom:4px; }
+      p { color:#666; font-size:14px; margin-bottom:20px; }
+      .url { font-size:12px; color:#999; margin-top:12px; word-break:break-all; }
+      @media print { button { display:none; } }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  </head><body>
+    <h2>Room Controller</h2>
+    <p>Scan to activate your room slot</p>
+    <div id="qr" style="display:inline-block;background:white;padding:12px;border:1px solid #ddd;border-radius:8px"></div>
+    <div class="url">${activateUrl}</div>
+    <br><button onclick="window.print()">Print</button>
+    <script>
+      new QRCode(document.getElementById('qr'), {
+        text: '${activateUrl}', width:200, height:200,
+        colorDark:'#000000', colorLight:'#ffffff',
+        correctLevel: QRCode.CorrectLevel.M
+      });
+      setTimeout(() => window.print(), 800);
+    </script>
+  </body></html>`);
+  win.document.close();
+}
 
 // ── Persist ──────────────────────────────────────────────────
 function persist() {
@@ -359,10 +492,25 @@ function syncFromFirebase(data) {
     const idx = parseInt(key.replace('room','')) - 1;
     if (idx < 0 || idx >= 6) return;
     const r = data[key];
-    // Only sync override from Firebase (ESP32 can also write status back)
+
+    // Sync override (ESP32 writes this back)
     if (r.override !== undefined) state.rooms[idx].override = r.override;
-    if (r.lightOn  !== undefined) {
-      // ESP32 confirmed state — update local
+
+    // Sync lightOn from ESP32
+    if (r.lightOn !== undefined) state.rooms[idx].lightOn = r.lightOn;
+
+    // Sync slot activation state — catches activations from activate.html
+    // Updates: activatedAt, activatedBy, attempts, lockedUntil per slot
+    if (r.slots && Array.isArray(r.slots)) {
+      r.slots.forEach((fbSlot, si) => {
+        const localSlot = state.rooms[idx].slots[0] && state.rooms[idx].slots[0][si];
+        if (!localSlot) return;
+        // Only sync activation fields — don't overwrite time/code/recurring
+        if (fbSlot.activatedAt  !== undefined) localSlot.activatedAt  = fbSlot.activatedAt;
+        if (fbSlot.activatedBy  !== undefined) localSlot.activatedBy  = fbSlot.activatedBy;
+        if (fbSlot.attempts     !== undefined) localSlot.attempts     = fbSlot.attempts;
+        if (fbSlot.lockedUntil  !== undefined) localSlot.lockedUntil  = fbSlot.lockedUntil;
+      });
     }
   });
   renderDashboard();
@@ -486,7 +634,18 @@ function addSlot(id) {
     showToast(`⚠️ Overlaps with ${overlapTimes} — slots merged`);
   }
 
-  existing.push({ s, e, recurring });
+  existing.push({
+    s, e, recurring,
+    code: generate4DigitCode(),   // 4-digit activation code
+    activatedAt: null,
+    activatedBy: null,
+    attempts: 0,
+    lockedUntil: null,
+    date: state.schedDay === 0 ? todayStr() : (() => {
+      const d = new Date(); d.setDate(d.getDate()+1);
+      return d.getFullYear()+'-'+String(d.getMonth()+2).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+    })()
+  });
   r.slots[state.schedDay] = mergeSlots(existing);
   persist(); pushRoom(id-1); renderDashboard();
   showToast(recurring ? '✓ Recurring slot added' : '✓ One-time slot added');
@@ -602,17 +761,32 @@ function copySlots(fromId) {
     const toRoom = state.rooms.find(r => r.id === toId);
 
     // Copy today + recurring slots → day 0
+    // Each copied slot gets a FRESH unique code + reset activation state
     const day0slots = [...todaySlots, ...recurringSlots];
     if (day0slots.length > 0) {
       if (!toRoom.slots[0]) toRoom.slots[0] = [];
-      day0slots.forEach(sl => toRoom.slots[0].push({...sl}));
+      day0slots.forEach(sl => toRoom.slots[0].push({
+        ...sl,
+        code: generate4DigitCode(),  // fresh code per room
+        activatedAt: null,           // reset activation
+        activatedBy: null,
+        attempts: 0,
+        lockedUntil: null
+      }));
       toRoom.slots[0] = mergeSlots(toRoom.slots[0]);
     }
 
-    // Copy tomorrow slots → day 1
+    // Copy tomorrow slots → day 1 with fresh codes
     if (tomorrowSlots.length > 0) {
       if (!toRoom.slots[1]) toRoom.slots[1] = [];
-      tomorrowSlots.forEach(sl => toRoom.slots[1].push({...sl}));
+      tomorrowSlots.forEach(sl => toRoom.slots[1].push({
+        ...sl,
+        code: generate4DigitCode(),  // fresh code per room
+        activatedAt: null,
+        activatedBy: null,
+        attempts: 0,
+        lockedUntil: null
+      }));
       toRoom.slots[1] = mergeSlots(toRoom.slots[1]);
     }
 
@@ -666,12 +840,27 @@ function renderRoomCard(r) {
 
     if (r.panelTab === 'slot') {
       const slotItems = slots.length
-        ? slots.map((s,i) => `<div class="slot-item">
-            <div class="slot-dot" style="background:${s.recurring?'var(--green)':'var(--accent)'}"></div>
-            <span class="slot-time">${s.s} – ${s.e}</span>
-            <span style="font-size:10px;padding:1px 6px;border-radius:10px;background:${s.recurring?'rgba(64,192,128,0.15)':'rgba(74,143,255,0.12)'};color:${s.recurring?'var(--green)':'var(--accent)'}">${s.recurring?'recurring':'one-time'}</span>
-            <button class="slot-del" onclick="deleteSlot(${r.id},${i})">×</button>
-          </div>`).join('')
+        ? slots.map((s,i) => {
+            const now = new Date();
+            const nm = now.getHours()*60+now.getMinutes();
+            const ss = toMinsStr(s.s), se = toMinsStr(s.e);
+            const isActive = !!s.activatedAt;
+            const isLocked = s.lockedUntil && Date.now() < s.lockedUntil;
+            const lockMins = isLocked ? Math.ceil((s.lockedUntil - Date.now())/60000) : 0;
+            return `<div class="slot-item" style="flex-wrap:wrap;gap:5px">
+              <div class="slot-dot" style="background:${s.recurring?'var(--green)':'var(--accent)'}"></div>
+              <span class="slot-time">${s.s} – ${s.e}</span>
+              <span style="font-size:10px;padding:1px 6px;border-radius:10px;background:${s.recurring?'rgba(64,192,128,0.15)':'rgba(74,143,255,0.12)'};color:${s.recurring?'var(--green)':'var(--accent)'}">${s.recurring?'recurring':'one-time'}</span>
+              <span class="slot-code">${s.code||'----'}</span>
+              ${isActive ? `<span class="slot-status active">✓ Active</span>` : ''}
+              ${isLocked ? `<span class="slot-status locked">🔒 ${lockMins}min</span>` : ''}
+              <div style="display:flex;gap:5px;margin-left:auto">
+                ${!isActive && !isLocked ? `<button class="slot-activate-btn" onclick="activateSlot(${r.id},${i})">Activate</button>` : ''}
+                ${isActive ? `<button class="slot-deactivate-btn" onclick="deactivateSlot(${r.id},${i})">Deactivate</button>` : ''}
+                <button class="slot-del" onclick="deleteSlot(${r.id},${i})">×</button>
+              </div>
+            </div>`;
+          }).join('')
         : `<div class="empty-msg">No slots yet</div>`;
       body = `<div class="panel-tabs">${ptabs}</div>
         <div class="day-toggle">
@@ -827,8 +1016,16 @@ function renderTimeline() {
 
 // ── Settings ─────────────────────────────────────────────────
 function renderSettings() {
-  document.getElementById('cfg-url').value = state.config.dbUrl;
-  document.getElementById('cfg-key').value = state.config.apiKey;
+  document.getElementById('cfg-url').value  = state.config.dbUrl;
+  document.getElementById('cfg-key').value  = state.config.apiKey;
+  document.getElementById('cfg-seed').value = state.config.adminSeed || '1234';
+  // Show admin code
+  const code = getAdminCode(state.config.adminSeed);
+  document.getElementById('adminCodeDisplay').textContent = code;
+  document.getElementById('adminCodeDate').textContent =
+    'Valid today: ' + new Date().toLocaleDateString([],{weekday:'short',month:'short',day:'numeric'});
+  // Generate QR
+  setTimeout(renderQR, 100);
   document.getElementById('roomNameInputs').innerHTML = state.rooms.map(r =>
     `<div class="settings-row" style="flex-direction:column;align-items:stretch;gap:4px">
       <div class="settings-label" style="font-size:12px;color:var(--muted)">Room ${r.id}</div>
@@ -839,8 +1036,13 @@ function renderSettings() {
 }
 
 function saveSettings() {
-  state.config.dbUrl  = document.getElementById('cfg-url').value.trim().replace(/\/$/, '');
-  state.config.apiKey = document.getElementById('cfg-key').value.trim();
+  state.config.dbUrl    = document.getElementById('cfg-url').value.trim().replace(/\/$/, '');
+  state.config.apiKey   = document.getElementById('cfg-key').value.trim();
+  state.config.adminSeed = document.getElementById('cfg-seed').value.trim() || '1234';
+  // Push seed to Firebase so activate.html can compute admin code
+  if (state.config.dbUrl) {
+    fbSet('/config/adminSeed', state.config.adminSeed);
+  }
   state.rooms.forEach(r => {
     const el = document.getElementById(`rname_${r.id}`);
     if (el) r.name = el.value.trim() || `Room ${r.id}`;
