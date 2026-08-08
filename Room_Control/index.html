@@ -495,7 +495,7 @@ function hydrate() {
 
 // ── Firebase REST helpers ────────────────────────────────────
 function fbUrl(path) {
-  return `${state.config.dbUrl}${path}.json?auth=${state.config.apiKey}`;
+  return `${state.config.dbUrl}${path}.json`;
 }
 
 async function fbSet(path, value) {
@@ -531,7 +531,7 @@ async function fbGet(path) {
 function startFbListener() {
   if (!state.config.dbUrl || !state.config.apiKey) return;
   if (fbListener) { fbListener.close(); fbListener = null; }
-  const url = `${state.config.dbUrl}/rooms.json?auth=${state.config.apiKey}`;
+  const url = `${state.config.dbUrl}/rooms.json`;
   const es = new EventSource(url);
   fbListener = es;
 
@@ -971,9 +971,7 @@ function renderRoomCard(r) {
           <div class="copy-day-row">
             <button class="copy-day-btn${copyState.sources.includes('today') ? ' active' : ''}" onclick="toggleCopySource('today')">Today</button>
             <button class="copy-day-btn${copyState.sources.includes('tomorrow') ? ' active' : ''}" onclick="toggleCopySource('tomorrow')">Tomorrow</button>
-            const recActive = copyState.sources.includes('recurring');
-            const recStyle  = recActive ? 'background:var(--green);color:white;' : 'color:var(--green);';
-            <button class="copy-day-btn${copyState.sources.includes('recurring') ? ' active' : ''}" onclick="toggleCopySource('recurring')" style="border-color:var(--green);${recStyle}">Recurring</button>
+            <button class="copy-day-btn${copyState.sources.includes('recurring') ? ' active' : ''}" onclick="toggleCopySource('recurring')" style="border-color:var(--green);${copyState.sources.includes('recurring') ? 'background:var(--green);color:white;' : 'color:var(--green);'}">Recurring</button>
           </div>
           <div style="font-size:11px;color:var(--muted);margin-bottom:6px">Copy to:</div>
           <div class="copy-grid">${state.rooms.filter(x=>x.id!==r.id).map(x=>`
