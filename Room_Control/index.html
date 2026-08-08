@@ -9,7 +9,6 @@
   <meta name="apple-mobile-web-app-title" content="RoomCtrl">
   <title>Room Controller</title>
   <link rel="manifest" href="manifest.json">
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <link rel="apple-touch-icon" href="icons/icon-192.png">
   <style>
     :root {
@@ -257,9 +256,14 @@
     </div>
     <div class="qr-section">
       <div class="settings-title" style="padding:0 0 8px">Activation page QR code</div>
-      <div class="qr-box"><div id="qrCanvas"></div></div>
-      <div class="qr-url" id="qrUrlText"></div>
-      <button class="print-btn" onclick="printQR()">🖨️ Print QR code</button>
+      <div id="qrHidden" style="display:none">
+        <div class="qr-box"><div id="qrCanvas"></div></div>
+        <div class="qr-url" id="qrUrlText"></div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="print-btn" onclick="showQR()" id="showQrBtn">🔍 Show QR code</button>
+        <button class="print-btn" onclick="printQR()" style="display:none" id="printQrBtn">🖨️ Print</button>
+      </div>
     </div>
     <div class="settings-section">
       <div class="settings-title">Room names</div>
@@ -363,19 +367,35 @@ async function deactivateSlot(roomId, slotIdx) {
 
 // ── QR code ───────────────────────────────────────────────────
 let qrGenerated = false;
-function renderQR() {
-  const baseUrl = window.location.href.replace('index.html','').replace(/\/$/, '');
+
+function showQR() {
+  const baseUrl = window.location.href
+    .replace('index.html', '')
+    .replace(/\/$/, '');
   const activateUrl = baseUrl + '/activate.html';
+
+  // Show the QR panel
+  document.getElementById('qrHidden').style.display = 'block';
+  document.getElementById('showQrBtn').style.display = 'none';
+  document.getElementById('printQrBtn').style.display = 'block';
   document.getElementById('qrUrlText').textContent = activateUrl;
-  if (!qrGenerated && document.getElementById('qrCanvas')) {
+
+  // Generate QR only once
+  if (!qrGenerated) {
     document.getElementById('qrCanvas').innerHTML = '';
-    new QRCode(document.getElementById('qrCanvas'), {
-      text: activateUrl,
-      width: 160, height: 160,
-      colorDark: '#000000', colorLight: '#ffffff',
-      correctLevel: QRCode.CorrectLevel.M
-    });
-    qrGenerated = true;
+    try {
+      new QRCode(document.getElementById('qrCanvas'), {
+        text: activateUrl,
+        width: 160, height: 160,
+        colorDark: '#000000',
+        colorLight: '#ffffff',
+        correctLevel: QRCode.CorrectLevel.M
+      });
+      qrGenerated = true;
+    } catch(e) {
+      document.getElementById('qrCanvas').innerHTML =
+        '<div style="color:var(--red);font-size:12px;padding:10px">QR library not loaded.<br>Check internet connection.</div>';
+    }
   }
 }
 
@@ -1024,8 +1044,7 @@ function renderSettings() {
   document.getElementById('adminCodeDisplay').textContent = code;
   document.getElementById('adminCodeDate').textContent =
     'Valid today: ' + new Date().toLocaleDateString([],{weekday:'short',month:'short',day:'numeric'});
-  // Generate QR
-  setTimeout(renderQR, 100);
+  // QR generated only when user taps Show QR button
   document.getElementById('roomNameInputs').innerHTML = state.rooms.map(r =>
     `<div class="settings-row" style="flex-direction:column;align-items:stretch;gap:4px">
       <div class="settings-label" style="font-size:12px;color:var(--muted)">Room ${r.id}</div>
@@ -1167,5 +1186,7 @@ function applyUpdate() {
   }
 }
 </script>
+  <!-- QR library loaded async — does not block page render -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" defer></script>
 </body>
 </html>
