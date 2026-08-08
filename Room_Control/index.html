@@ -329,7 +329,7 @@ function generate4DigitCode() {
   return String(Math.floor(1000 + Math.random() * 9000));
 }
 
-function editSlotCode(roomId, slotIdx) {
+async function editSlotCode(roomId, slotIdx) {
   const r = state.rooms.find(x => x.id === roomId);
   const slot = r.slots[state.schedDay][slotIdx];
   const current = slot.code || '';
@@ -351,7 +351,7 @@ function editSlotCode(roomId, slotIdx) {
   slot.attempts    = 0;
   slot.lockedUntil = null;
   persist();
-  pushRoom(roomId - 1);
+  await pushRoom(roomId - 1);
   renderDashboard();
 }
 
@@ -530,6 +530,25 @@ async function fbSet(path, value) {
   }
 }
 
+// PATCH — partial update, preserves fields not included
+// Use for room updates to preserve ESP32-written fields (lightOn, lastSeen)
+async function fbPatch(path, value) {
+  if (!state.config.dbUrl) { showToast('Set Firebase URL in Settings'); return false; }
+  try {
+    const res = await fetch(`${state.config.dbUrl}${path}.json`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(value)
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return true;
+  } catch(e) {
+    addLog('error', e.message);
+    setConnStatus(false);
+    return false;
+  }
+}
+
 async function fbGet(path) {
   try {
     const res = await fetch(fbUrl(path));
@@ -568,6 +587,9 @@ function startFbListener() {
   es.onerror = () => setConnStatus(false);
 }
 
+// Track when PWA last wrote override to prevent immediate sync overwrite
+const overrideWriteTime = {};
+
 function syncFromFirebase(data) {
   // data is { room1: {...}, room2: {...}, ... }
   Object.keys(data || {}).forEach(key => {
@@ -575,8 +597,13 @@ function syncFromFirebase(data) {
     if (idx < 0 || idx >= 6) return;
     const r = data[key];
 
-    // Sync override (ESP32 writes this back)
-    if (r.override !== undefined) state.rooms[idx].override = r.override;
+    // Sync override — but skip if PWA just wrote it (within last 5 seconds)
+    // This prevents ESP32 heartbeat from immediately overwriting PWA override
+    const lastWrite = overrideWriteTime[idx] || 0;
+    const justWrote = (Date.now() - lastWrite) < 5000;
+    if (r.override !== undefined && !justWrote) {
+      state.rooms[idx].override = r.override;
+    }
 
     // Sync lightOn from ESP32
     if (r.lightOn !== undefined) state.rooms[idx].lightOn = r.lightOn;
@@ -603,6 +630,8 @@ function syncFromFirebase(data) {
 // ── Write full room state to Firebase ───────────────────────
 async function pushRoom(idx) {
   const r = state.rooms[idx];
+  // Use PATCH not PUT — only update fields PWA owns
+  // This preserves lightOn, lastSeen written by ESP32
   const payload = {
     override: r.override,          // null / true / false
     slots: r.slots[0] || [],       // today's slots
@@ -610,26 +639,21 @@ async function pushRoom(idx) {
     name: r.name,
     updatedAt: Date.now()
   };
-  const ok = await fbSet(`/rooms/room${r.id}`, payload);
+  const ok = await fbPatch(`/rooms/room${r.id}`, payload);
   addLog(ok ? 'ok' : 'error', `room${r.id} → Firebase`);
   setConnStatus(ok);
   return ok;
 }
 
 async function pushAllRooms() {
-  const payload = {};
-  state.rooms.forEach(r => {
-    payload[`room${r.id}`] = {
-      override: r.override,
-      slots: r.slots[0] || [],
-      slotsT: r.slots[1] || [],
-      name: r.name,
-      updatedAt: Date.now()
-    };
-  });
-  const ok = await fbSet('/rooms', payload);
-  addLog(ok ? 'ok' : 'error', 'all_rooms → Firebase');
-  return ok;
+  // PATCH each room individually to preserve ESP32 fields
+  let allOk = true;
+  for (let i = 0; i < state.rooms.length; i++) {
+    const ok = await pushRoom(i);
+    if (!ok) allOk = false;
+  }
+  addLog(allOk ? 'ok' : 'error', 'all_rooms → Firebase');
+  return allOk;
 }
 
 // ── Light state logic ────────────────────────────────────────
@@ -650,17 +674,17 @@ function getLightState(room) {
 
 // ── Schedule auto-check ──────────────────────────────────────
 let lastChecked = {};
-function checkSchedules() {
-  state.rooms.forEach(room => {
-    if (room.override !== null) return;
+async function checkSchedules() {
+  for (const room of state.rooms) {
+    if (room.override !== null) continue;
     const wasOn = lastChecked[room.id] || false;
     const isOn  = isScheduledNow(room);
     if (isOn !== wasOn) {
       lastChecked[room.id] = isOn;
-      pushRoom(room.id - 1);
-      addLog('ok', `${room.name} schedule → ${isOn?'ON':'OFF'}`);
+      await pushRoom(room.id - 1);
+      addLog('ok', `${room.name} schedule → ${isOn ? 'ON' : 'OFF'}`);
     }
-  });
+  }
 }
 
 // ── Room actions ─────────────────────────────────────────────
@@ -702,7 +726,7 @@ function mergeSlots(slots) {
   return merged;
 }
 
-function addSlot(id) {
+async function addSlot(id) {
   const r = state.rooms.find(x => x.id === id);
   const s = document.getElementById(`ns_${id}`).value;
   const e = document.getElementById(`ne_${id}`).value;
@@ -742,7 +766,7 @@ function addSlot(id) {
   // Clear code input field after adding
   const codeEl = document.getElementById(`nc_${id}`);
   if (codeEl) codeEl.value = '';
-  persist(); pushRoom(id-1); renderDashboard();
+  persist(); await pushRoom(id-1); renderDashboard();
   const codeMsg = !requireCode
     ? ' (auto-approved)'
     : codeInput.length === 4
@@ -751,10 +775,10 @@ function addSlot(id) {
   showToast((recurring ? '✓ Recurring' : '✓ One-time') + ' slot added' + codeMsg);
 }
 
-function deleteSlot(id, idx) {
+async function deleteSlot(id, idx) {
   const r = state.rooms.find(x => x.id === id);
   r.slots[state.schedDay].splice(idx, 1);
-  persist(); pushRoom(id-1); renderDashboard();
+  persist(); await pushRoom(id-1); renderDashboard();
 }
 
 function toggleDay(id, day) {
@@ -768,7 +792,7 @@ function setRecurring(id, field, val) {
   state.rooms.find(r => r.id === id).recurring[field] = val;
 }
 
-function applyRecurring(id) {
+async function applyRecurring(id) {
   const r = state.rooms.find(x => x.id === id);
   if (!r.recurring.days.length) { showToast('Select at least one day'); return; }
   const today = new Date().getDay();
@@ -790,19 +814,24 @@ function applyRecurring(id) {
       }
     }
   });
-  persist(); pushRoom(id-1); renderDashboard();
+  persist(); await pushRoom(id-1); renderDashboard();
   showToast(anyOverlap ? '⚠️ Overlap detected — slots merged' : 'Recurring applied');
 }
 
 async function setOverride(id, val) {
   const r = state.rooms.find(x => x.id === id);
   r.override = val;
+  // Record write time so syncFromFirebase won't overwrite for 5 seconds
+  overrideWriteTime[id - 1] = Date.now();
   persist(); renderDashboard();
   await pushRoom(id - 1);
 }
 
 async function allRooms(val) {
-  state.rooms.forEach(r => r.override = val);
+  state.rooms.forEach((r, i) => {
+    r.override = val;
+    overrideWriteTime[i] = Date.now();
+  });
   persist(); renderDashboard();
   await pushAllRooms();
   showToast(val === true ? 'All ON' : val === false ? 'All OFF' : 'All Auto');
@@ -829,7 +858,7 @@ function toggleCopySource(src) {
   renderDashboard();
 }
 
-function copySlots(fromId) {
+async function copySlots(fromId) {
   if (copyState.selectedRooms.length === 0) { showToast('Select at least one target room'); return; }
   if (copyState.sources.length === 0) { showToast('Select at least one source'); return; }
 
@@ -856,8 +885,9 @@ function copySlots(fromId) {
   }
 
   let copied = 0;
-  copyState.selectedRooms.forEach(toId => {
-    if (toId === fromId) return;
+  // Sequential pushRoom to avoid parallel Firebase write conflicts
+  for (const toId of copyState.selectedRooms) {
+    if (toId === fromId) continue;
     const toRoom = state.rooms.find(r => r.id === toId);
 
     // Copy today + recurring slots → day 0
@@ -890,9 +920,9 @@ function copySlots(fromId) {
       toRoom.slots[1] = mergeSlots(toRoom.slots[1]);
     }
 
-    pushRoom(toId - 1);
+    await pushRoom(toId - 1);  // await each push sequentially
     copied++;
-  });
+  }
 
   persist();
   copyState.selectedRooms = [];
