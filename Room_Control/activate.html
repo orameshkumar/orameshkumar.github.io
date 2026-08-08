@@ -157,6 +157,13 @@ function todayStr() {
     String(d.getDate()).padStart(2,'0');
 }
 
+function tomorrowStr() {
+  const d = new Date(); d.setDate(d.getDate()+1);
+  return d.getFullYear() + '-' +
+    String(d.getMonth()+1).padStart(2,'0') + '-' +
+    String(d.getDate()).padStart(2,'0');
+}
+
 function getAdminCode(seed) {
   const now = new Date();
   const dateNum = now.getFullYear() * 10000 +
@@ -214,24 +221,27 @@ async function loadSlots() {
     const slots = room.slots || [];
 
     // Filter: only today's slots that haven't ended yet
-    const todaySlots = slots.filter(sl => {
-      // Must be today's date (for one-time) or recurring
-      const isToday = sl.recurring || sl.date === today;
-      if (!isToday) return false;
-      // Must not have ended
-      const endMins = toMins(sl.e);
-      return endMins > nm;
-    });
+    // origIdx must be the index in the ORIGINAL slots array (for Firebase write)
+    const todaySlots = slots.reduce((acc, sl, originalIndex) => {
+      // Show if: recurring, OR date matches today, OR no date set (legacy slots)
+      // Explicitly exclude tomorrow's dated slots
+      const isTomorrow = sl.date === tomorrowStr();
+      const isToday = !isTomorrow && (
+                      sl.recurring ||
+                      sl.date === today ||
+                      !sl.date);  // slots without date field treated as today
+      if (!isToday) return acc;
+      // Must not have ended yet
+      if (toMins(sl.e) <= nm) return acc;
+      acc.push({ ...sl, origIdx: originalIndex, roomKey: key });
+      return acc;
+    }, []);
 
     if (todaySlots.length > 0) {
       allRooms.push({
         id: parseInt(key.replace('room','')),
         name: room.name || key,
-        slots: todaySlots.map((sl, i) => ({
-          ...sl,
-          origIdx: i,
-          roomKey: key
-        }))
+        slots: todaySlots
       });
     }
   });
