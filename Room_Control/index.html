@@ -1123,7 +1123,7 @@ function renderRoomCard(r) {
             <button class="copy-room-btn${copyState.selectedRooms.includes(x.id)?' selected':''}" onclick="toggleCopyRoom(${x.id})">${x.name}</button>
           `).join('')}</div>
           <button class="copy-btn" onclick="copySlots(${r.id})">Copy slots →</button>
-        </div>\`;`
+        </div>`;
 
     } else if (r.panelTab === 'recurring') {
       const dayPills = DAYS.map((d,i) =>
