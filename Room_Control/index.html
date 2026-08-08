@@ -455,7 +455,7 @@ function printQR() {
   const baseUrl = window.location.href.replace('index.html','').replace(/\/$/, '');
   const activateUrl = baseUrl + '/activate.html';
   const win = window.open('', '_blank');
-  // Use string concat to avoid </script> inside template literal breaking parser
+  // Use string concat to avoid script-closing tag inside string breaking parser
   const scriptTag = '<scr' + 'ipt src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></' + 'script>';
   const inlineScript = '<scr' + 'ipt>window.onload=function(){new QRCode(document.getElementById("qr"),{text:"' + activateUrl + '",width:200,height:200,colorDark:"#000000",colorLight:"#ffffff",correctLevel:2});setTimeout(function(){window.print();},800);};</' + 'script>';
   win.document.write(
