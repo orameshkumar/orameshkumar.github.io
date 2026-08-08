@@ -175,10 +175,18 @@ function getAdminCode(seed) {
 // ── Firebase REST ─────────────────────────────────────────────
 async function fbGet(path) {
   try {
-    const res = await fetch(FIREBASE_URL + path + '.json');
-    if (!res.ok) return null;
-    return await res.json();
-  } catch(e) { return null; }
+    const url = FIREBASE_URL + path + '.json';
+    const res = await fetch(url);
+    if (!res.ok) {
+      console.warn(`[fbGet] FAILED ${path} status=${res.status}`);
+      return null;
+    }
+    const data = await res.json();
+    return data;
+  } catch(e) {
+    console.error(`[fbGet] ERROR ${path}`, e.message);
+    return null;
+  }
 }
 
 async function fbPut(path, value) {
@@ -223,12 +231,8 @@ async function loadSlots() {
     const roomId   = parseInt(key.replace('room',''));
 
     // Fetch slots directly from Firebase path
-    let rawSlots = null;
-    try {
-      rawSlots = await fbGet('/rooms/' + key + '/slots');
-    } catch(e) { rawSlots = null; }
-
-    console.log(`[activate] ${key} slots raw:`, JSON.stringify(rawSlots));
+    let rawSlots = await fbGet('/rooms/' + key + '/slots');
+    console.log(`[activate] ${key}/slots → `, rawSlots === null ? 'NULL' : rawSlots === undefined ? 'UNDEFINED' : JSON.stringify(rawSlots).substring(0,100));
 
     // Normalize: Firebase returns array as object {"0":{...},"1":{...}}
     let slotsArr = [];
@@ -247,12 +251,15 @@ async function loadSlots() {
     console.log(`[activate] ${key}: ${slots.length} valid slots`);
     slots.forEach((s,i) => console.log(`  slot[${i}] ${s.s}-${s.e} code=${s.code} activated=${s.activatedAt}`));
 
-    // Filter: today's slots not yet ended
+    // Filter: show slots that haven't ended yet
+    // Only exclude slots explicitly dated for tomorrow
+    // All other slots (today, no-date, recurring) are shown
     const todaySlots = slots.reduce((acc, sl, originalIndex) => {
       const isTomorrow = sl.date === tomorrowStr();
-      const isToday = !isTomorrow && (sl.recurring || sl.date === today || !sl.date);
-      if (!isToday) return acc;
-      if (toMins(sl.e) <= nm) return acc;
+      const notEnded   = toMins(sl.e) > nm;
+      console.log(`  filter slot[${originalIndex}] ${sl.s}-${sl.e} date="${sl.date}" isTomorrow=${isTomorrow} notEnded=${notEnded}`);
+      if (isTomorrow) return acc;   // exclude tomorrow's slots
+      if (!notEnded) return acc;    // exclude ended slots
       acc.push({ ...sl, origIdx: originalIndex, roomKey: key });
       return acc;
     }, []);
@@ -262,6 +269,11 @@ async function loadSlots() {
     }
   }
 
+  console.log(`[activate] allRooms to display (${allRooms.length} rooms):`);
+  allRooms.forEach(r => {
+    console.log(`  ${r.name} (${r.slots.length} slots):`);
+    r.slots.forEach(s => console.log(`    ${s.s}-${s.e} activated=${s.activatedAt} date=${s.date}`));
+  });
   document.getElementById('loadingState').style.display = 'none';
   renderSlots();
 }

@@ -768,7 +768,7 @@ async function addSlot(id) {
   const overlapping = existing.filter(sl => slotsOverlap(s, e, sl.s, sl.e));
   if (overlapping.length > 0) {
     const overlapTimes = overlapping.map(sl => `${sl.s}\u2013${sl.e}`).join(', ');
-    showToast(`⚠️ Overlaps with ${overlapTimes} — slots merged`);
+    showToast(`⚠️ Overlaps with ${overlapTimes} — each slot has its own code`);
   }
 
   existing.push({
@@ -783,7 +783,7 @@ async function addSlot(id) {
       return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
     })()
   });
-  r.slots[state.schedDay] = mergeSlots(existing);
+  // No merging — each slot keeps its own code and activation state
   // Clear code input field after adding
   const codeEl = document.getElementById(`nc_${id}`);
   if (codeEl) codeEl.value = '';
@@ -831,7 +831,7 @@ async function applyRecurring(id) {
         if (overlapping.length > 0) anyOverlap = true;
         r.slots[day].push({ s: r.recurring.start, e: r.recurring.end });
         // Merge after adding
-        r.slots[day] = mergeSlots(r.slots[day]);
+        // No merging — keep slots independent
       }
     }
   });
@@ -927,7 +927,7 @@ async function copySlots(fromId) {
         attempts: 0,
         lockedUntil: null
       }));
-      toRoom.slots[0] = mergeSlots(toRoom.slots[0]);
+      // No merging — each copied slot is independent
     }
 
     // Copy tomorrow slots → day 1 with fresh codes
@@ -941,10 +941,19 @@ async function copySlots(fromId) {
         attempts: 0,
         lockedUntil: null
       }));
-      toRoom.slots[1] = mergeSlots(toRoom.slots[1]);
+      // No merging — each copied slot is independent
     }
 
-    await pushRoom(toId - 1);  // await each push sequentially
+    // Write slots directly to Firebase path as well (belt and suspenders)
+    // pushRoom uses PATCH which may not work if slots node doesn't exist yet
+    const slotsToWrite = normalizeSlots(toRoom.slots[0]);
+    if (slotsToWrite.length > 0) {
+      await fbPatch(`/rooms/room${toId}`, {
+        slots: slotsToWrite,
+        updatedAt: Date.now()
+      });
+      console.log(`Copied ${slotsToWrite.length} slots to room${toId}`, slotsToWrite);
+    }
     copied++;
   }
 
