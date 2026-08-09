@@ -434,6 +434,7 @@ let modalRoomId  = null;
 let modalDay     = 0;
 
 function openSlotModal(roomId) {
+  showToast("Opening slot modal for room " + roomId);
   modalRoomId = roomId;
   modalDay    = state.schedDay;
   const r     = state.rooms.find(x => x.id === roomId);
@@ -1258,16 +1259,20 @@ async function copySlots(fromId) {
 
 // ── Render Dashboard ─────────────────────────────────────────
 function renderDashboard() {
-  let onCount=0, manualCount=0, slotCount=0;
-  state.rooms.forEach(r => {
-    if (getLightState(r).on) onCount++;
-    if (r.override !== null) manualCount++;
-    slotCount += (r.slots[0]||[]).length;
-  });
-  document.getElementById('s-on').textContent = onCount;
-  document.getElementById('s-manual').textContent = manualCount;
-  document.getElementById('s-slots').textContent = slotCount;
-  document.getElementById('roomList').innerHTML = state.rooms.map(renderRoomCard).join('');
+  try {
+    let onCount=0, manualCount=0, slotCount=0;
+    state.rooms.forEach(r => {
+      if (getLightState(r).on) onCount++;
+      if (r.override !== null) manualCount++;
+      slotCount += (r.slots[0]||[]).length;
+    });
+    document.getElementById('s-on').textContent = onCount;
+    document.getElementById('s-manual').textContent = manualCount;
+    document.getElementById('s-slots').textContent = slotCount;
+    document.getElementById('roomList').innerHTML = state.rooms.map(renderRoomCard).join('');
+  } catch(e) {
+    showToast('Render error: ' + e.message);
+  }
 }
 
 function renderRoomCard(r) {
