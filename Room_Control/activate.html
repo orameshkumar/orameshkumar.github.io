@@ -430,35 +430,25 @@ async function pinSubmit() {
       // ── Correct code ─────────────────────────────────────────
       updatePinDots('ok');
 
-      // Write activatedAt directly to the specific slot field
-      // Use targeted path to avoid overwriting other slots
+      // Write activatedAt to Firebase
       const slotBasePath = `/rooms/${selectedSlot.roomKey}/slots/${selectedSlot.origIdx}`;
       await fbPut(slotBasePath + '/activatedAt', Date.now());
       await fbPut(slotBasePath + '/activatedBy', isAdmin ? 'admin' : 'slot');
       await fbPut(slotBasePath + '/attempts',    0);
       await fbPut(slotBasePath + '/lockedUntil', null);
 
-      // Update local state immediately so UI reflects activation now
-      const localRoom = allRooms.find(r => r.id === selectedRoom.id);
-      if (localRoom) {
-        const localSlot = localRoom.slots.find(
-          sl => sl.s === selectedSlot.s && sl.e === selectedSlot.e
-        );
-        if (localSlot) localSlot.activatedAt = Date.now();
-      }
-      // Re-render immediately to show ✓ Active badge
-      renderSlots();
-
+      // Close PIN, show success, then full refresh
+      document.getElementById('pinOverlay').classList.remove('show');
+      pinValue = '';
+      updatePinDots();
+      document.getElementById('successSub').textContent =
+        `${selectedRoom.name} · ${selectedSlot.s} – ${selectedSlot.e}`;
+      document.getElementById('successOverlay').classList.add('show');
       setTimeout(() => {
-        document.getElementById('pinOverlay').classList.remove('show');
-        document.getElementById('successSub').textContent =
-          `${selectedRoom.name} · ${selectedSlot.s} – ${selectedSlot.e}`;
-        document.getElementById('successOverlay').classList.add('show');
-        setTimeout(() => {
-          document.getElementById('successOverlay').classList.remove('show');
-          loadSlots(); // Full refresh from Firebase
-        }, 2000);
-      }, 400);
+        document.getElementById('successOverlay').classList.remove('show');
+        loadingSlots = false;
+        loadSlots(); // Full refresh from Firebase
+      }, 1500);
 
     } else {
       // ── Wrong code ───────────────────────────────────────────

@@ -121,6 +121,47 @@
     .tl-legend-item { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--muted); }
     .tl-legend-dot { width: 10px; height: 10px; border-radius: 2px; }
 
+
+    /* ── Slot creation modal ─────────────────────────────────── */
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 200;
+      display: flex; align-items: center; justify-content: center;
+      opacity: 0; pointer-events: none; transition: opacity 0.2s; }
+    .modal-overlay.show { opacity: 1; pointer-events: all; }
+    .modal-box { background: var(--card); border-radius: var(--radius); padding: 0;
+      width: min(92vw, 400px); max-height: 85vh; overflow-y: auto;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.5); }
+    .modal-header { display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 16px; border-bottom: 1px solid var(--border); }
+    .modal-title { font-size: 15px; font-weight: 600; }
+    .modal-close { background: none; border: none; color: var(--muted); font-size: 22px;
+      cursor: pointer; padding: 0 4px; line-height: 1; }
+    .modal-close:hover { color: var(--text); }
+    .modal-body { padding: 16px; }
+    .modal-row { display: flex; gap: 10px; align-items: center; margin-bottom: 12px; }
+    .modal-label { font-size: 13px; color: var(--muted); width: 44px; flex-shrink: 0; }
+    .modal-time { flex: 1; background: var(--card2); border: 1px solid var(--border);
+      border-radius: 8px; color: var(--text); font-size: 15px; padding: 10px 12px;
+      min-height: 44px; }
+    .modal-check-row { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+    .modal-check-row input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--amber); flex-shrink: 0; }
+    .modal-check-label { font-size: 13px; color: var(--muted); }
+    .modal-code-row { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; }
+    .modal-code-input { width: 90px; background: var(--card2); border: 1px solid var(--amber);
+      border-radius: 8px; color: var(--amber); font-size: 18px; font-family: monospace;
+      font-weight: 700; letter-spacing: 4px; padding: 8px 10px; text-align: center;
+      min-height: 44px; }
+    .modal-divider { height: 1px; background: var(--border); margin: 4px 0 14px; }
+    .modal-save-btn { width: 100%; padding: 14px; border-radius: var(--radius); border: none;
+      background: var(--accent); color: white; font-size: 15px; font-weight: 600;
+      cursor: pointer; margin-bottom: 8px; min-height: 48px; }
+    .modal-cancel-btn { width: 100%; padding: 12px; border-radius: var(--radius);
+      border: 1px solid var(--border); background: transparent; color: var(--muted);
+      font-size: 14px; cursor: pointer; min-height: 44px; }
+    .modal-day-row { display: flex; gap: 6px; margin-bottom: 12px; }
+    .modal-day-btn { flex: 1; padding: 8px 0; border-radius: 8px;
+      border: 1px solid var(--border); background: transparent;
+      font-size: 12px; color: var(--muted); cursor: pointer; min-height: 36px; }
+    .modal-day-btn.active { background: var(--accent); color: white; border-color: var(--accent); }
     .settings-section { background: var(--card); border-radius: var(--radius); margin-bottom: 12px; overflow: hidden; }
     .settings-title { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; padding: 12px 14px 6px; }
     .settings-row { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-top: 1px solid var(--border); }
@@ -305,7 +346,50 @@
   </button>
 </div>
 
-<div class="toast" id="toast"></div>
+<div class="toast" id="toast">
+  <!-- ── Slot creation modal ────────────────────────────────── -->
+  <div class="modal-overlay" id="slotModal" onclick="modalBackdropClick(event)">
+    <div class="modal-box">
+      <div class="modal-header">
+        <span class="modal-title" id="modalTitle">Add Slot</span>
+        <button class="modal-close" onclick="closeSlotModal()">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="modal-day-row">
+          <button class="modal-day-btn active" id="mdayBtn0" onclick="setModalDay(0)">Today</button>
+          <button class="modal-day-btn" id="mdayBtn1" onclick="setModalDay(1)">Tomorrow</button>
+        </div>
+        <div class="modal-row">
+          <label class="modal-label">Start</label>
+          <input class="modal-time" type="time" id="m_start" value="09:00">
+        </div>
+        <div class="modal-row">
+          <label class="modal-label">End</label>
+          <input class="modal-time" type="time" id="m_end" value="10:00">
+        </div>
+        <div class="modal-divider"></div>
+        <div class="modal-check-row">
+          <input type="checkbox" id="m_reqcode" checked onchange="modalToggleCode(this.checked)">
+          <label class="modal-check-label" for="m_reqcode">Require activation code</label>
+        </div>
+        <div id="m_coderow" class="modal-code-row">
+          <input class="modal-code-input" type="text" id="m_code" maxlength="4" placeholder="----"
+            oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,4)">
+          <button class="code-refresh-btn" onclick="modalRefreshCode()" title="Generate random">🔄</button>
+          <span style="font-size:11px;color:var(--muted)">Blank = auto-generate</span>
+        </div>
+        <div class="modal-divider"></div>
+        <div class="modal-check-row">
+          <input type="checkbox" id="m_recurring" onchange="modalToggleRecurring(this.checked)">
+          <label class="modal-check-label" id="m_recurlabel" for="m_recurring">Repeat daily (recurring)</label>
+        </div>
+        <button class="modal-save-btn" onclick="saveSlotFromModal()">+ Add Slot</button>
+        <button class="modal-cancel-btn" onclick="closeSlotModal()">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+</div>
 
 <script>
 // ── State ────────────────────────────────────────────────────
@@ -333,6 +417,122 @@ function normalizeSlots(slots) {
   if (Array.isArray(slots)) return slots;
   // Firebase converted array to object with numeric keys
   return Object.keys(slots).sort((a,b) => parseInt(a)-parseInt(b)).map(k => slots[k]).filter(Boolean);
+}
+
+
+// ── Slot Modal ────────────────────────────────────────────────
+let modalRoomId  = null;
+let modalDay     = 0;
+
+function openSlotModal(roomId) {
+  modalRoomId = roomId;
+  modalDay    = state.schedDay;
+  const r     = state.rooms.find(x => x.id === roomId);
+  document.getElementById('modalTitle').textContent = 'Add Slot — ' + r.name;
+  // Reset form
+  document.getElementById('m_start').value    = '09:00';
+  document.getElementById('m_end').value      = '10:00';
+  document.getElementById('m_code').value     = '';
+  document.getElementById('m_reqcode').checked  = true;
+  document.getElementById('m_recurring').checked = false;
+  document.getElementById('m_coderow').style.opacity = '1';
+  document.getElementById('m_coderow').style.pointerEvents = '';
+  // Day buttons
+  setModalDay(state.schedDay);
+  // Recurring disabled for tomorrow
+  modalToggleRecurring(false);
+  document.getElementById('slotModal').classList.add('show');
+}
+
+function closeSlotModal() {
+  document.getElementById('slotModal').classList.remove('show');
+  modalRoomId = null;
+}
+
+function modalBackdropClick(e) {
+  if (e.target.id === 'slotModal') closeSlotModal();
+}
+
+function setModalDay(d) {
+  modalDay = d;
+  document.getElementById('mdayBtn0').className = 'modal-day-btn' + (d===0?' active':'');
+  document.getElementById('mdayBtn1').className = 'modal-day-btn' + (d===1?' active':'');
+  // Disable recurring for tomorrow
+  const rec = document.getElementById('m_recurring');
+  const lbl = document.getElementById('m_recurlabel');
+  if (d === 1) {
+    rec.checked = false;
+    rec.disabled = true;
+    lbl.textContent = 'Recurring (today only)';
+    lbl.style.color = 'var(--muted)';
+    lbl.style.opacity = '0.5';
+  } else {
+    rec.disabled = false;
+    lbl.textContent = 'Repeat daily (recurring)';
+    lbl.style.opacity = '1';
+  }
+}
+
+function modalToggleCode(checked) {
+  const row = document.getElementById('m_coderow');
+  row.style.opacity      = checked ? '1' : '0.3';
+  row.style.pointerEvents = checked ? '' : 'none';
+  if (!checked) document.getElementById('m_code').value = '';
+}
+
+function modalToggleRecurring(checked) {}
+
+function modalRefreshCode() {
+  const el = document.getElementById('m_code');
+  el.value = generate4DigitCode();
+  el.style.borderColor = 'var(--green)';
+  setTimeout(() => el.style.borderColor = '', 1000);
+}
+
+async function saveSlotFromModal() {
+  if (!modalRoomId) return;
+  const r = state.rooms.find(x => x.id === modalRoomId);
+  const s = document.getElementById('m_start').value;
+  const e = document.getElementById('m_end').value;
+
+  if (!s || !e || s >= e) { showToast('⚠️ Invalid time range'); return; }
+
+  // Check for duplicate slot times
+  const existing = r.slots[modalDay] || [];
+  const dup = existing.find(sl => sl.s === s && sl.e === e);
+  if (dup) { showToast('⚠️ Slot already exists'); return; }
+
+  const requireCode  = document.getElementById('m_reqcode').checked;
+  const codeInput    = document.getElementById('m_code').value.trim();
+  const slotCode     = requireCode
+    ? (codeInput.length === 4 && /^[0-9]{4}$/.test(codeInput) ? codeInput : generate4DigitCode())
+    : null;
+  const recurring    = document.getElementById('m_recurring').checked && modalDay === 0;
+
+  // Build date string
+  let dateStr;
+  if (modalDay === 0) {
+    dateStr = todayStr();
+  } else {
+    const d = new Date(); d.setDate(d.getDate()+1);
+    dateStr = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  }
+
+  if (!r.slots[modalDay]) r.slots[modalDay] = [];
+  r.slots[modalDay].push({
+    s: s, e: e, recurring,
+    code: slotCode,
+    activatedAt: null, activatedBy: null,
+    attempts: 0, lockedUntil: null, expired: false,
+    date: dateStr
+  });
+
+  closeSlotModal();
+  persist();
+  await pushRoom(modalRoomId - 1);
+  renderDashboard();
+  const codeMsg = !requireCode ? ' (auto)' : ` (code: ${slotCode})`;
+  showToast((recurring ? '✓ Recurring' : '✓ One-time') + ' slot added' + codeMsg);
 }
 
 function generate4DigitCode() {
@@ -677,9 +877,7 @@ function syncFromFirebase(data) {
       });
     }
   });
-  // Only re-render if no panel is expanded — don't interrupt user editing a slot
-  const anyExpanded = state.rooms.some(r => r.expanded);
-  if (!anyExpanded) renderDashboard();
+  renderDashboard();
   persist();
 }
 
@@ -689,8 +887,7 @@ function startPolling() {
   if (pollingInterval) return; // already polling
   pollingInterval = setInterval(async () => {
     if (!state.config.dbUrl) return;
-    // Don't poll while user is editing — expanded panel means user is active
-    if (state.rooms.some(r => r.expanded)) return;
+
     try {
       const data = await fbGet('/rooms');
       if (data) syncFromFirebase(data);
@@ -1091,28 +1288,7 @@ function renderRoomCard(r) {
           <button class="${state.schedDay===1 ? 'active' : ''}" onclick="setSchedDay(1)">Tomorrow</button>
         </div>
         <div class="slot-list">${slotItems}</div>
-        <div class="form-row"><label>Start</label><input type="time" id="ns_${r.id}" value="09:00"></div>
-        <div class="form-row"><label>End</label><input type="time" id="ne_${r.id}" value="10:00"></div>
-        <div class="form-row" style="margin-bottom:8px">
-          <label style="width:auto;color:var(--muted);font-size:12px">Require code</label>
-          <input type="checkbox" id="nq_${r.id}" style="width:16px;height:16px;accent-color:var(--amber)"
-            onchange="toggleCodeInput(${r.id},this.checked)" checked>
-          <span style="font-size:12px;color:var(--muted)">Activation code required</span>
-        </div>
-        <div class="code-input-row" id="codeRow_${r.id}">
-          <label>Code</label>
-          <input class="code-input" type="text" id="nc_${r.id}" maxlength="4" placeholder="----"
-            oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,4)"
-            title="4-digit activation code">
-          <button class="code-refresh-btn" onclick="refreshCode(${r.id})" title="Generate random code">🔄</button>
-          <span style="font-size:11px;color:var(--muted)">Leave blank to auto-generate</span>
-        </div>
-        <div class="form-row" style="margin-bottom:10px" id="recurringRow_${r.id}">
-          <label style="width:auto;color:var(--muted);font-size:12px">Recurring</label>
-          <input type="checkbox" id="nr_${r.id}" style="width:16px;height:16px;accent-color:var(--green)" ${state.schedDay===1?'disabled':''}>
-          <span style="font-size:12px;color:var(--muted)">${state.schedDay===1 ? 'Today only' : 'Repeat daily'}</span>
-        </div>
-        <button class="add-slot-btn" onclick="addSlot(${r.id})">+ Add slot</button>
+        <button class="add-slot-btn" onclick="openSlotModal(${r.id})">+ Add slot</button>
         <div class="copy-section">
           <div class="copy-title">Copy slots to other rooms</div>
           <div style="font-size:11px;color:var(--muted);margin-bottom:6px">Select what to copy:</div>
@@ -1364,9 +1540,7 @@ updateClock();
 setInterval(updateClock, 10000);
 setInterval(checkSchedules, 60000);
 setInterval(() => {
-  // Only auto-refresh dashboard if NO room is currently expanded (user not editing)
-  const anyExpanded = state.rooms.some(r => r.expanded);
-  if (!anyExpanded && document.getElementById('page-dashboard').classList.contains('active')) renderDashboard();
+  if (document.getElementById('page-dashboard').classList.contains('active')) renderDashboard();
   if (document.getElementById('page-timeline').classList.contains('active'))  renderTimeline();
 }, 30000);
 
