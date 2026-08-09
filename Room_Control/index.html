@@ -428,8 +428,9 @@ async function saveRecurringFromModal() {
   if (!s || !e || s >= e) { showToast('⚠️ Invalid time range'); return; }
   r.recurring.start = s;
   r.recurring.end   = e;
+  const savedId = recModalRoomId; // save before closeRecurringModal clears it
   closeRecurringModal();
-  await applyRecurring(recModalRoomId);
+  await applyRecurring(savedId);
 }
 
 // ── Slot Modal ────────────────────────────────────────────────
@@ -540,9 +541,10 @@ async function saveSlotFromModal() {
     date: dateStr
   });
 
+  const savedRoomId = modalRoomId; // save before closeSlotModal clears it
   closeSlotModal();
   persist();
-  await pushRoom(modalRoomId - 1);
+  await pushRoom(savedRoomId - 1);
   renderDashboard();
   const codeMsg = !requireCode ? ' (auto)' : ` (code: ${slotCode})`;
   showToast((recurring ? '✓ Recurring' : '✓ One-time') + ' slot added' + codeMsg);
