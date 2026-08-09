@@ -347,6 +347,32 @@
 </div>
 
 <div class="toast" id="toast">
+
+  <!-- ── Recurring schedule modal ─────────────────────────────── -->
+  <div class="modal-overlay" id="recurringModal" onclick="recModalBackdropClick(event)">
+    <div class="modal-box">
+      <div class="modal-header">
+        <span class="modal-title" id="recModalTitle">Recurring Schedule</span>
+        <button class="modal-close" onclick="closeRecurringModal()">×</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size:12px;color:var(--muted);margin-bottom:12px">Select days and time for daily recurring slot:</p>
+        <div class="day-row" id="recDayRow" style="flex-wrap:wrap;gap:6px;margin-bottom:14px"></div>
+        <div class="modal-row">
+          <label class="modal-label">Start</label>
+          <input class="modal-time" type="time" id="rec_start" value="09:00">
+        </div>
+        <div class="modal-row">
+          <label class="modal-label">End</label>
+          <input class="modal-time" type="time" id="rec_end" value="10:00">
+        </div>
+        <div class="modal-divider"></div>
+        <button class="modal-save-btn" onclick="saveRecurringFromModal()">Apply to today & tomorrow</button>
+        <button class="modal-cancel-btn" onclick="closeRecurringModal()">Cancel</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ── Slot creation modal ────────────────────────────────── -->
   <div class="modal-overlay" id="slotModal" onclick="modalBackdropClick(event)">
     <div class="modal-box">
@@ -419,6 +445,56 @@ function normalizeSlots(slots) {
   return Object.keys(slots).sort((a,b) => parseInt(a)-parseInt(b)).map(k => slots[k]).filter(Boolean);
 }
 
+
+
+// ── Recurring Modal ───────────────────────────────────────────
+let recModalRoomId = null;
+
+function openRecurringModal(roomId) {
+  recModalRoomId = roomId;
+  const r = state.rooms.find(x => x.id === roomId);
+  document.getElementById('recModalTitle').textContent = 'Recurring — ' + r.name;
+  document.getElementById('rec_start').value = r.recurring.start || '09:00';
+  document.getElementById('rec_end').value   = r.recurring.end   || '10:00';
+  // Build day pills
+  const dayRow = document.getElementById('recDayRow');
+  dayRow.innerHTML = DAYS.map((d, i) =>
+    `<button class="day-pill${r.recurring.days.includes(i)?' active':''}"
+      onclick="toggleRecDay(${i})" id="recDay_${i}">${d}</button>`
+  ).join('');
+  document.getElementById('recurringModal').classList.add('show');
+}
+
+function closeRecurringModal() {
+  document.getElementById('recurringModal').classList.remove('show');
+  recModalRoomId = null;
+}
+
+function recModalBackdropClick(e) {
+  if (e.target.id === 'recurringModal') closeRecurringModal();
+}
+
+function toggleRecDay(i) {
+  const r = state.rooms.find(x => x.id === recModalRoomId);
+  const idx = r.recurring.days.indexOf(i);
+  if (idx > -1) r.recurring.days.splice(idx, 1);
+  else r.recurring.days.push(i);
+  // Update button style
+  const btn = document.getElementById('recDay_' + i);
+  if (btn) btn.className = 'day-pill' + (r.recurring.days.includes(i) ? ' active' : '');
+}
+
+async function saveRecurringFromModal() {
+  if (!recModalRoomId) return;
+  const r = state.rooms.find(x => x.id === recModalRoomId);
+  const s = document.getElementById('rec_start').value;
+  const e = document.getElementById('rec_end').value;
+  if (!s || !e || s >= e) { showToast('⚠️ Invalid time range'); return; }
+  r.recurring.start = s;
+  r.recurring.end   = e;
+  closeRecurringModal();
+  await applyRecurring(recModalRoomId);
+}
 
 // ── Slot Modal ────────────────────────────────────────────────
 let modalRoomId  = null;
@@ -998,52 +1074,8 @@ function mergeSlots(slots) {
 }
 
 async function addSlot(id) {
-  const r = state.rooms.find(x => x.id === id);
-  const s = document.getElementById(`ns_${id}`).value;
-  const e = document.getElementById(`ne_${id}`).value;
-  const recurring   = document.getElementById(`nr_${id}`)?.checked || false;
-  const requireCode = document.getElementById(`nq_${id}`)?.checked !== false;
-  // If code not required → auto-approved slot (no code needed)
-  // If code required → use custom code or auto-generate one
-  const codeInput = (document.getElementById(`nc_${id}`)?.value || '').trim();
-  const slotCode  = requireCode
-    ? ((codeInput.length === 4 && /^[0-9]{4}$/.test(codeInput))
-        ? codeInput
-        : generate4DigitCode())
-    : null;  // null = no code = auto-approved
-  if (!s || !e || s >= e) { showToast('Invalid time range'); return; }
-  if (!r.slots[state.schedDay]) r.slots[state.schedDay] = [];
-
-  const existing = r.slots[state.schedDay];
-  const overlapping = existing.filter(sl => slotsOverlap(s, e, sl.s, sl.e));
-  if (overlapping.length > 0) {
-    const overlapTimes = overlapping.map(sl => `${sl.s}\u2013${sl.e}`).join(', ');
-    showToast(`⚠️ Overlaps with ${overlapTimes} — each slot has its own code`);
-  }
-
-  existing.push({
-    s, e, recurring,
-    code: slotCode,         // null = auto-approved, string = requires code
-    activatedAt: null,
-    activatedBy: null,
-    attempts: 0,
-    lockedUntil: null,
-    date: state.schedDay === 0 ? todayStr() : (() => {
-      const d = new Date(); d.setDate(d.getDate()+1);
-      return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
-    })()
-  });
-  // No merging — each slot keeps its own code and activation state
-  // Clear code input field after adding
-  const codeEl = document.getElementById(`nc_${id}`);
-  if (codeEl) codeEl.value = '';
-  persist(); await pushRoom(id-1); renderDashboard();
-  const codeMsg = !requireCode
-    ? ' (auto-approved)'
-    : codeInput.length === 4
-      ? ` (code: ${slotCode})`
-      : ` (code: ${slotCode} auto)`;
-  showToast((recurring ? '✓ Recurring' : '✓ One-time') + ' slot added' + codeMsg);
+  // Slot creation moved to modal — redirect to openSlotModal
+  openSlotModal(id);
 }
 
 async function deleteSlot(id, idx) {
@@ -1066,6 +1098,9 @@ function setRecurring(id, field, val) {
 async function applyRecurring(id) {
   const r = state.rooms.find(x => x.id === id);
   if (!r.recurring.days.length) { showToast('Select at least one day'); return; }
+  if (!r.recurring.start || !r.recurring.end || r.recurring.start >= r.recurring.end) {
+    showToast('⚠️ Invalid time range'); return;
+  }
   const today = new Date().getDay();
   let anyOverlap = false;
   [0,1].forEach(day => {
@@ -1075,18 +1110,24 @@ async function applyRecurring(id) {
       const exists = r.slots[day].some(sl =>
         sl.s === r.recurring.start && sl.e === r.recurring.end);
       if (!exists) {
-        // Check for overlap before adding
         const overlapping = r.slots[day].filter(sl =>
           slotsOverlap(r.recurring.start, r.recurring.end, sl.s, sl.e));
         if (overlapping.length > 0) anyOverlap = true;
-        r.slots[day].push({ s: r.recurring.start, e: r.recurring.end });
-        // Merge after adding
-        // No merging — keep slots independent
+        r.slots[day].push({
+          s: r.recurring.start, e: r.recurring.end,
+          recurring: true, code: generate4DigitCode(),
+          activatedAt: null, activatedBy: null,
+          attempts: 0, lockedUntil: null, expired: false,
+          date: day === 0 ? todayStr() : (() => {
+            const dt = new Date(); dt.setDate(dt.getDate()+1);
+            return dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0');
+          })()
+        });
       }
     }
   });
   persist(); await pushRoom(id-1); renderDashboard();
-  showToast(anyOverlap ? '⚠️ Overlap detected — slots merged' : 'Recurring applied');
+  showToast(anyOverlap ? '⚠️ Overlap detected' : '✓ Recurring applied');
 }
 
 async function setOverride(id, val) {
@@ -1244,9 +1285,9 @@ function renderRoomCard(r) {
   let body = '';
 
   if (r.expanded) {
-    const ptabs = ['slot','recurring','override'].map(t => {
+    const ptabs = ['slot','override'].map(t => {
       const pActive = r.panelTab===t ? ' active' : '';
-      const pLabel  = t==='slot'?'Slots':t==='recurring'?'Recurring':'Override';
+      const pLabel  = t==='slot'?'Slots':'Override';
       return `<button class="ptab${pActive}" onclick="setPanelTab(${r.id},'${t}')">${pLabel}</button>`;
     }).join('');
 
@@ -1289,6 +1330,7 @@ function renderRoomCard(r) {
         </div>
         <div class="slot-list">${slotItems}</div>
         <button class="add-slot-btn" onclick="openSlotModal(${r.id})">+ Add slot</button>
+        <button class="add-slot-btn" style="margin-top:6px;border-color:var(--green);color:var(--green)" onclick="openRecurringModal(${r.id})">⟳ Edit recurring schedule</button>
         <div class="copy-section">
           <div class="copy-title">Copy slots to other rooms</div>
           <div style="font-size:11px;color:var(--muted);margin-bottom:6px">Select what to copy:</div>
@@ -1303,18 +1345,6 @@ function renderRoomCard(r) {
           `).join('')}</div>
           <button class="copy-btn" onclick="copySlots(${r.id})">Copy slots →</button>
         </div>`;
-
-    } else if (r.panelTab === 'recurring') {
-      const dayPills = DAYS.map((d,i) =>
-        `<button class="day-pill${r.recurring.days.includes(i)?' active':''}" onclick="toggleDay(${r.id},${i})">${d}</button>`
-      ).join('');
-      const rStart = r.recurring.start || '09:00';
-      const rEnd   = r.recurring.end   || '10:00';
-      body = `<div class="panel-tabs">${ptabs}</div>
-        <div class="day-row">${dayPills}</div>
-        <div class="form-row"><label>Start</label><input type="time" id="rs_${r.id}" value="${rStart}" onchange="setRecurring(${r.id},'start',this.value)"></div>
-        <div class="form-row"><label>End</label><input type="time" id="re_${r.id}" value="${rEnd}" onchange="setRecurring(${r.id},'end',this.value)"></div>
-        <button class="apply-btn" onclick="applyRecurring(${r.id})">Apply to today & tomorrow</button>`;
 
     } else {
       const ovOn = r.override===true, ovOff = r.override===false, ovNone = r.override===null;
