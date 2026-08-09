@@ -646,14 +646,13 @@ function syncFromFirebase(data) {
     if (idx < 0 || idx >= 6) return;
     const r = data[key];
 
-    // Sync override — only if PWA hasn't written recently
-    // 30-second lock prevents ESP32 heartbeat from resetting manual override
+    // Sync override — only accept null (clearing) from Firebase
+    // true/false are set by PWA only — local state is authoritative
+    // Prevents stale Firebase snapshot from flipping override back
     const lastWrite = overrideWriteTime[idx] || 0;
     const justWrote = (Date.now() - lastWrite) < 30000;
-    if (r.override !== undefined && !justWrote) {
-      // Extra safety: only accept null from Firebase (clearing override)
-      // true/false overrides from Firebase are only set by PWA so this is safe
-      state.rooms[idx].override = r.override;
+    if (r.override === null && !justWrote) {
+      state.rooms[idx].override = null;
     }
 
     // Sync lightOn from ESP32
@@ -1367,7 +1366,7 @@ setInterval(() => {
   if (document.getElementById('page-timeline').classList.contains('active'))  renderTimeline();
 }, 30000);
 
-if (state.config.dbUrl && state.config.apiKey) startFbListener();
+if (state.config.dbUrl) startFbListener();
 renderDashboard();
 
 // Service worker registration with update detection
