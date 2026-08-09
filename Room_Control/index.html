@@ -677,7 +677,9 @@ function syncFromFirebase(data) {
       });
     }
   });
-  renderDashboard();
+  // Only re-render if no panel is expanded — don't interrupt user editing a slot
+  const anyExpanded = state.rooms.some(r => r.expanded);
+  if (!anyExpanded) renderDashboard();
   persist();
 }
 
@@ -687,11 +689,13 @@ function startPolling() {
   if (pollingInterval) return; // already polling
   pollingInterval = setInterval(async () => {
     if (!state.config.dbUrl) return;
+    // Don't poll while user is editing — expanded panel means user is active
+    if (state.rooms.some(r => r.expanded)) return;
     try {
       const data = await fbGet('/rooms');
       if (data) syncFromFirebase(data);
     } catch(e) {}
-  }, 5000); // poll every 5 seconds as fallback
+  }, 5000);
 }
 
 // ── Write full room state to Firebase ───────────────────────
