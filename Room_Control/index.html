@@ -125,9 +125,8 @@
 
     /* ── Slot creation modal ─────────────────────────────────── */
     .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 200;
-      display: flex; align-items: center; justify-content: center;
-      opacity: 0; pointer-events: none; transition: opacity 0.2s; }
-    .modal-overlay.show { opacity: 1; pointer-events: all; }
+      display: none; align-items: center; justify-content: center; }
+    .modal-overlay.show { display: flex; }
     .modal-box { background: var(--card); border-radius: var(--radius); padding: 0;
       width: min(92vw, 400px); max-height: 85vh; overflow-y: auto;
       box-shadow: 0 8px 32px rgba(0,0,0,0.5); }
@@ -348,73 +347,6 @@
 </div>
 
 <div class="toast" id="toast">
-
-  <!-- ── Recurring schedule modal ─────────────────────────────── -->
-  <div class="modal-overlay" id="recurringModal" onclick="recModalBackdropClick(event)">
-    <div class="modal-box">
-      <div class="modal-header">
-        <span class="modal-title" id="recModalTitle">Recurring Schedule</span>
-        <button class="modal-close" onclick="closeRecurringModal()">×</button>
-      </div>
-      <div class="modal-body">
-        <p style="font-size:12px;color:var(--muted);margin-bottom:12px">Select days and time for daily recurring slot:</p>
-        <div class="day-row" id="recDayRow" style="flex-wrap:wrap;gap:6px;margin-bottom:14px"></div>
-        <div class="modal-row">
-          <label class="modal-label" for="rec_start">Start</label>
-          <input class="modal-time" type="time" id="rec_start" value="09:00">
-        </div>
-        <div class="modal-row">
-          <label class="modal-label" for="rec_end">End</label>
-          <input class="modal-time" type="time" id="rec_end" value="10:00">
-        </div>
-        <div class="modal-divider"></div>
-        <button class="modal-save-btn" onclick="saveRecurringFromModal()">Apply to today & tomorrow</button>
-        <button class="modal-cancel-btn" onclick="closeRecurringModal()">Cancel</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ── Slot creation modal ────────────────────────────────── -->
-  <div class="modal-overlay" id="slotModal" onclick="modalBackdropClick(event)">
-    <div class="modal-box">
-      <div class="modal-header">
-        <span class="modal-title" id="modalTitle">Add Slot</span>
-        <button class="modal-close" onclick="closeSlotModal()">×</button>
-      </div>
-      <div class="modal-body">
-        <div class="modal-day-row">
-          <button class="modal-day-btn active" id="mdayBtn0" onclick="setModalDay(0)">Today</button>
-          <button class="modal-day-btn" id="mdayBtn1" onclick="setModalDay(1)">Tomorrow</button>
-        </div>
-        <div class="modal-row">
-          <label class="modal-label" for="m_start">Start</label>
-          <input class="modal-time" type="time" id="m_start" value="09:00">
-        </div>
-        <div class="modal-row">
-          <label class="modal-label" for="m_end">End</label>
-          <input class="modal-time" type="time" id="m_end" value="10:00">
-        </div>
-        <div class="modal-divider"></div>
-        <div class="modal-check-row">
-          <input type="checkbox" id="m_reqcode" checked onchange="modalToggleCode(this.checked)">
-          <label class="modal-check-label" for="m_reqcode">Require activation code</label>
-        </div>
-        <div id="m_coderow" class="modal-code-row">
-          <input class="modal-code-input" type="text" id="m_code" maxlength="4" placeholder="----"
-            oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,4)">
-          <button class="code-refresh-btn" onclick="modalRefreshCode()" title="Generate random">🔄</button>
-          <span style="font-size:11px;color:var(--muted)">Blank = auto-generate</span>
-        </div>
-        <div class="modal-divider"></div>
-        <div class="modal-check-row">
-          <input type="checkbox" id="m_recurring" onchange="modalToggleRecurring(this.checked)">
-          <label class="modal-check-label" id="m_recurlabel" for="m_recurring">Repeat daily (recurring)</label>
-        </div>
-        <button class="modal-save-btn" onclick="saveSlotFromModal()">+ Add Slot</button>
-        <button class="modal-cancel-btn" onclick="closeSlotModal()">Cancel</button>
-      </div>
-    </div>
-  </div>
 
 </div>
 
@@ -790,7 +722,76 @@ function printQR() {
     '<div class="url">' + activateUrl + '</div>' +
     '<br><button onclick="window.print()">Print</button>' +
     inlineScript +
-    '</body></html>'
+    '
+  <!-- ── Recurring schedule modal ─────────────────────────────── -->
+  <div class="modal-overlay" id="recurringModal" onclick="recModalBackdropClick(event)">
+    <div class="modal-box">
+      <div class="modal-header">
+        <span class="modal-title" id="recModalTitle">Recurring Schedule</span>
+        <button class="modal-close" onclick="closeRecurringModal()">×</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size:12px;color:var(--muted);margin-bottom:12px">Select days and time for daily recurring slot:</p>
+        <div class="day-row" id="recDayRow" style="flex-wrap:wrap;gap:6px;margin-bottom:14px"></div>
+        <div class="modal-row">
+          <label class="modal-label" for="rec_start">Start</label>
+          <input class="modal-time" type="time" id="rec_start" value="09:00">
+        </div>
+        <div class="modal-row">
+          <label class="modal-label" for="rec_end">End</label>
+          <input class="modal-time" type="time" id="rec_end" value="10:00">
+        </div>
+        <div class="modal-divider"></div>
+        <button class="modal-save-btn" onclick="saveRecurringFromModal()">Apply to today & tomorrow</button>
+        <button class="modal-cancel-btn" onclick="closeRecurringModal()">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Slot creation modal ────────────────────────────────── -->
+  <div class="modal-overlay" id="slotModal" onclick="modalBackdropClick(event)">
+    <div class="modal-box">
+      <div class="modal-header">
+        <span class="modal-title" id="modalTitle">Add Slot</span>
+        <button class="modal-close" onclick="closeSlotModal()">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="modal-day-row">
+          <button class="modal-day-btn active" id="mdayBtn0" onclick="setModalDay(0)">Today</button>
+          <button class="modal-day-btn" id="mdayBtn1" onclick="setModalDay(1)">Tomorrow</button>
+        </div>
+        <div class="modal-row">
+          <label class="modal-label" for="m_start">Start</label>
+          <input class="modal-time" type="time" id="m_start" value="09:00">
+        </div>
+        <div class="modal-row">
+          <label class="modal-label" for="m_end">End</label>
+          <input class="modal-time" type="time" id="m_end" value="10:00">
+        </div>
+        <div class="modal-divider"></div>
+        <div class="modal-check-row">
+          <input type="checkbox" id="m_reqcode" checked onchange="modalToggleCode(this.checked)">
+          <label class="modal-check-label" for="m_reqcode">Require activation code</label>
+        </div>
+        <div id="m_coderow" class="modal-code-row">
+          <input class="modal-code-input" type="text" id="m_code" maxlength="4" placeholder="----"
+            oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,4)">
+          <button class="code-refresh-btn" onclick="modalRefreshCode()" title="Generate random">🔄</button>
+          <span style="font-size:11px;color:var(--muted)">Blank = auto-generate</span>
+        </div>
+        <div class="modal-divider"></div>
+        <div class="modal-check-row">
+          <input type="checkbox" id="m_recurring" onchange="modalToggleRecurring(this.checked)">
+          <label class="modal-check-label" id="m_recurlabel" for="m_recurring">Repeat daily (recurring)</label>
+        </div>
+        <button class="modal-save-btn" onclick="saveSlotFromModal()">+ Add Slot</button>
+        <button class="modal-cancel-btn" onclick="closeSlotModal()">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+
+</body></html>'
   );
   win.document.close();
 }
