@@ -214,6 +214,7 @@ async function loadSlots() {
   if (loadingSlots) return;
   if (userIsBusy()) return;  // don't refresh while PIN pad is open
   loadingSlots = true;
+  const prevAllRooms = allRooms; // save before clearing — used to preserve activation state
   allRooms = [];
 
   const showError = (msg) => {
@@ -266,7 +267,21 @@ async function loadSlots() {
       slots.forEach((sl, originalIndex) => {
         if (sl.date === tomorrowStr()) return; // skip tomorrow
         if (toMins(sl.e) <= nm) return;        // skip ended
-        todaySlots.push({ ...sl, origIdx: originalIndex, roomKey: key });
+
+        // Preserve activation state from previous allRooms if Firebase returns null
+        // Once activated, never revert to waiting unless admin explicitly deactivates
+        const prevRoom = prevAllRooms.find(r => r.id === parseInt(key.replace('room','')));
+        const prevSlot = prevRoom && prevRoom.slots.find(
+          ps => ps.s === sl.s && ps.e === sl.e
+        );
+        const mergedSlot = { ...sl, origIdx: originalIndex, roomKey: key };
+        // Only keep previous activatedAt if Firebase returned null/missing
+        // and previous state had a valid activation
+        if (!mergedSlot.activatedAt && prevSlot && prevSlot.activatedAt) {
+          mergedSlot.activatedAt = prevSlot.activatedAt;
+          mergedSlot.activatedBy = prevSlot.activatedBy;
+        }
+        todaySlots.push(mergedSlot);
       });
 
       if (todaySlots.length > 0) {
@@ -276,12 +291,37 @@ async function loadSlots() {
 
     document.getElementById('loadingState').style.display = 'none';
     renderSlots();
+    verifyAndRender(); // verify Waiting slots against Firebase
 
   } catch(e) {
     showError('Error loading slots. Please refresh the page.');
   } finally {
     loadingSlots = false;
   }
+}
+
+// ── Verify slot activation status directly from Firebase ────────
+// Called before showing "Waiting" to confirm slot is truly not activated
+async function verifyAndRender() {
+  const nm = nowMins();
+  let needsRerender = false;
+
+  for (const room of allRooms) {
+    for (const sl of room.slots) {
+      // Only verify slots currently in time window that appear unactivated
+      const isCurrent = toMins(sl.s) <= nm && toMins(sl.e) > nm;
+      if (!isCurrent || sl.activatedAt || !sl.code) continue;
+
+      // Fetch latest activatedAt directly from Firebase
+      const val = await fbGet(`/rooms/${sl.roomKey}/slots/${sl.origIdx}/activatedAt`);
+      if (val && val !== null) {
+        sl.activatedAt = val; // update local — slot IS activated
+        needsRerender = true;
+      }
+    }
+  }
+
+  if (needsRerender) renderSlots();
 }
 
 // ── Render slots ──────────────────────────────────────────────

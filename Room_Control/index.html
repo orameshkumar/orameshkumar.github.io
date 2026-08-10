@@ -915,21 +915,29 @@ async function pushRoom(idx) {
   const r = state.rooms[idx];
   // Use PATCH not PUT — only update fields PWA owns
   // This preserves lightOn, lastSeen written by ESP32
-  // Normalize slots — include activation fields FROM LOCAL STATE
-  // Local state is synced from Firebase via syncFromFirebase so it's accurate
-  // This preserves activatedAt when pushRoom runs after an activation
-  const preserveSlot = sl => ({
-    s: sl.s, e: sl.e,
-    recurring: sl.recurring,
-    code: sl.code,
-    date: sl.date,
-    // Include activation state from local (synced from Firebase)
-    activatedAt:  sl.activatedAt  ?? null,
-    activatedBy:  sl.activatedBy  ?? null,
-    attempts:     sl.attempts     ?? 0,
-    lockedUntil:  sl.lockedUntil  ?? null,
-    expired:      sl.expired      ?? false
-  });
+  // Normalize slots for Firebase write
+  // Key rule: never send activatedAt=null if local state has null
+  // because Firebase might have a more recent activation from activate.html
+  // Only send activatedAt when it has a real value (not null)
+  // Firebase PATCH: omitted fields are preserved, only sent fields are updated
+  const preserveSlot = sl => {
+    const slot = {
+      s: sl.s, e: sl.e,
+      recurring: sl.recurring,
+      code: sl.code,
+      date: sl.date,
+      attempts:    sl.attempts    ?? 0,
+      lockedUntil: sl.lockedUntil ?? null,
+      expired:     sl.expired     ?? false
+    };
+    // Only include activatedAt/By if they have a value
+    // If null in local state, omit — Firebase keeps its existing value
+    if (sl.activatedAt) {
+      slot.activatedAt = sl.activatedAt;
+      slot.activatedBy = sl.activatedBy ?? null;
+    }
+    return slot;
+  };
   const todaySlots    = normalizeSlots(r.slots[0]).map(preserveSlot);
   const tomorrowSlots = normalizeSlots(r.slots[1]).map(preserveSlot);
   const payload = {
