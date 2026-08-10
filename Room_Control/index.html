@@ -920,34 +920,40 @@ async function pushRoom(idx) {
   // because Firebase might have a more recent activation from activate.html
   // Only send activatedAt when it has a real value (not null)
   // Firebase PATCH: omitted fields are preserved, only sent fields are updated
-  const preserveSlot = sl => {
-    const slot = {
+  // Write non-activation fields only — never touch activatedAt via bulk write
+  // Firebase PATCH on parent node replaces ALL children including activatedAt
+  // So we write slots individually via targeted PATCH to preserve activatedAt
+  const roomBase = `/rooms/room${r.id}`;
+
+  // Write room-level fields first
+  await fbPatch(roomBase, {
+    override: r.override,
+    name: r.name,
+    updatedAt: Date.now()
+  });
+
+  // Write each today slot individually — only structural fields, not activation
+  const todaySlots = normalizeSlots(r.slots[0]);
+  for (let si = 0; si < todaySlots.length; si++) {
+    const sl = todaySlots[si];
+    await fbPatch(`${roomBase}/slots/${si}`, {
       s: sl.s, e: sl.e,
       recurring: sl.recurring,
       code: sl.code,
-      date: sl.date,
-      attempts:    sl.attempts    ?? 0,
-      lockedUntil: sl.lockedUntil ?? null,
-      expired:     sl.expired     ?? false
-    };
-    // Only include activatedAt/By if they have a value
-    // If null in local state, omit — Firebase keeps its existing value
-    if (sl.activatedAt) {
-      slot.activatedAt = sl.activatedAt;
-      slot.activatedBy = sl.activatedBy ?? null;
-    }
-    return slot;
-  };
-  const todaySlots    = normalizeSlots(r.slots[0]).map(preserveSlot);
-  const tomorrowSlots = normalizeSlots(r.slots[1]).map(preserveSlot);
-  const payload = {
-    override: r.override,          // null / true / false
-    slots:  todaySlots,            // today's slots (always array)
-    slotsT: tomorrowSlots,         // tomorrow's slots (always array)
-    name: r.name,
-    updatedAt: Date.now()
-  };
-  const ok = await fbPatch(`/rooms/room${r.id}`, payload);
+      date: sl.date
+      // activatedAt/By/attempts/lockedUntil/expired NOT written here
+      // They are managed exclusively by activateSlot/deactivateSlot/activate.html
+    });
+  }
+
+  // Write slotsT (tomorrow) — these are never activated so safe to write fully
+  const tomorrowSlots = normalizeSlots(r.slots[1]);
+  const slotsT = tomorrowSlots.map(sl => ({
+    s: sl.s, e: sl.e, recurring: sl.recurring, code: sl.code, date: sl.date
+  }));
+  await fbPatch(roomBase, { slotsT });
+
+  const ok = true;
   addLog(ok ? 'ok' : 'error', `room${r.id} → Firebase`);
   setConnStatus(ok);
   return ok;
