@@ -915,18 +915,23 @@ async function pushRoom(idx) {
   const r = state.rooms[idx];
   // Use PATCH not PUT — only update fields PWA owns
   // This preserves lightOn, lastSeen written by ESP32
-  // Normalize slots to array before sending (safety check)
-  // IMPORTANT: strip activation fields — these are owned by activateSlot/activate.html
-  // Sending them via pushRoom would overwrite an activated slot back to waiting
-  const stripActivation = sl => ({
+  // Normalize slots — include activation fields FROM LOCAL STATE
+  // Local state is synced from Firebase via syncFromFirebase so it's accurate
+  // This preserves activatedAt when pushRoom runs after an activation
+  const preserveSlot = sl => ({
     s: sl.s, e: sl.e,
     recurring: sl.recurring,
     code: sl.code,
-    date: sl.date
-    // omit: activatedAt, activatedBy, attempts, lockedUntil, expired
+    date: sl.date,
+    // Include activation state from local (synced from Firebase)
+    activatedAt:  sl.activatedAt  ?? null,
+    activatedBy:  sl.activatedBy  ?? null,
+    attempts:     sl.attempts     ?? 0,
+    lockedUntil:  sl.lockedUntil  ?? null,
+    expired:      sl.expired      ?? false
   });
-  const todaySlots    = normalizeSlots(r.slots[0]).map(stripActivation);
-  const tomorrowSlots = normalizeSlots(r.slots[1]).map(stripActivation);
+  const todaySlots    = normalizeSlots(r.slots[0]).map(preserveSlot);
+  const tomorrowSlots = normalizeSlots(r.slots[1]).map(preserveSlot);
   const payload = {
     override: r.override,          // null / true / false
     slots:  todaySlots,            // today's slots (always array)
