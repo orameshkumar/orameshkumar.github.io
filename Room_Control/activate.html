@@ -499,15 +499,16 @@ setTimeout(() => {
 }, 10000);
 
 // Full refresh every 10 seconds — always fresh from Firebase, no cache
-setInterval(() => { loadingSlots = false; loadSlots(); }, 10000);
+setInterval(() => loadSlots(), 10000);
 
 // Firebase SSE — instant full refresh when any data changes
 (function startSSE() {
   try {
     const es = new EventSource(FIREBASE_URL + '/rooms.json');
-    es.addEventListener('put',   () => { loadingSlots = false; loadSlots(); });
-    es.addEventListener('patch', () => { loadingSlots = false; loadSlots(); });
-    es.onerror = () => es.close(); // polling handles it
+    // Do NOT reset loadingSlots — let the guard prevent concurrent loads
+    es.addEventListener('put',   () => loadSlots());
+    es.addEventListener('patch', () => loadSlots());
+    es.onerror = () => es.close();
   } catch(e) {}
 })();
 
@@ -518,7 +519,6 @@ function scheduleRefresh() {
   if (refreshTimer) clearTimeout(refreshTimer);
   refreshTimer = setTimeout(() => {
     refreshTimer = null;
-    loadingSlots = false; // reset guard before refresh
     loadSlots();
   }, 300);
 }
