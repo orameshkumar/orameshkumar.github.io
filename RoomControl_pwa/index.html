@@ -338,8 +338,12 @@
       </div>
     </div>
     <div class="settings-section">
-      <div class="settings-title">Room names</div>
+      <div class="settings-title">Room names &amp; GPIO pins</div>
+      <div class="settings-sub" style="padding:0 14px 8px">Used by the ESP32 firmware to know which pin controls each room</div>
       <div id="roomNameInputs"></div>
+      <div class="settings-row">
+        <button class="add-slot-btn" onclick="addRoom()">+ Add room</button>
+      </div>
     </div>
     <button class="save-btn" onclick="saveActiveProfile()">Save changes to this profile</button>
     <button class="test-btn" onclick="saveAsNewProfile()">Save as new profile</button>
@@ -373,6 +377,11 @@
 
 <script>
 // ── State ────────────────────────────────────────────────────
+// Matches the ESP32 sketch's current hardcoded RELAY_PINS[]/LED_PINS[] wiring —
+// used as sensible defaults until the ESP32 firmware reads these from Firebase.
+const DEFAULT_RELAY_PINS = [26, 27, 14, 12, 13, 15];
+const DEFAULT_LED_PINS   = [2, 4, 5, 18, 19, 21];
+
 const state = {
   rooms: makeBlankRooms(),
   profiles: [],
@@ -385,6 +394,8 @@ function makeBlankRooms() {
   return Array.from({length:6}, (_,i) => ({
     id: i+1, name: `Room ${i+1}`,
     override: null,
+    relayPin: DEFAULT_RELAY_PINS[i],
+    ledPin: DEFAULT_LED_PINS[i],
     expanded: false, panelTab: 'slot',
     slots: { 0: [], 1: [] },
     recurring: { days: [], start: '09:00', end: '10:00' }
@@ -916,7 +927,7 @@ function syncFromFirebase(data) {
   // data is { room1: {...}, room2: {...}, ... }
   Object.keys(data || {}).forEach(key => {
     const idx = parseInt(key.replace('room','')) - 1;
-    if (idx < 0 || idx >= 6) return;
+    if (idx < 0 || idx >= state.rooms.length) return;
     const r = data[key];
 
     // Sync override — only accept null (clearing) from Firebase
@@ -987,6 +998,8 @@ async function pushRoom(idx) {
   await fbPatch(roomBase, {
     override: r.override,
     name: r.name,
+    relayPin: r.relayPin,
+    ledPin: r.ledPin,
     updatedAt: Date.now()
   });
 
@@ -1501,13 +1514,40 @@ function renderSettings() {
   document.getElementById('adminCodeDate').textContent =
     'Valid today: ' + new Date().toLocaleDateString([],{weekday:'short',month:'short',day:'numeric'});
   // QR generated only when user taps Show QR button
-  document.getElementById('roomNameInputs').innerHTML = state.rooms.map(r =>
-    `<div class="settings-row" style="flex-direction:column;align-items:stretch;gap:4px">
-      <div class="settings-label" style="font-size:12px;color:var(--muted)">Room ${r.id}</div>
-      <input class="settings-input" id="rname_${r.id}" value="${r.name}" style="font-family:-apple-system,sans-serif">
-    </div>`
-  ).join('');
+  document.getElementById('roomNameInputs').innerHTML = state.rooms.map(renderRoomSettingsRow).join('');
   renderLog();
+}
+
+function renderRoomSettingsRow(r) {
+  const noLed = r.ledPin === null || r.ledPin === undefined;
+  return `<div class="settings-row" style="flex-direction:column;align-items:stretch;gap:4px">
+    <div style="display:flex;align-items:center;justify-content:space-between">
+      <div class="settings-label" style="font-size:12px;color:var(--muted)">Room ${r.id}</div>
+      <button class="profile-btn" onclick="deleteRoom(${r.id})" title="Delete room">🗑</button>
+    </div>
+    <input class="settings-input" id="rname_${r.id}" value="${r.name}" style="font-family:-apple-system,sans-serif">
+    <div style="display:flex;gap:8px">
+      <div style="flex:1">
+        <div class="settings-sub" style="margin-bottom:4px">Relay GPIO</div>
+        <input class="settings-input" id="rrelay_${r.id}" type="number" min="0" max="39" value="${r.relayPin ?? ''}" style="font-family:monospace">
+      </div>
+      <div style="flex:1">
+        <div class="settings-sub" style="margin-bottom:4px">LED GPIO</div>
+        <input class="settings-input" id="rled_${r.id}" type="number" min="0" max="39" value="${noLed ? '' : r.ledPin}" ${noLed ? 'disabled' : ''} style="font-family:monospace">
+        <label style="display:flex;align-items:center;gap:5px;margin-top:4px;font-size:11px;color:var(--muted);cursor:pointer">
+          <input type="checkbox" id="rnoled_${r.id}" ${noLed?'checked':''} onchange="toggleNoLed(${r.id}, this.checked)" style="width:14px;height:14px">
+          No LED for this room
+        </label>
+      </div>
+    </div>
+  </div>`;
+}
+
+function toggleNoLed(id, checked) {
+  const input = document.getElementById(`rled_${id}`);
+  if (!input) return;
+  input.disabled = checked;
+  if (checked) input.value = '';
 }
 
 function renderProfileRow(p) {
@@ -1617,15 +1657,44 @@ function saveAsNewProfile() {
 
 function applyRoomNameEdits() {
   state.rooms.forEach(r => {
-    const el = document.getElementById(`rname_${r.id}`);
-    if (el) r.name = el.value.trim() || `Room ${r.id}`;
+    const nameEl  = document.getElementById(`rname_${r.id}`);
+    const relayEl = document.getElementById(`rrelay_${r.id}`);
+    const ledEl   = document.getElementById(`rled_${r.id}`);
+    const noLedEl = document.getElementById(`rnoled_${r.id}`);
+    if (nameEl) r.name = nameEl.value.trim() || `Room ${r.id}`;
+    if (relayEl && relayEl.value !== '') r.relayPin = parseInt(relayEl.value, 10);
+    if (noLedEl && noLedEl.checked) r.ledPin = null;
+    else if (ledEl && ledEl.value !== '') r.ledPin = parseInt(ledEl.value, 10);
   });
+}
+
+// Non-blocking check — same GPIO assigned to more than one relay/LED is a wiring conflict
+function checkPinConflicts() {
+  const usedBy = {};
+  let conflict = null;
+  state.rooms.forEach(r => {
+    [['Relay', r.relayPin], ['LED', r.ledPin]].forEach(([kind, pin]) => {
+      if (pin === undefined || pin === null || pin === '') return;
+      const prev = usedBy[pin];
+      if (prev && !conflict) conflict = `GPIO ${pin}: ${prev} and Room ${r.id} (${kind})`;
+      else if (!prev) usedBy[pin] = `Room ${r.id} (${kind})`;
+    });
+  });
+  return conflict;
+}
+
+// Non-blocking check — a room with no relay pin can't control anything physically
+function checkMissingRelayPins() {
+  return state.rooms
+    .filter(r => r.relayPin === null || r.relayPin === undefined || r.relayPin === '')
+    .map(r => r.name);
 }
 
 function finishSaveSettings(p, message) {
   // Push seed to Firebase so activate.html can compute admin code
   if (p.dbUrl) {
     fbSet('/config/adminSeed', p.adminSeed);
+    pushAllRooms();
     startFbListener();
   }
   renderDashboard();
@@ -1633,6 +1702,52 @@ function finishSaveSettings(p, message) {
   const msg = document.getElementById('settingsMsg');
   msg.className='status-msg ok'; msg.textContent = message + ' — connecting…';
   setTimeout(() => msg.textContent='', 3000);
+  const conflict = checkPinConflicts();
+  const missingRelay = checkMissingRelayPins();
+  if (conflict) showToast('⚠️ GPIO conflict — ' + conflict);
+  else if (missingRelay.length) showToast(`⚠️ No relay GPIO set for: ${missingRelay.join(', ')}`);
+}
+
+// ── Room management ────────────────────────────────────────────
+function addRoom() {
+  applyRoomNameEdits(); // preserve any unsaved edits to other rooms before mutating the list
+  const newId = state.rooms.length + 1;
+  state.rooms.push({
+    id: newId, name: `Room ${newId}`,
+    override: null,
+    relayPin: null, ledPin: null,
+    expanded: false, panelTab: 'slot',
+    slots: { 0: [], 1: [] },
+    recurring: { days: [], start: '09:00', end: '10:00' }
+  });
+  persist();
+  renderDashboard();
+  renderSettings();
+  if (getActiveProfile().dbUrl) pushRoom(state.rooms.length - 1);
+  showToast(`Added Room ${newId} — set its relay GPIO before use`);
+}
+
+async function deleteRoom(id) {
+  if (state.rooms.length <= 1) { showToast('At least one room is required'); return; }
+  const r = state.rooms.find(x => x.id === id);
+  if (!r) return;
+  if (!confirm(`Delete "${r.name}"? This removes it from the dashboard and Firebase for this profile.`)) return;
+  applyRoomNameEdits(); // preserve any unsaved edits to the remaining rooms
+  const oldCount = state.rooms.length;
+  state.rooms = state.rooms.filter(x => x.id !== id);
+  state.rooms.forEach((rm, i) => { rm.id = i + 1; }); // keep ids contiguous 1..N for simple Firebase paths
+  persist();
+  renderDashboard();
+  renderSettings();
+  if (getActiveProfile().dbUrl) {
+    // Renumbering shifted every room after the deleted one down by one path —
+    // clear the now-orphaned trailing Firebase nodes before rewriting the rest
+    for (let n = state.rooms.length + 1; n <= oldCount; n++) {
+      await fbSet(`/rooms/room${n}`, null);
+    }
+    await pushAllRooms();
+  }
+  showToast(`Deleted "${r.name}"`);
 }
 
 async function testConnection() {
