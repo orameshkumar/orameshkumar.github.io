@@ -268,18 +268,21 @@ async function loadSlots() {
         if (sl.date === tomorrowStr()) return; // skip tomorrow
         if (toMins(sl.e) <= nm) return;        // skip ended
 
-        // Preserve activation state from previous allRooms if Firebase returns null
-        // Once activated, never revert to waiting unless admin explicitly deactivates
-        const prevRoom = prevAllRooms.find(r => r.id === parseInt(key.replace('room','')));
-        const prevSlot = prevRoom && prevRoom.slots.find(
-          ps => ps.s === sl.s && ps.e === sl.e
-        );
         const mergedSlot = { ...sl, origIdx: originalIndex, roomKey: key };
-        // Only keep previous activatedAt if Firebase returned null/missing
-        // and previous state had a valid activation
-        if (!mergedSlot.activatedAt && prevSlot && prevSlot.activatedAt) {
-          mergedSlot.activatedAt = prevSlot.activatedAt;
-          mergedSlot.activatedBy = prevSlot.activatedBy;
+
+        // Preserve activation state from previous allRooms if Firebase returns null
+        // Match by room + origIdx (Firebase index) for exact slot identification
+        // Prevents wrong slot's activation being applied to a different slot
+        if (!mergedSlot.activatedAt) {
+          const roomId  = parseInt(key.replace('room', ''));
+          const prevRoom = prevAllRooms.find(r => r.id === roomId);
+          const prevSlot = prevRoom && prevRoom.slots.find(
+            ps => ps.origIdx === originalIndex  // exact Firebase index match
+          );
+          if (prevSlot && prevSlot.activatedAt) {
+            mergedSlot.activatedAt = prevSlot.activatedAt;
+            mergedSlot.activatedBy = prevSlot.activatedBy;
+          }
         }
         todaySlots.push(mergedSlot);
       });
