@@ -821,7 +821,7 @@ async function fbSet(path, value) {
   try {
     const res = await fetch(fbUrl(path), {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
       body: JSON.stringify(value)
     });
     if (!res.ok) throw new Error(await res.text());
@@ -840,7 +840,7 @@ async function fbPatch(path, value) {
   try {
     const res = await fetch(`${getActiveProfile().dbUrl}${path}.json`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
       body: JSON.stringify(value)
     });
     if (!res.ok) throw new Error(await res.text());
@@ -854,7 +854,10 @@ async function fbPatch(path, value) {
 
 async function fbGet(path) {
   try {
-    const res = await fetch(fbUrl(path));
+    // Explicit Accept — without it, Firebase can occasionally serve the SSE
+    // event-stream format on this URL instead of plain JSON while a listener
+    // is open on the same path, which breaks res.json()
+    const res = await fetch(fbUrl(path), { headers: { 'Accept': 'application/json' } });
     if (!res.ok) throw new Error(await res.text());
     return await res.json();
   } catch(e) {

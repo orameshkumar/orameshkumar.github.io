@@ -183,7 +183,10 @@ async function fbGet(path) {
   try {
     // Add timestamp to bust any HTTP cache layer
     const url = FIREBASE_URL + path + '.json?nc=' + Date.now();
-    const res = await fetch(url, { cache: 'no-store' });
+    // Explicit Accept — without it, Firebase can occasionally serve the SSE
+    // event-stream format on this URL instead of plain JSON while a listener
+    // is open on the same path, which breaks res.json()
+    const res = await fetch(url, { cache: 'no-store', headers: { 'Accept': 'application/json' } });
     if (!res.ok) return null;
     return await res.json();
   } catch(e) {
@@ -195,7 +198,7 @@ async function fbPut(path, value) {
   try {
     await fetch(FIREBASE_URL + path + '.json', {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
       body: JSON.stringify(value)
     });
     return true;
