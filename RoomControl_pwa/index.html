@@ -31,6 +31,7 @@
     .header { padding: 16px 16px 0; display: flex; align-items: center; justify-content: space-between; }
     .header h1 { font-size: 20px; font-weight: 600; }
     .header-profile { font-size: 12px; color: var(--accent); font-weight: 500; margin-top: 1px; }
+    .header-profile-select { font-size: 12px; color: var(--accent); font-weight: 500; margin-top: 2px; background: var(--card); border: 1px solid var(--border); border-radius: 6px; padding: 2px 6px; cursor: pointer; max-width: 160px; }
     .header-right { display: flex; align-items: center; gap: 10px; }
     .live-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); transition: background 0.4s; }
     .live-dot.connected { background: var(--green); animation: pulse 2s infinite; }
@@ -251,7 +252,7 @@
   <div class="header">
     <div>
       <h1>Room Controller</h1>
-      <div class="header-profile" id="headerProfileName"></div>
+      <div id="headerProfileArea"></div>
     </div>
     <div class="header-right">
       <div class="live-dot" id="liveDot"></div>
@@ -828,9 +829,20 @@ function getActiveProfile() {
 
 // Shown in the persistent header — same on Rooms, Timeline, and Settings —
 // so it's always clear which profile/site the current view belongs to.
+// With 2+ profiles it becomes a selector: picking one calls switchProfile(),
+// which already re-scopes the whole app (dashboard, timeline, Firebase
+// connection) — this is just another entry point into that same function.
 function updateHeaderProfile() {
-  const el = document.getElementById('headerProfileName');
-  if (el) el.textContent = getActiveProfile().name;
+  const el = document.getElementById('headerProfileArea');
+  if (!el) return;
+  const active = getActiveProfile();
+  if (state.profiles.length <= 1) {
+    el.innerHTML = `<div class="header-profile">${active.name}</div>`;
+  } else {
+    el.innerHTML = `<select class="header-profile-select" onchange="switchProfile(this.value)">
+      ${state.profiles.map(p => `<option value="${p.id}"${p.id===active.id?' selected':''}>${p.name}</option>`).join('')}
+    </select>`;
+  }
 }
 
 // ── Firebase REST helpers ────────────────────────────────────
@@ -1625,6 +1637,7 @@ function deleteProfile(id) {
     switchProfile(state.profiles[0].id);
   } else {
     persist();
+    updateHeaderProfile(); // option list shrank — refresh even though the active profile didn't change
     renderSettings();
   }
 }
