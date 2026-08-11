@@ -325,6 +325,18 @@
         <input class="settings-input" id="cfg-seed" placeholder="1234" style="font-family:monospace;letter-spacing:2px">
       </div>
     </div>
+    <div class="settings-section">
+      <div class="settings-title">Relay wiring</div>
+      <div class="settings-sub" style="padding:0 14px 8px">Which relay contact your lights are physically wired to — the ESP32 uses this to invert its signal correctly. Applied immediately to this profile's Firebase; the ESP32 needs a reboot to pick it up.</div>
+      <div class="ov-btns" style="padding:0 14px 12px">
+        <button class="ov-btn" id="rw-nc" onclick="setRelayWiring('NC')">
+          <span class="ov-icon">🔒</span>Normally Closed<small>Fail-safe ON</small>
+        </button>
+        <button class="ov-btn" id="rw-no" onclick="setRelayWiring('NO')">
+          <span class="ov-icon">🔓</span>Normally Open<small>Fail-safe OFF</small>
+        </button>
+      </div>
+    </div>
     <div class="admin-code-box">
       <div class="admin-code-lbl">Today's admin code</div>
       <div class="admin-code-val" id="adminCodeDisplay">----</div>
@@ -805,14 +817,14 @@ function hydrate() {
       // Migrate legacy single-config format (pre-profiles) into a "Default" profile
       const p = { id: makeProfileId(), name: 'Default',
         dbUrl: d.config.dbUrl || '', apiKey: d.config.apiKey || '',
-        adminSeed: d.config.adminSeed || '1234' };
+        adminSeed: d.config.adminSeed || '1234', relayWiring: 'NC' };
       state.profiles = [p];
       state.activeProfileId = p.id;
     }
   } catch(e) {}
 
   if (!state.profiles.length) {
-    const p = { id: makeProfileId(), name: 'Default', dbUrl: '', apiKey: '', adminSeed: '1234' };
+    const p = { id: makeProfileId(), name: 'Default', dbUrl: '', apiKey: '', adminSeed: '1234', relayWiring: 'NC' };
     state.profiles = [p];
     state.activeProfileId = p.id;
   }
@@ -1536,9 +1548,33 @@ function renderSettings() {
   document.getElementById('adminCodeDisplay').textContent = code;
   document.getElementById('adminCodeDate').textContent =
     'Valid today: ' + new Date().toLocaleDateString([],{weekday:'short',month:'short',day:'numeric'});
+  const relayWiring = p.relayWiring || 'NC';
+  document.getElementById('rw-nc').className = 'ov-btn' + (relayWiring === 'NC' ? ' active-auto' : '');
+  document.getElementById('rw-no').className = 'ov-btn' + (relayWiring === 'NO' ? ' active-auto' : '');
   // QR generated only when user taps Show QR button
   document.getElementById('roomNameInputs').innerHTML = state.rooms.map(renderRoomSettingsRow).join('');
   renderLog();
+}
+
+function setRelayWiring(mode) {
+  const p = getActiveProfile();
+  const current = p.relayWiring || 'NC';
+  if (mode === current) return; // already selected — nothing to confirm
+
+  const label = mode === 'NC' ? 'Normally Closed (fail-safe ON)' : 'Normally Open (fail-safe OFF)';
+  const confirmed = confirm(
+    `Change relay wiring to ${label}?\n\n` +
+    `Only do this if your relay's load side is physically wired to match — ` +
+    `otherwise every light will turn ON when it should turn OFF, and vice versa.\n\n` +
+    `Requires an ESP32 reboot to take effect.`
+  );
+  if (!confirmed) return;
+
+  p.relayWiring = mode;
+  persist();
+  renderSettings();
+  if (p.dbUrl) fbSet('/config/relayWiring', mode);
+  showToast(`Relay wiring set to ${mode === 'NC' ? 'Normally Closed' : 'Normally Open'} — reboot the ESP32 to apply`);
 }
 
 function renderRoomSettingsRow(r) {
@@ -1672,7 +1708,8 @@ function saveAsNewProfile() {
     name: name.trim() || 'New Site',
     dbUrl: document.getElementById('cfg-url').value.trim().replace(/\/$/, ''),
     apiKey: document.getElementById('cfg-key').value.trim(),
-    adminSeed: document.getElementById('cfg-seed').value.trim() || '1234'
+    adminSeed: document.getElementById('cfg-seed').value.trim() || '1234',
+    relayWiring: 'NC'
   };
   state.profiles.push(p);
   state.activeProfileId = p.id;
