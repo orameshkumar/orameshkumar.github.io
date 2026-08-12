@@ -47,10 +47,23 @@ self.addEventListener('fetch', e => {
       fetch(e.request, { cache: 'no-store' })
         .then(res => {
           const clone = res.clone();
-          caches.open(CACHE).then(c => c.put(e.request, clone));
+          // Caching is a best-effort side effect — a failure here (e.g. an
+          // aborted/error-type response mid-navigation) must never become an
+          // unhandled rejection or block the actual page response
+          caches.open(CACHE).then(c => c.put(e.request, clone)).catch(() => {});
           return res;
         })
-        .catch(() => caches.match(e.request))
+        // If network AND cache both come up empty (e.g. first-ever offline
+        // load), respondWith still needs a real Response, not undefined —
+        // that's what causes "Failed to convert value to 'Response'"
+        .catch(() =>
+          caches.match(e.request).then(cached =>
+            cached || new Response(
+              'Room Controller is offline and this page was never cached yet. Please connect to the internet and reload.',
+              { headers: { 'Content-Type': 'text/plain' } }
+            )
+          )
+        )
     );
     return;
   }
@@ -60,9 +73,9 @@ self.addEventListener('fetch', e => {
     caches.match(e.request).then(cached =>
       cached || fetch(e.request).then(res => {
         const clone = res.clone();
-        caches.open(CACHE).then(c => c.put(e.request, clone));
+        caches.open(CACHE).then(c => c.put(e.request, clone)).catch(() => {});
         return res;
-      }).catch(() => cached)
+      }).catch(() => cached || new Response('', { status: 504, statusText: 'Offline and not cached' }))
     )
   );
 });
