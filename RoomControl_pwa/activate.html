@@ -138,8 +138,13 @@
 </div>
 
 <script>
-// ── Config — supplied via the ?db= param baked into each profile's QR/activation link ──
-const FIREBASE_URL = new URLSearchParams(location.search).get('db') || '';
+// ── Config — supplied via ?db=&p= baked into each profile's QR/activation link ──
+// p = the profile's numeric Firebase key (/profiles/{p}/...) — profiles sharing
+// one database are namespaced this way; the profile's name is never part of
+// the path, just a display property, so it's not needed here at all.
+const FIREBASE_URL   = new URLSearchParams(location.search).get('db') || '';
+const PROFILE_NUM    = new URLSearchParams(location.search).get('p') || '';
+const PROFILE_PREFIX = PROFILE_NUM ? '/profiles/' + PROFILE_NUM : '';
 
 // ── State ─────────────────────────────────────────────────────
 let allRooms     = [];
@@ -182,7 +187,7 @@ function getAdminCode(seed) {
 async function fbGet(path) {
   try {
     // Add timestamp to bust any HTTP cache layer
-    const url = FIREBASE_URL + path + '.json?nc=' + Date.now();
+    const url = FIREBASE_URL + PROFILE_PREFIX + path + '.json?nc=' + Date.now();
     // Explicit Accept — without it, Firebase can occasionally serve the SSE
     // event-stream format on this URL instead of plain JSON while a listener
     // is open on the same path, which breaks res.json()
@@ -196,7 +201,7 @@ async function fbGet(path) {
 
 async function fbPut(path, value) {
   try {
-    await fetch(FIREBASE_URL + path + '.json', {
+    await fetch(FIREBASE_URL + PROFILE_PREFIX + path + '.json', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
       body: JSON.stringify(value)
@@ -214,7 +219,7 @@ function userIsBusy() {
 }
 
 async function loadSlots() {
-  if (!FIREBASE_URL) {
+  if (!FIREBASE_URL || !PROFILE_NUM) {
     document.getElementById('loadingState').style.display = 'none';
     document.getElementById('slotList').style.display = 'block';
     document.getElementById('slotList').innerHTML =
@@ -546,7 +551,7 @@ document.getElementById('headerDate').textContent =
 
 loadSlots();
 
-if (FIREBASE_URL) {
+if (FIREBASE_URL && PROFILE_NUM) {
   // Safety timeout — if still showing loading after 10 sec, retry once
   setTimeout(() => {
     const ls = document.getElementById('loadingState');
@@ -562,7 +567,7 @@ if (FIREBASE_URL) {
   // Firebase SSE — instant full refresh when any data changes
   (function startSSE() {
     try {
-      const es = new EventSource(FIREBASE_URL + '/rooms.json');
+      const es = new EventSource(FIREBASE_URL + PROFILE_PREFIX + '/rooms.json');
       // Do NOT reset loadingSlots — let the guard prevent concurrent loads
       es.addEventListener('put',   () => loadSlots());
       es.addEventListener('patch', () => loadSlots());

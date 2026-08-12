@@ -209,6 +209,7 @@
     .profile-row.active { cursor: default; background: rgba(74,143,255,0.08); }
     .profile-name { font-size: 14px; font-weight: 500; }
     .profile-active-tag { font-size: 10px; padding: 1px 7px; border-radius: 10px; background: rgba(74,143,255,0.2); color: var(--accent); font-weight: 600; margin-left: 4px; }
+    .profile-num-tag { font-size: 10px; padding: 1px 7px; border-radius: 10px; background: rgba(255,255,255,0.08); color: var(--muted); font-weight: 600; margin-left: 4px; font-family: monospace; }
     .profile-url { font-size: 11px; color: var(--muted); margin-top: 2px; font-family: monospace; }
     .profile-actions { display: flex; gap: 4px; flex-shrink: 0; }
     .profile-btn { background: none; border: 1px solid var(--border); border-radius: 6px; color: var(--muted); font-size: 13px; padding: 4px 8px; cursor: pointer; }
@@ -628,6 +629,18 @@ async function editSlotCode(roomId, slotIdx) {
   slot.lockedUntil = null;
   persist();
   await pushRoom(roomId - 1);
+  // pushRoom()'s per-slot write deliberately excludes activation fields (see
+  // its own comment) so routine saves can't clobber a real activation from
+  // activate.html — but that means this reset needs its own direct write,
+  // same technique as deactivateSlot(), or the old activatedAt stays live in
+  // Firebase and gets synced right back, silently undoing the reset above.
+  const base = `/rooms/room${roomId}/slots/${slotIdx}`;
+  await fbPatch(base, {
+    activatedAt: null,
+    activatedBy: null,
+    attempts: 0,
+    lockedUntil: null
+  });
   renderDashboard();
 }
 
@@ -720,10 +733,11 @@ let qrGenerated = false;
 function showQR() {
   const p = getActiveProfile();
   if (!p.dbUrl) { showToast('Set this profile\'s Database URL first, then Show QR'); return; }
+  if (!p.fbNum) { showToast('Save this profile first — its Firebase number hasn\'t been assigned yet'); return; }
   const baseUrl = window.location.href
     .replace('index.html', '')
     .replace(/\/$/, '');
-  const activateUrl = baseUrl + '/activate.html?db=' + encodeURIComponent(p.dbUrl);
+  const activateUrl = baseUrl + '/activate.html?db=' + encodeURIComponent(p.dbUrl) + '&p=' + p.fbNum;
 
   // Show the QR panel
   document.getElementById('qrHidden').style.display = 'block';
@@ -764,8 +778,9 @@ function showQR() {
 function printQR() {
   const p = getActiveProfile();
   if (!p.dbUrl) { showToast('Set this profile\'s Database URL first'); return; }
+  if (!p.fbNum) { showToast('Save this profile first — its Firebase number hasn\'t been assigned yet'); return; }
   const baseUrl = window.location.href.replace('index.html','').replace(/\/$/, '');
-  const activateUrl = baseUrl + '/activate.html?db=' + encodeURIComponent(p.dbUrl);
+  const activateUrl = baseUrl + '/activate.html?db=' + encodeURIComponent(p.dbUrl) + '&p=' + p.fbNum;
   const win = window.open('', '_blank');
   // Use string concat to avoid script-closing tag inside string breaking parser
   const scriptTag = '<scr' + 'ipt src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></' + 'script>';
@@ -839,6 +854,44 @@ function getActiveProfile() {
   return state.profiles.find(p => p.id === state.activeProfileId) || state.profiles[0];
 }
 
+// Allocates this profile's numeric Firebase key (/profiles/{n}) the first
+// time it's saved with a dbUrl. Numbering is scoped per-database — reads
+// whatever's under /profiles at that specific dbUrl and picks the next one,
+// so two profiles pointing at different databases never need to coordinate.
+// Must be called while `p` is already the active profile (fbGet/fbSet below
+// resolve against getActiveProfile()), and BEFORE any room data is pushed,
+// since pushRoom()/etc. rely on p.fbNum already being set to build their paths.
+async function ensureProfileNumber(p) {
+  if (p.fbNum) return p.fbNum;
+  if (!p.dbUrl) return null;
+  const existing = await fbGet('/profiles'); // p.fbNum unset here → no prefix → correct bare path
+  let maxNum = 0;
+  if (existing && typeof existing === 'object') {
+    Object.keys(existing).forEach(k => {
+      const n = parseInt(k, 10);
+      if (!isNaN(n) && n > maxNum) maxNum = n;
+    });
+  }
+  const assigned = maxNum + 1;
+  await fbSet(`/profiles/${assigned}/name`, p.name); // still unprefixed — fbNum not set until after this
+  p.fbNum = assigned;
+  return assigned;
+}
+
+// Pushes a profile's display name to its own /profiles/{n}/name — built from
+// the EXPLICIT profile passed in, not the implicit active-profile helpers,
+// since renaming can target a profile that isn't currently active.
+async function pushProfileName(p) {
+  if (!p.dbUrl || !p.fbNum) return;
+  try {
+    await fetch(`${p.dbUrl}/profiles/${p.fbNum}/name.json`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify(p.name)
+    });
+  } catch(e) {}
+}
+
 // Shown in the persistent header — same on Rooms, Timeline, and Settings —
 // so it's always clear which profile/site the current view belongs to.
 // With 2+ profiles it becomes a selector: picking one calls switchProfile(),
@@ -858,8 +911,18 @@ function updateHeaderProfile() {
 }
 
 // ── Firebase REST helpers ────────────────────────────────────
+// Profiles sharing one Firebase project are namespaced under /profiles/{n} —
+// name is just a display property, never part of the path (see
+// ensureProfileNumber()). No fbNum yet (not allocated) means no prefix —
+// this is exactly what lets ensureProfileNumber() itself read/write the
+// bare /profiles node before a number has been assigned.
+function profilePathPrefix(p) {
+  return (p && p.fbNum) ? `/profiles/${p.fbNum}` : '';
+}
+
 function fbUrl(path) {
-  return `${getActiveProfile().dbUrl}${path}.json`;
+  const p = getActiveProfile();
+  return `${p.dbUrl}${profilePathPrefix(p)}${path}.json`;
 }
 
 async function fbSet(path, value) {
@@ -884,7 +947,7 @@ async function fbSet(path, value) {
 async function fbPatch(path, value) {
   if (!getActiveProfile().dbUrl) { showToast('Set Firebase URL in Settings'); return false; }
   try {
-    const res = await fetch(`${getActiveProfile().dbUrl}${path}.json`, {
+    const res = await fetch(fbUrl(path), {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
       body: JSON.stringify(value)
@@ -903,7 +966,12 @@ async function fbGet(path) {
     // Explicit Accept — without it, Firebase can occasionally serve the SSE
     // event-stream format on this URL instead of plain JSON while a listener
     // is open on the same path, which breaks res.json()
-    const res = await fetch(fbUrl(path), { headers: { 'Accept': 'application/json' } });
+    // cache: 'no-store' + a cache-busting query param — without both, a
+    // browser can still serve a stale cached response for a repeated GET on
+    // the exact same URL (confirmed: no-store alone wasn't enough), which
+    // silently breaks anything that reads-then-writes to decide what to do
+    // next, like ensureProfileNumber(). Matches activate.html's same fix.
+    const res = await fetch(fbUrl(path) + '?nc=' + Date.now(), { cache: 'no-store', headers: { 'Accept': 'application/json' } });
     if (!res.ok) throw new Error(await res.text());
     return await res.json();
   } catch(e) {
@@ -915,11 +983,12 @@ async function fbGet(path) {
 
 // ── Firebase SSE listener (real-time) ───────────────────────
 function startFbListener() {
-  if (!getActiveProfile().dbUrl) return;
+  const p = getActiveProfile();
+  if (!p.dbUrl) return;
   if (fbListener) { fbListener.close(); fbListener = null; }
   // Firebase SSE requires Accept: text/event-stream header
   // EventSource sends this automatically but some browsers need the explicit param
-  const url = `${getActiveProfile().dbUrl}/rooms.json`;
+  const url = `${p.dbUrl}${profilePathPrefix(p)}/rooms.json`;
   let es;
   try {
     es = new EventSource(url);
@@ -1279,11 +1348,17 @@ async function copySlots(fromId) {
     const toRoom = state.rooms.find(r => r.id === toId);
 
     // Copy today + recurring slots → day 0
-    // Each copied slot gets a FRESH unique code + reset activation state
+    // Each copied slot gets a FRESH unique code + reset activation state.
+    // Written one-by-one at their own NEW indices — never as a wholesale
+    // overwrite of the whole slots array, since this room's existing slots
+    // (untouched by this copy) may have a real activation in Firebase from
+    // activate.html that hasn't synced to this browser yet; overwriting the
+    // whole array with this client's local snapshot would silently erase it.
     const day0slots = [...todaySlots, ...recurringSlots];
     if (day0slots.length > 0) {
       if (!toRoom.slots[0]) toRoom.slots[0] = [];
-      day0slots.forEach(sl => toRoom.slots[0].push({
+      const startIdx = normalizeSlots(toRoom.slots[0]).length;
+      const newSlots = day0slots.map(sl => ({
         ...sl,
         code: generate4DigitCode(),  // fresh code per room
         activatedAt: null,           // reset activation
@@ -1291,6 +1366,10 @@ async function copySlots(fromId) {
         attempts: 0,
         lockedUntil: null
       }));
+      newSlots.forEach(sl => toRoom.slots[0].push(sl));
+      for (let i = 0; i < newSlots.length; i++) {
+        await fbPatch(`/rooms/room${toId}/slots/${startIdx + i}`, newSlots[i]);
+      }
       // No merging — each copied slot is independent
     }
 
@@ -1306,17 +1385,16 @@ async function copySlots(fromId) {
         lockedUntil: null
       }));
       // No merging — each copied slot is independent
+      // slotsT IS safe to write wholesale — tomorrow's slots can never have a
+      // real activation yet (activate.html only ever shows today's slots),
+      // the same assumption pushRoom() already relies on for this field.
+      const slotsT = normalizeSlots(toRoom.slots[1]).map(sl => ({
+        s: sl.s, e: sl.e, recurring: sl.recurring, code: sl.code, date: sl.date
+      }));
+      await fbPatch(`/rooms/room${toId}`, { slotsT });
     }
 
-    // Write slots directly to Firebase path as well (belt and suspenders)
-    // pushRoom uses PATCH which may not work if slots node doesn't exist yet
-    const slotsToWrite = normalizeSlots(toRoom.slots[0]);
-    if (slotsToWrite.length > 0) {
-      await fbPatch(`/rooms/room${toId}`, {
-        slots: slotsToWrite,
-        updatedAt: Date.now()
-      });
-    }
+    await fbPatch(`/rooms/room${toId}`, { updatedAt: Date.now() });
     copied++;
   }
 
@@ -1613,7 +1691,7 @@ function renderProfileRow(p) {
   const isActive = p.id === state.activeProfileId;
   return `<div class="profile-row${isActive?' active':''}" ${isActive?'':`onclick="switchProfile('${p.id}')"`}>
     <div>
-      <div class="profile-name">${p.name}${isActive?' <span class="profile-active-tag">Active</span>':''}</div>
+      <div class="profile-name">${p.name}${isActive?' <span class="profile-active-tag">Active</span>':''}${p.fbNum ? ` <span class="profile-num-tag">#${p.fbNum}</span>` : ''}</div>
       <div class="profile-url">${p.dbUrl ? truncateUrl(p.dbUrl) : 'No DB URL set yet'}</div>
     </div>
     <div class="profile-actions">
@@ -1628,7 +1706,7 @@ function truncateUrl(url) {
 }
 
 // ── Profile management ────────────────────────────────────────
-function switchProfile(id) {
+async function switchProfile(id) {
   if (id === state.activeProfileId) return;
   const p = state.profiles.find(x => x.id === id);
   if (!p) return;
@@ -1641,7 +1719,11 @@ function switchProfile(id) {
   renderSettings();
   addLog('ok', `Switched to profile "${p.name}"`);
   showToast(`Switched to ${p.name} — connecting…`);
-  if (p.dbUrl) startFbListener();
+  if (p.dbUrl) {
+    await ensureProfileNumber(p); // must resolve before the listener opens, so it reads the right /profiles/{n} path
+    persist();
+    startFbListener();
+  }
 }
 
 function clearProfileForm() {
@@ -1660,6 +1742,7 @@ function renameProfile(id) {
   persist();
   updateHeaderProfile();
   renderSettings();
+  pushProfileName(p); // name is just a display property — safe to update in place, no path/data implications
 }
 
 function deleteProfile(id) {
@@ -1688,7 +1771,7 @@ function resetConnectionForProfileChange() {
   document.getElementById('printQrBtn').style.display = 'none';
 }
 
-function saveActiveProfile() {
+async function saveActiveProfile() {
   const p = getActiveProfile();
   resetConnectionForProfileChange();
   p.dbUrl     = document.getElementById('cfg-url').value.trim().replace(/\/$/, '');
@@ -1696,10 +1779,12 @@ function saveActiveProfile() {
   p.adminSeed = document.getElementById('cfg-seed').value.trim() || '1234';
   applyRoomNameEdits();
   persist();
+  if (p.dbUrl) await ensureProfileNumber(p); // before finishSaveSettings, which pushes room data using this profile's number
+  persist();
   finishSaveSettings(p, `Saved changes to "${p.name}"`);
 }
 
-function saveAsNewProfile() {
+async function saveAsNewProfile() {
   const name = prompt('Name for this new profile (e.g. site or building name):', 'New Site');
   if (name === null) return;
   resetConnectionForProfileChange();
@@ -1712,8 +1797,10 @@ function saveAsNewProfile() {
     relayWiring: 'NC'
   };
   state.profiles.push(p);
-  state.activeProfileId = p.id;
+  state.activeProfileId = p.id; // ensureProfileNumber below resolves against getActiveProfile(), so this must be set first
   state.rooms = makeBlankRooms();
+  persist();
+  if (p.dbUrl) await ensureProfileNumber(p);
   persist();
   finishSaveSettings(p, `Created profile "${p.name}"`);
 }
