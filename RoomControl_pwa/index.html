@@ -423,6 +423,10 @@ const DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 let fbConnected = false;
 let fbListener = null;
 let tlView = '12h';
+// Tracks the savedAt this tab last read/wrote — lets persist() detect when
+// another tab has saved more recently, so a stale background tab can't
+// silently clobber a newer save (e.g. an old tab left open elsewhere).
+let lastKnownSavedAt = 0;
 
 // ── Code helpers ─────────────────────────────────────────────
 // Normalize Firebase slots — converts object {0:{...}} to array [{...}]
@@ -806,9 +810,28 @@ function printQR() {
 
 // ── Persist ──────────────────────────────────────────────────
 function persist() {
+  // Guard against a stale tab (e.g. an old tab left open in the background)
+  // clobbering a newer save made by another tab. Peek at what's actually in
+  // localStorage right now — if it's newer than what this tab last knew
+  // about, someone else saved after we last synced; skip this write instead
+  // of overwriting their newer data with our possibly-stale in-memory state.
+  try {
+    const current = JSON.parse(localStorage.getItem('rc_fb') || '{}');
+    const currentSavedAt = current.savedAt || 0;
+    if (currentSavedAt > lastKnownSavedAt) {
+      lastKnownSavedAt = currentSavedAt;
+      addLog('error', 'Newer data found from another tab — reload this tab to avoid losing changes');
+      showToast('⚠️ Newer data from another tab — please reload');
+      return;
+    }
+  } catch(e) {}
+
+  const savedAt = Date.now();
+  lastKnownSavedAt = savedAt;
   localStorage.setItem('rc_fb', JSON.stringify({
     rooms: state.rooms, profiles: state.profiles,
-    activeProfileId: state.activeProfileId, log: state.log.slice(0,30)
+    activeProfileId: state.activeProfileId, log: state.log.slice(0,30),
+    savedAt
   }));
 }
 
@@ -836,6 +859,7 @@ function hydrate() {
       state.profiles = [p];
       state.activeProfileId = p.id;
     }
+    lastKnownSavedAt = d.savedAt || 0;
   } catch(e) {}
 
   if (!state.profiles.length) {
