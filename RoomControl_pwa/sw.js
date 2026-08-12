@@ -24,8 +24,16 @@ self.addEventListener('fetch', e => {
   // Only handle GET requests
   if (e.request.method !== 'GET') return;
 
-  // Never cache Firebase requests
-  if (e.request.url.includes('firebaseio.com')) return;
+  // Never cache Firebase requests — Realtime Database uses two different
+  // domain patterns depending on the project's region: the older/default
+  // "project.firebaseio.com" and the newer regional
+  // "project-default-rtdb.REGION.firebasedatabase.app" (e.g. this project's
+  // own asia-southeast1 URL). Missing the second pattern meant every
+  // Firebase call — including the EventSource connection — was being
+  // routed through this service worker's cache-then-network logic instead
+  // of going straight to the network, which is never correct for
+  // rapidly-changing real-time data.
+  if (e.request.url.includes('firebaseio.com') || e.request.url.includes('firebasedatabase.app')) return;
 
   // NEVER cache activate.html — always fetch fresh from network
   // This ensures slot data is always current
