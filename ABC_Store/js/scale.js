@@ -46,6 +46,17 @@ const Scale = (function () {
   /** @type {Function|null} Callback invoked with current weight (grams) on each parsed frame */
   var onWeightUpdateCb = null;
 
+  // ─── Cumulative (Stacking) Mode State ───────────────────────────────────────
+
+  /** @type {'single'|'stacking'|'reverse-stacking'} Current weighing mode */
+  var weighMode = 'single';
+
+  /** @type {number} Reference weight for stacking/reverse-stacking mode */
+  var referenceWeight = 0;
+
+  /** @type {boolean} Whether reference has been captured in reverse-stacking mode */
+  var reverseReferenceSet = false;
+
   // ─── Constants ──────────────────────────────────────────────────────────────
 
   /** Tolerance in grams for stability detection */
@@ -298,13 +309,30 @@ const Scale = (function () {
    * Stability is detected when consecutive readings remain within ±2g
    * tolerance for at least 500ms.
    *
-   * After emitting a stable weight, further emissions are suppressed until
-   * the scale returns to zero (below 5g threshold).
+   * In single mode: after emitting a stable weight, further emissions are
+   * suppressed until the scale returns to zero (below 5g threshold).
+   *
+   * In stacking mode: the emitted weight is (absolute reading - referenceWeight).
+   * After emission, referenceWeight is updated to the current reading so the
+   * next stable reading only reports the incremental (new item) weight.
+   * The cycle resets when weight increases by more than STABILITY_TOLERANCE
+   * from the reference (new item placed).
    *
    * @param {number} newWeight - Current weight reading in grams
    * @private
    */
   function _checkStability(newWeight) {
+    if (weighMode === 'stacking') {
+      _checkStabilityStacking(newWeight);
+      return;
+    }
+    if (weighMode === 'reverse-stacking') {
+      _checkStabilityReverseStacking(newWeight);
+      return;
+    }
+
+    // ─── Single mode (original behavior) ──────────────────────────────────────
+
     // Zero-crossing reset: if weight drops below threshold, reset the cycle
     if (newWeight < ZERO_THRESHOLD) {
       stableEmitted = false;
@@ -335,6 +363,146 @@ const Scale = (function () {
     } else {
       // Readings are fluctuating — reset stability tracking
       stableStartTime = null;
+    }
+  }
+
+  /**
+   * Stacking mode stability detection.
+   * Emits the incremental weight (currentWeight - referenceWeight) when stable.
+   * After successful emission, updates referenceWeight to currentWeight.
+   *
+   * @param {number} newWeight - Current absolute weight reading in grams
+   * @private
+   */
+  function _checkStabilityStacking(newWeight) {
+    // If weight drops below reference + threshold, it means items were removed
+    // Reset the stable emitted flag so next increase triggers again
+    var incrementalWeight = newWeight - referenceWeight;
+
+    if (incrementalWeight < ZERO_THRESHOLD) {
+      // No meaningful new weight above reference
+      stableEmitted = false;
+      stableStartTime = null;
+      lastWeight = newWeight;
+      return;
+    }
+
+    // If stable weight already emitted for this increment, wait for new item
+    if (stableEmitted) {
+      return;
+    }
+
+    var now = Date.now();
+
+    if (lastWeight !== null && Math.abs(newWeight - lastWeight) <= STABILITY_TOLERANCE) {
+      if (stableStartTime === null) {
+        stableStartTime = now;
+      } else if ((now - stableStartTime) >= STABILITY_DURATION) {
+        stableEmitted = true;
+
+        // Emit the incremental weight (only the new item's weight)
+        var emitWeight = Math.round(newWeight - referenceWeight);
+
+        if (onStableWeightCb) {
+          onStableWeightCb(emitWeight);
+        }
+
+        // Update reference to current total so next item is measured from here
+        referenceWeight = newWeight;
+      }
+    } else {
+      // Readings fluctuating — new item being placed, reset stability
+      stableStartTime = null;
+      stableEmitted = false;
+    }
+  }
+
+  /**
+   * Reverse-stacking mode stability detection.
+   *
+   * Workflow: User places ALL items on scale first. First stable reading becomes
+   * the reference. Then user removes items one at a time. Each time weight
+   * stabilizes at a LOWER value, the difference (previous reference - current)
+   * is emitted as the removed item's weight. Reference updates to current reading.
+   *
+   * Step 1: All items on scale → stable at 2000g → referenceWeight = 2000, no emit
+   * Step 2: Remove item → stable at 1500g → emit 2000-1500 = 500g → ref = 1500
+   * Step 3: Remove item → stable at 1200g → emit 1500-1200 = 300g → ref = 1200
+   *
+   * @param {number} newWeight - Current absolute weight reading in grams
+   * @private
+   */
+  function _checkStabilityReverseStacking(newWeight) {
+    var now = Date.now();
+
+    // Phase 1: Capture initial reference (all items on scale)
+    if (!reverseReferenceSet) {
+      // Wait for first stable reading to set as reference
+      if (newWeight < ZERO_THRESHOLD) {
+        // Scale is empty, nothing to do yet
+        lastWeight = newWeight;
+        return;
+      }
+
+      if (lastWeight !== null && Math.abs(newWeight - lastWeight) <= STABILITY_TOLERANCE) {
+        if (stableStartTime === null) {
+          stableStartTime = now;
+        } else if ((now - stableStartTime) >= STABILITY_DURATION) {
+          // First stable reading — set as reference
+          referenceWeight = newWeight;
+          reverseReferenceSet = true;
+          stableEmitted = true; // Mark as emitted so we don't re-trigger
+          stableStartTime = null;
+
+          // Notify via onStableWeight with 0 to signal "reference captured"
+          // The billing module will show the reference value but not add to bill
+          if (onStableWeightCb) {
+            onStableWeightCb(0); // 0 means reference set, no item to bill
+          }
+        }
+      } else {
+        stableStartTime = null;
+      }
+      return;
+    }
+
+    // Phase 2: Detect weight DECREASE (item removed)
+    var weightDrop = referenceWeight - newWeight;
+
+    if (weightDrop < ZERO_THRESHOLD) {
+      // Weight is same or higher than reference — no item removed yet
+      // Could be user adding back or scale fluctuation
+      stableEmitted = false;
+      stableStartTime = null;
+      lastWeight = newWeight;
+      return;
+    }
+
+    // Weight has dropped — an item may have been removed
+    if (stableEmitted) {
+      return; // Already emitted for this removal, wait for next change
+    }
+
+    if (lastWeight !== null && Math.abs(newWeight - lastWeight) <= STABILITY_TOLERANCE) {
+      if (stableStartTime === null) {
+        stableStartTime = now;
+      } else if ((now - stableStartTime) >= STABILITY_DURATION) {
+        // Stable after a drop — emit the difference
+        stableEmitted = true;
+
+        var emitWeight = Math.round(referenceWeight - newWeight);
+
+        if (onStableWeightCb && emitWeight > 0) {
+          onStableWeightCb(emitWeight);
+        }
+
+        // Update reference to current weight for next removal
+        referenceWeight = newWeight;
+      }
+    } else {
+      // Still fluctuating
+      stableStartTime = null;
+      stableEmitted = false;
     }
   }
 
@@ -385,6 +553,7 @@ const Scale = (function () {
     /**
      * Register a callback for stable weight detection.
      * The callback is invoked once per weighing cycle with the stable weight in grams.
+     * In stacking mode, the value is the incremental weight (new item only).
      * @param {Function} cb - Callback function receiving (grams: number)
      */
     onStableWeight: function (cb) {
@@ -413,7 +582,56 @@ const Scale = (function () {
      * @param {string} frame - Raw ASCII frame string
      * @returns {{ grams: number, raw: string }|null} Parsed weight or null
      */
-    parseFrame: parseFrame
+    parseFrame: parseFrame,
+
+    // ─── Mode & Tare API ──────────────────────────────────────────────────────
+
+    /**
+     * Set the weighing mode.
+     * @param {'single'|'stacking'|'reverse-stacking'} mode
+     *   'single' = remove item between weighings
+     *   'stacking' = cumulative weighing, add items on top
+     *   'reverse-stacking' = start with all items, remove one by one
+     */
+    setMode: function (mode) {
+      if (mode === 'single' || mode === 'stacking' || mode === 'reverse-stacking') {
+        weighMode = mode;
+        // Reset state when switching modes
+        referenceWeight = 0;
+        reverseReferenceSet = false;
+        stableEmitted = false;
+        stableStartTime = null;
+      }
+    },
+
+    /**
+     * Get the current weighing mode.
+     * @returns {'single'|'stacking'|'reverse-stacking'}
+     */
+    getMode: function () {
+      return weighMode;
+    },
+
+    /**
+     * Manual tare / zero reset.
+     * Resets referenceWeight to 0 and all tracking state.
+     * In reverse-stacking: also resets reverseReferenceSet so next stable
+     * reading becomes the new reference.
+     */
+    tare: function () {
+      referenceWeight = 0;
+      reverseReferenceSet = false;
+      stableEmitted = false;
+      stableStartTime = null;
+    },
+
+    /**
+     * Get the current reference weight (stacking mode baseline).
+     * @returns {number} Reference weight in grams
+     */
+    getReferenceWeight: function () {
+      return referenceWeight;
+    }
   };
 
 })();

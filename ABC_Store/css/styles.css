@@ -1953,6 +1953,20 @@ select {
 .weight-display { font-size:1.2rem; font-weight:700; color:#202124; padding:4px 8px; }
 .weight-label { font-size:0.7rem; color:#5f6368; }
 
+/* --- Scale Controls (Mode Toggle + Zero Button) --- */
+.hw-scale-controls {
+  display: flex;
+  gap: 8px;
+  padding: 4px 8px 8px;
+  align-items: center;
+}
+.hw-ctrl-btn {
+  font-size: 0.7rem !important;
+  padding: 6px 10px !important;
+  min-height: 32px !important;
+  white-space: nowrap;
+}
+
 /* --- Print styles for thermal receipt --- */
 @media print {
   body * { visibility: hidden; }

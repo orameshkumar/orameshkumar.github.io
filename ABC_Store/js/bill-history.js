@@ -296,14 +296,38 @@ const BillHistory = (function () {
       var encodedText = encodeURIComponent(text);
       var whatsappUrl = 'https://wa.me/?text=' + encodedText;
 
-      // Try opening WhatsApp URL
-      var opened = window.open(whatsappUrl, '_blank');
+      // iOS Safari/PWA blocks window.open after async gaps.
+      // Show a tappable toast so the user can tap to open WhatsApp.
+      var existing = document.getElementById('_wa_toast');
+      if (existing) existing.parentNode.removeChild(existing);
 
-      // If window.open returns null/undefined, the URL scheme isn't supported
-      // Fall back to clipboard copy
-      if (!opened) {
-        copyToClipboard(text);
-      }
+      var toast = document.createElement('div');
+      toast.id = '_wa_toast';
+      toast.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);z-index:99999;background:#25D366;color:#fff;border-radius:14px;padding:13px 18px;font-size:1rem;font-weight:600;box-shadow:0 4px 20px rgba(0,0,0,0.35);display:flex;align-items:center;gap:10px;white-space:nowrap;max-width:90vw';
+
+      var link = document.createElement('a');
+      link.href = whatsappUrl;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      link.textContent = '📲 Share via WhatsApp';
+      link.style.cssText = 'color:#fff;text-decoration:none;flex:1;';
+      link.addEventListener('click', function () {
+        setTimeout(function () { toast.parentNode && toast.parentNode.removeChild(toast); }, 300);
+      });
+
+      var closeBtn = document.createElement('button');
+      closeBtn.textContent = '✕';
+      closeBtn.setAttribute('aria-label', 'Dismiss');
+      closeBtn.style.cssText = 'background:none;border:none;color:#fff;font-size:1rem;cursor:pointer;padding:0;line-height:1;';
+      closeBtn.addEventListener('click', function () {
+        toast.parentNode && toast.parentNode.removeChild(toast);
+      });
+
+      toast.appendChild(link);
+      toast.appendChild(closeBtn);
+      document.body.appendChild(toast);
+      setTimeout(function () { toast.parentNode && toast.parentNode.removeChild(toast); }, 12000);
+
     } catch (err) {
       console.error('Error sharing bill via WhatsApp:', err);
       // Attempt clipboard fallback on any error

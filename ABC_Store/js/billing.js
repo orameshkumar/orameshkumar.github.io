@@ -134,22 +134,9 @@ const Billing = (function () {
     });
 
     // ─── Scale: register onConnectionChange callback (Task 6.1, 12.3)
-    if (typeof Scale !== 'undefined' && Scale.onConnectionChange) {
-      Scale.onConnectionChange(function (connected) {
-        var dot = document.getElementById('hw-scale-dot');
-        var label = document.getElementById('hw-scale-label');
-        var weightEl = document.getElementById('hw-weight-display');
-        if (dot) dot.className = 'hw-dot ' + (connected ? 'hw-dot-green' : 'hw-dot-red');
-        if (label) label.textContent = connected ? 'Connected' : 'Disconnected';
-        if (weightEl) weightEl.style.display = connected ? 'flex' : 'none';
-        if (!connected) {
-          var wVal = document.getElementById('hw-weight-value');
-          var wStatus = document.getElementById('hw-weight-status');
-          if (wVal) wVal.textContent = '--';
-          if (wStatus) wStatus.textContent = '';
-        }
-      });
-    }
+    // NOTE: Connection change is now handled in _initScaleControls to include
+    // both status indicators and scale controls visibility.
+    // Initial setup still done here for when _initScaleControls is called.
 
     // ─── Scale: register onWeightUpdate to display current reading (Task 6.2)
     if (typeof Scale !== 'undefined' && Scale.onWeightUpdate) {
@@ -172,18 +159,42 @@ const Billing = (function () {
       Scale.onStableWeight(function (grams) {
         // Update weight status to Stable
         var wStatus = document.getElementById('hw-weight-status');
+
+        // In reverse-stacking mode, grams=0 means reference was just captured
+        if (grams === 0 && Scale.getMode() === 'reverse-stacking') {
+          if (wStatus) wStatus.textContent = 'Ref: ' + Scale.getReferenceWeight() + 'g — Remove items';
+          return; // Don't fill quantity input
+        }
+
         if (wStatus) wStatus.textContent = 'Stable ✓';
 
-        // Auto-fill only for kg/litre items (not count) — Task 6.5
-        if (selectedItemId) {
-          var item = allItems.find(function (i) { return i.id === selectedItemId; });
-          if (item && (item.baseUnit === 'kg' || item.baseUnit === 'litre')) {
-            addLineItem(item, grams);
-            resetSelection();
+        // Fill the quantity input with the stable weight (for kg/litre items)
+        // User then selects item to add it to the bill
+        if (grams > 0) {
+          selectedQuantityGrams = grams;
+
+          // Clear preset button highlights
+          qtyButtons.forEach(function (b) { b.classList.remove('active'); });
+
+          // Fill the custom quantity input
+          if (customQtyInput) {
+            customQtyInput.value = grams;
+          }
+
+          // If an item is already selected, auto-add to bill
+          if (selectedItemId) {
+            var item = allItems.find(function (i) { return i.id === selectedItemId; });
+            if (item && (item.baseUnit === 'kg' || item.baseUnit === 'litre')) {
+              addLineItem(item, grams);
+              resetSelection();
+            }
           }
         }
       });
     }
+
+    // ─── Scale Controls: Mode Toggle + Zero Button ────────────────────────────
+    _initScaleControls(statusBar);
 
     // ─── Printer: connection state indicator (Task 11.4, 12.4)
     if (typeof Printer !== 'undefined' && Printer.onConnectionChange) {
@@ -207,6 +218,117 @@ const Billing = (function () {
         if (printerDotInit) printerDotInit.className = 'hw-dot hw-dot-red';
         if (printerLabelInit) printerLabelInit.textContent = 'Disconnected';
       }
+    }
+  }
+
+  /**
+   * Create and inject Scale mode toggle and Zero button below the hardware status bar.
+   * Shows only when Web Serial API is available and scale module is loaded.
+   * @param {HTMLElement} statusBar - The hardware status bar element
+   */
+  function _initScaleControls(statusBar) {
+    if (!statusBar || typeof Scale === 'undefined') return;
+
+    // Create controls row
+    var controlsRow = document.createElement('div');
+    controlsRow.id = 'hw-scale-controls';
+    controlsRow.className = 'hw-scale-controls';
+    controlsRow.style.display = 'none'; // Hidden until scale is connected
+
+    // Mode toggle button
+    var modeBtn = document.createElement('button');
+    modeBtn.id = 'hw-scale-mode-btn';
+    modeBtn.className = 'btn-secondary hw-ctrl-btn';
+    modeBtn.textContent = '📦 Single';
+    modeBtn.title = 'Single mode: remove item between weighings. Tap to cycle modes.';
+    modeBtn.addEventListener('click', function () {
+      var currentMode = Scale.getMode();
+      var newMode;
+      if (currentMode === 'single') {
+        newMode = 'stacking';
+      } else if (currentMode === 'stacking') {
+        newMode = 'reverse-stacking';
+      } else {
+        newMode = 'single';
+      }
+      Scale.setMode(newMode);
+
+      if (newMode === 'stacking') {
+        modeBtn.textContent = '📚 Stacking';
+        modeBtn.title = 'Stacking mode: add items on top. Tap to switch to Reverse Stacking.';
+      } else if (newMode === 'reverse-stacking') {
+        modeBtn.textContent = '🔄 Reverse';
+        modeBtn.title = 'Reverse Stacking: start full, remove items one by one. Tap to switch to Single.';
+      } else {
+        modeBtn.textContent = '📦 Single';
+        modeBtn.title = 'Single mode: remove item between weighings. Tap to switch to Stacking.';
+      }
+
+      // Clear quantity input when switching modes
+      if (customQtyInput) customQtyInput.value = '';
+      selectedQuantityGrams = null;
+      qtyButtons.forEach(function (b) { b.classList.remove('active'); });
+
+      // Update weight status to indicate mode change
+      var wStatus = document.getElementById('hw-weight-status');
+      if (wStatus) {
+        if (newMode === 'reverse-stacking') {
+          wStatus.textContent = 'Place all items...';
+        } else {
+          wStatus.textContent = '';
+        }
+      }
+    });
+
+    // Zero / Tare button
+    var zeroBtn = document.createElement('button');
+    zeroBtn.id = 'hw-scale-zero-btn';
+    zeroBtn.className = 'btn-secondary hw-ctrl-btn';
+    zeroBtn.textContent = '0️⃣ Zero';
+    zeroBtn.title = 'Reset scale reference to zero';
+    zeroBtn.addEventListener('click', function () {
+      Scale.tare();
+
+      // Clear the quantity input
+      if (customQtyInput) {
+        customQtyInput.value = '';
+      }
+      selectedQuantityGrams = null;
+      qtyButtons.forEach(function (b) { b.classList.remove('active'); });
+
+      // Visual feedback
+      var wVal = document.getElementById('hw-weight-value');
+      var wStatus = document.getElementById('hw-weight-status');
+      if (wVal) wVal.textContent = '0 g';
+      if (wStatus) wStatus.textContent = 'Zeroed ✓';
+    });
+
+    controlsRow.appendChild(modeBtn);
+    controlsRow.appendChild(zeroBtn);
+
+    // Insert after the status bar
+    statusBar.parentNode.insertBefore(controlsRow, statusBar.nextSibling);
+
+    // Show/hide controls based on scale connection
+    if (Scale.onConnectionChange) {
+      Scale.onConnectionChange(function (connected) {
+        // Update connection status indicators
+        var dot = document.getElementById('hw-scale-dot');
+        var label = document.getElementById('hw-scale-label');
+        var weightEl = document.getElementById('hw-weight-display');
+        if (dot) dot.className = 'hw-dot ' + (connected ? 'hw-dot-green' : 'hw-dot-red');
+        if (label) label.textContent = connected ? 'Connected' : 'Disconnected';
+        if (weightEl) weightEl.style.display = connected ? 'flex' : 'none';
+        if (!connected) {
+          var wVal = document.getElementById('hw-weight-value');
+          var wStatus = document.getElementById('hw-weight-status');
+          if (wVal) wVal.textContent = '--';
+          if (wStatus) wStatus.textContent = '';
+        }
+
+        // Toggle scale controls visibility
+        controlsRow.style.display = connected ? 'flex' : 'none';
+      });
     }
   }
 
