@@ -262,16 +262,24 @@
     .all-btn.off { border-color: var(--red);   color: var(--red); }
     .all-btn.auto { border-color: var(--accent); color: var(--accent); }
 
-    /* ── License gate ─────────────────────────────────────────── */
-    .license-gate { position: fixed; inset: 0; background: var(--bg); z-index: 300;
-      display: none; align-items: center; justify-content: center; padding: 20px; }
-    .license-gate.show { display: flex; }
-    .license-gate-box { background: var(--card); border-radius: var(--radius); padding: 24px 20px;
-      width: min(92vw, 400px); box-shadow: 0 8px 32px rgba(0,0,0,0.5); text-align: center; }
-    .license-gate-icon { font-size: 40px; margin-bottom: 10px; }
-    .license-gate-title { font-size: 18px; font-weight: 600; margin-bottom: 8px; }
-    .license-gate-msg { font-size: 13px; color: var(--muted); margin-bottom: 16px; line-height: 1.5; }
-    .license-gate-box textarea.settings-input { min-height: 70px; resize: vertical; font-size: 12px; margin-bottom: 12px; }
+    /* ── License — soft gate ──────────────────────────────────── */
+    /* No blocking screen: the app stays usable without a license — only
+       override on/off works freely. Everything else (Settings changes,
+       schedule/slot editing) is dimmed and inert until activated. */
+    .license-banner { display: flex; align-items: center; justify-content: space-between; gap: 10px;
+      background: rgba(240,160,48,0.15); color: var(--amber); border-bottom: 1px solid rgba(240,160,48,0.3);
+      padding: 8px 16px; font-size: 12px; }
+    .license-banner-btn { background: var(--amber); color: #1a1a2e; border: none; border-radius: 6px;
+      padding: 5px 12px; font-size: 11px; font-weight: 600; cursor: pointer; flex-shrink: 0; }
+    body.license-locked #page-settings .settings-section:not(.license-exempt),
+    body.license-locked #page-settings .qr-section,
+    body.license-locked #page-settings .admin-code-box,
+    body.license-locked .add-slot-btn,
+    body.license-locked .copy-btn,
+    body.license-locked .slot-activate-btn,
+    body.license-locked .slot-del {
+      opacity: 0.45; pointer-events: none;
+    }
   </style>
 </head>
 <body>
@@ -279,6 +287,10 @@
 <div class="update-banner" id="updateBanner">
   New version available!
   <button class="update-btn" onclick="applyUpdate()">Update now</button>
+</div>
+<div class="license-banner" id="licenseBanner" style="display:none">
+  <span>🔒 No active license — overrides work, everything else is view-only.</span>
+  <button class="license-banner-btn" onclick="openLicenseModal()">Activate</button>
 </div>
   <div class="header">
     <div>
@@ -356,7 +368,7 @@
         <input class="settings-input" id="cfg-seed" placeholder="1234" style="font-family:monospace;letter-spacing:2px">
       </div>
     </div>
-    <div class="settings-section">
+    <div class="settings-section license-exempt">
       <div class="settings-title">License</div>
       <div class="settings-row" style="flex-direction:column;align-items:stretch;gap:2px">
         <div class="settings-label" id="licenseStatusLabel">No license active</div>
@@ -431,18 +443,6 @@
 
 <div class="toast" id="toast">
 
-</div>
-
-<!-- ── License gate — blocks the app until a valid key is active ──────── -->
-<div class="license-gate" id="licenseGate">
-  <div class="license-gate-box">
-    <div class="license-gate-icon" id="lgIcon">🔒</div>
-    <div class="license-gate-title" id="lgTitle">License Required</div>
-    <div class="license-gate-msg" id="lgMsg">Enter your Room Controller license key to continue.</div>
-    <textarea class="settings-input" id="lgKeyInput" rows="3" placeholder="Paste license key here" autocomplete="off"></textarea>
-    <div id="lgError" class="status-msg err" style="display:none;margin-bottom:10px"></div>
-    <button class="save-btn" onclick="activateLicenseFromGate()">Activate</button>
-  </div>
 </div>
 
 <script>
@@ -558,6 +558,7 @@ function normalizeSlots(slots) {
 let recModalRoomId = null;
 
 function openRecurringModal(roomId) {
+  if (!requireLicense('edit a recurring schedule')) return;
   recModalRoomId = roomId;
   const r = state.rooms.find(x => x.id === roomId);
   document.getElementById('recModalTitle').textContent = 'Recurring — ' + r.name;
@@ -592,6 +593,7 @@ function toggleRecDay(i) {
 }
 
 async function saveRecurringFromModal() {
+  if (!requireLicense('edit a recurring schedule')) return;
   if (!recModalRoomId) return;
   const r = state.rooms.find(x => x.id === recModalRoomId);
   const s = document.getElementById('rec_start').value;
@@ -715,7 +717,7 @@ function renderGridOccupancy() {
 }
 
 function openSlotModal(roomId) {
-  showToast("Opening slot modal for room " + roomId);
+  if (!requireLicense('add a slot')) return;
   modalRoomId = roomId;
   modalDay    = state.schedDay;
   const r     = state.rooms.find(x => x.id === roomId);
@@ -788,6 +790,7 @@ function modalRefreshCode() {
 }
 
 async function saveSlotFromModal() {
+  if (!requireLicense('add a slot')) return;
   if (!modalRoomId) return;
   const r = state.rooms.find(x => x.id === modalRoomId);
   const s = document.getElementById('m_start').value;
@@ -839,6 +842,7 @@ function generate4DigitCode() {
 }
 
 async function editSlotCode(roomId, slotIdx) {
+  if (!requireLicense('change a slot code')) return;
   const r = state.rooms.find(x => x.id === roomId);
   const slot = r.slots[state.schedDay][slotIdx];
   const current = slot.code || '';
@@ -918,6 +922,7 @@ function toMinsStr(t) {
 
 // ── Slot activation ───────────────────────────────────────────
 async function activateSlot(roomId, slotIdx) {
+  if (!requireLicense('activate a slot')) return;
   const r = state.rooms.find(x => x.id === roomId);
   const slot = r.slots[0][slotIdx];
   const now = Date.now();
@@ -938,6 +943,7 @@ async function activateSlot(roomId, slotIdx) {
 }
 
 async function deactivateSlot(roomId, slotIdx) {
+  if (!requireLicense('deactivate a slot')) return;
   const r = state.rooms.find(x => x.id === roomId);
   const slot = r.slots[0][slotIdx];
   slot.activatedAt = null;
@@ -1475,6 +1481,7 @@ async function addSlot(id) {
 }
 
 async function deleteSlot(id, idx) {
+  if (!requireLicense('delete a slot')) return;
   const r = state.rooms.find(x => x.id === id);
   r.slots[state.schedDay].splice(idx, 1);
   persist(); await pushRoom(id-1); renderDashboard();
@@ -1570,6 +1577,7 @@ function toggleCopySource(src) {
 }
 
 async function copySlots(fromId) {
+  if (!requireLicense('copy slots')) return;
   if (copyState.selectedRooms.length === 0) { showToast('Select at least one target room'); return; }
   if (copyState.sources.length === 0) { showToast('Select at least one source'); return; }
 
@@ -1890,6 +1898,7 @@ function renderSettings() {
 }
 
 function setRelayWiring(mode) {
+  if (!requireLicense('change relay wiring')) return;
   const p = getActiveProfile();
   const current = p.relayWiring || 'NC';
   if (mode === current) return; // already selected — nothing to confirm
@@ -1989,6 +1998,7 @@ function clearProfileForm() {
 }
 
 function renameProfile(id) {
+  if (!requireLicense('rename a profile')) return;
   const p = state.profiles.find(x => x.id === id);
   if (!p) return;
   const name = prompt('Rename profile:', p.name);
@@ -2001,6 +2011,7 @@ function renameProfile(id) {
 }
 
 function deleteProfile(id) {
+  if (!requireLicense('delete a profile')) return;
   if (state.profiles.length <= 1) { showToast('At least one profile is required'); return; }
   const p = state.profiles.find(x => x.id === id);
   if (!p) return;
@@ -2027,6 +2038,7 @@ function resetConnectionForProfileChange() {
 }
 
 async function saveActiveProfile() {
+  if (!requireLicense('save profile settings')) return;
   const p = getActiveProfile();
   resetConnectionForProfileChange();
   p.dbUrl     = document.getElementById('cfg-url').value.trim().replace(/\/$/, '');
@@ -2040,6 +2052,7 @@ async function saveActiveProfile() {
 }
 
 async function saveAsNewProfile() {
+  if (!requireLicense('create a new profile')) return;
   const name = prompt('Name for this new profile (e.g. site or building name):', 'New Site');
   if (name === null) return;
   resetConnectionForProfileChange();
@@ -2116,6 +2129,7 @@ function finishSaveSettings(p, message) {
 
 // ── Room management ────────────────────────────────────────────
 function addRoom() {
+  if (!requireLicense('add a room')) return;
   applyRoomNameEdits(); // preserve any unsaved edits to other rooms before mutating the list
   const newId = state.rooms.length + 1;
   state.rooms.push({
@@ -2134,6 +2148,7 @@ function addRoom() {
 }
 
 async function deleteRoom(id) {
+  if (!requireLicense('delete a room')) return;
   if (state.rooms.length <= 1) { showToast('At least one room is required'); return; }
   const r = state.rooms.find(x => x.id === id);
   if (!r) return;
@@ -2225,12 +2240,12 @@ function updateClock() {
 }
 
 // ── License gate UI ──────────────────────────────────────────
-function _licenseGateMessage(result) {
-  if (!result) return { icon: '🔒', title: 'License Required', msg: 'Enter your Room Controller license key to continue.' };
+function _licenseStatusMessage(result) {
+  if (!result) return { icon: '🔒', title: 'No License Active', msg: 'Activate a license to unlock full editing.' };
   switch (result.reason) {
     case 'expired':
       return { icon: '⏳', title: 'License Expired',
-        msg: `The license for ${result.name} expired on ${result.validTo}. Enter a new license key to continue.` };
+        msg: `The license for ${result.name} expired on ${result.validTo}. Enter a new license key to unlock full editing.` };
     case 'not-yet-active':
       return { icon: '⏳', title: 'License Not Yet Active',
         msg: `This license for ${result.name} becomes valid on ${result.validFrom}.` };
@@ -2238,76 +2253,64 @@ function _licenseGateMessage(result) {
     case 'invalid':
       return { icon: '⚠️', title: 'Invalid License Key', msg: 'That key could not be verified. Check it and try again.' };
     default:
-      return { icon: '🔒', title: 'License Required', msg: 'Enter your Room Controller license key to continue.' };
+      return { icon: '🔒', title: 'No License Active', msg: 'Activate a license to unlock full editing.' };
   }
 }
 
-function showLicenseGate(result) {
-  const info = _licenseGateMessage(result);
-  document.getElementById('lgIcon').textContent = info.icon;
-  document.getElementById('lgTitle').textContent = info.title;
-  document.getElementById('lgMsg').textContent = info.msg;
-  document.getElementById('lgError').style.display = 'none';
-  document.getElementById('licenseGate').classList.add('show');
+// Without a valid license the app stays fully open for day-to-day use —
+// viewing every page and toggling manual override on/off always works.
+// Only actions that change configuration or schedules (Settings edits,
+// slot/recurring creation, profile/room management) require an active
+// license. This flag is the single thing every gated action checks.
+let licenseValid = false;
+
+// Call at the top of any mutating action other than override on/off.
+// Returns true (and lets the caller proceed) only when licensed; otherwise
+// explains why and blocks it.
+function requireLicense(actionLabel) {
+  if (licenseValid) return true;
+  showToast('🔒 Activate a license to ' + (actionLabel || 'do this') + ' — see Settings → License');
+  return false;
 }
 
-function hideLicenseGate() {
-  document.getElementById('licenseGate').classList.remove('show');
+function applyLicenseUIState() {
+  document.body.classList.toggle('license-locked', !licenseValid);
+  const banner = document.getElementById('licenseBanner');
+  if (banner) banner.style.display = licenseValid ? 'none' : '';
 }
 
-let _appBooted = false;
-
-async function activateLicenseFromGate() {
-  const input = document.getElementById('lgKeyInput');
-  const raw = (input.value || '').trim();
-  const errEl = document.getElementById('lgError');
-  if (!raw) { errEl.textContent = 'Please enter a license key.'; errEl.style.display = ''; return; }
-  const result = await validateLicenseKey(raw);
-  if (!result.valid) {
-    errEl.textContent = _licenseGateMessage(result).msg;
-    errEl.style.display = '';
-    return;
-  }
-  state.licenseKey = raw;
-  persist();
-  hideLicenseGate();
-  if (!_appBooted) bootApp();
+async function refreshLicenseState() {
+  const result = state.licenseKey ? await validateLicenseKey(state.licenseKey) : { valid: false };
+  licenseValid = result.valid;
+  applyLicenseUIState();
   renderLicenseStatus();
-}
-
-async function checkLicenseAndBoot() {
-  if (!state.licenseKey) { showLicenseGate(null); return; }
-  const result = await validateLicenseKey(state.licenseKey);
-  if (!result.valid) { showLicenseGate(result); return; }
-  bootApp();
+  return result;
 }
 
 // Re-checks periodically so a date-restricted license that expires while the
-// app is left open (e.g. an installed dashboard nobody closes) locks it
-// immediately, instead of only being caught on the next reload.
+// app is left open (e.g. an installed dashboard nobody closes) locks editing
+// again immediately, instead of only being caught on the next reload.
 function startLicenseWatch() {
-  setInterval(async () => {
-    if (!state.licenseKey) return;
-    const result = await validateLicenseKey(state.licenseKey);
-    if (!result.valid) showLicenseGate(result);
-  }, 3600000);
+  setInterval(refreshLicenseState, 3600000);
 }
 
 // ── License status (Settings page) ───────────────────────────
-async function renderLicenseStatus() {
+// Reads the cached licenseValid flag rather than re-validating on every
+// render (renderSettings() calls this often) — refreshLicenseState() is
+// what actually re-checks the key.
+function renderLicenseStatus() {
   const labelEl = document.getElementById('licenseStatusLabel');
   const subEl = document.getElementById('licenseStatusSub');
   if (!labelEl || !subEl) return;
   if (!state.licenseKey) { labelEl.textContent = 'No license active'; subEl.textContent = ''; return; }
-  const result = await validateLicenseKey(state.licenseKey);
-  if (!result.valid) {
-    labelEl.textContent = _licenseGateMessage(result).title;
-    subEl.textContent = result.name ? `Was licensed to ${result.name}` : '';
+  const obj = decodeLicenseKey(state.licenseKey) || {};
+  if (!licenseValid) {
+    labelEl.textContent = 'License inactive';
+    subEl.textContent = obj.n ? `Was licensed to ${obj.n}` : '';
     return;
   }
-  labelEl.textContent = `Licensed to ${result.name}`;
-  subEl.textContent = result.licenseType === 'date-restricted'
-    ? `Valid ${result.validFrom} – ${result.validTo}` : 'Perpetual license';
+  labelEl.textContent = `Licensed to ${obj.n || ''}`;
+  subEl.textContent = (obj.f && obj.t) ? `Valid ${obj.f} – ${obj.t}` : 'Perpetual license';
 }
 
 function openLicenseModal() {
@@ -2326,18 +2329,19 @@ async function saveLicenseFromModal() {
   const errEl = document.getElementById('licenseModalError');
   if (!raw) { errEl.textContent = 'Please enter a license key.'; errEl.style.display = ''; return; }
   const result = await validateLicenseKey(raw);
-  if (!result.valid) { errEl.textContent = _licenseGateMessage(result).msg; errEl.style.display = ''; return; }
+  if (!result.valid) { errEl.textContent = _licenseStatusMessage(result).msg; errEl.style.display = ''; return; }
   state.licenseKey = raw;
   persist();
   closeLicenseModal();
-  renderLicenseStatus();
+  await refreshLicenseState();
   showToast('✅ License activated');
 }
 
 // ── Boot ──────────────────────────────────────────────────────
 hydrate();
+bootApp();
+refreshLicenseState();
 startLicenseWatch();
-checkLicenseAndBoot();
 
 function bootApp() {
   _appBooted = true;
