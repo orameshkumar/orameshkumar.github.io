@@ -167,6 +167,20 @@
       border: 1px solid var(--border); background: transparent;
       font-size: 12px; color: var(--muted); cursor: pointer; min-height: 36px; }
     .modal-day-btn.active { background: var(--accent); color: white; border-color: var(--accent); }
+
+    /* ── Slot creation — day-view 30-min picker ─────────────────── */
+    .modal-grid-hint { font-size: 11px; color: var(--muted); margin-bottom: 8px;
+      display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+    .grid-clear-link { color: var(--accent); cursor: pointer; text-decoration: underline; flex-shrink: 0; }
+    .time-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; margin-bottom: 14px; }
+    .time-block { position: relative; padding: 7px 2px; border-radius: 6px; border: 1px solid var(--border);
+      background: var(--card2); font-size: 10.5px; color: var(--muted); text-align: center;
+      cursor: pointer; user-select: none; font-family: inherit; min-height: 30px; }
+    .time-block.selected { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .time-block.anchor { border-color: var(--amber); box-shadow: 0 0 0 2px rgba(240,160,48,0.35); }
+    .time-block.occupied::after { content: ''; position: absolute; top: 3px; right: 3px;
+      width: 5px; height: 5px; border-radius: 50%; background: var(--amber); }
+
     .settings-section { background: var(--card); border-radius: var(--radius); margin-bottom: 12px; overflow: hidden; }
     .settings-title { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; padding: 12px 14px 6px; }
     .settings-row { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-top: 1px solid var(--border); }
@@ -589,6 +603,112 @@ async function saveRecurringFromModal() {
 let modalRoomId  = null;
 let modalDay     = 0;
 
+// ── Day-view 30-min time picker (inside the slot modal) ────────
+let modalGridBuilt    = false;
+let modalGridAnchor   = null; // block index waiting for its range partner, or null
+let modalGridSelStart = null; // first selected block index, or null if nothing selected
+let modalGridSelEnd   = null; // last selected block index (inclusive)
+
+function timeGridLabel(idx) {
+  const mins = idx * 30;
+  return String(Math.floor(mins / 60)).padStart(2, '0') + ':' + String(mins % 60).padStart(2, '0');
+}
+
+function buildTimeGridHtml() {
+  let html = '';
+  for (let i = 0; i < 48; i++) {
+    html += `<button type="button" class="time-block" id="tb_${i}" onclick="gridBlockClick(${i})">${timeGridLabel(i)}</button>`;
+  }
+  return html;
+}
+
+// Tap 1 sets the range's start anchor; tap 2 fills everything between it and
+// the new tap (in either order) and finalizes the range — the next tap then
+// starts a fresh single-block selection rather than extending indefinitely,
+// which keeps the two-tap gesture unambiguous on a touch screen.
+function gridBlockClick(idx) {
+  if (modalGridAnchor === null) {
+    modalGridAnchor = idx;
+    modalGridSelStart = idx;
+    modalGridSelEnd = idx;
+  } else {
+    modalGridSelStart = Math.min(modalGridAnchor, idx);
+    modalGridSelEnd   = Math.max(modalGridAnchor, idx);
+    modalGridAnchor = null;
+  }
+  renderGridSelection();
+  syncModalTimesFromGrid();
+}
+
+function clearGridSelection() {
+  modalGridAnchor = null;
+  modalGridSelStart = null;
+  modalGridSelEnd = null;
+  renderGridSelection();
+}
+
+function renderGridSelection() {
+  for (let i = 0; i < 48; i++) {
+    const el = document.getElementById('tb_' + i);
+    if (!el) continue;
+    const inRange = modalGridSelStart !== null && i >= modalGridSelStart && i <= modalGridSelEnd;
+    el.classList.toggle('selected', inRange);
+    el.classList.toggle('anchor', modalGridAnchor === i);
+  }
+}
+
+function syncModalTimesFromGrid() {
+  if (modalGridSelStart === null) return;
+  document.getElementById('m_start').value = timeGridLabel(modalGridSelStart);
+  document.getElementById('m_end').value   = timeGridLabel(modalGridSelEnd + 1);
+}
+
+// Reflects the modal's current Start/End inputs onto the grid when they land
+// exactly on 30-min boundaries (e.g. the 09:00–10:00 default, or after the
+// user picks via the grid itself). A manually-typed time that doesn't align
+// to a half-hour just leaves the grid unselected — it's a shortcut layer on
+// top of the inputs, not a replacement for them.
+function syncGridFromModalTimes() {
+  const toIdx = (t) => {
+    if (!t) return null;
+    const [h, m] = t.split(':').map(Number);
+    if (isNaN(h) || isNaN(m)) return null;
+    return (h * 60 + m) / 30;
+  };
+  const si = toIdx(document.getElementById('m_start').value);
+  const ei = toIdx(document.getElementById('m_end').value);
+  if (Number.isInteger(si) && Number.isInteger(ei) && si >= 0 && ei > si && ei <= 48) {
+    modalGridSelStart = si;
+    modalGridSelEnd = ei - 1;
+  } else {
+    modalGridSelStart = null;
+    modalGridSelEnd = null;
+  }
+  modalGridAnchor = null;
+  renderGridSelection();
+}
+
+// Marks blocks that overlap an existing slot for the modal's current
+// room+day with a small dot — purely informational, doesn't block picking
+// that range again (overlapping slots are allowed elsewhere in the app too).
+function renderGridOccupancy() {
+  const r = modalRoomId ? state.rooms.find(x => x.id === modalRoomId) : null;
+  const slots = (r && r.slots[modalDay]) || [];
+  const occupied = new Array(48).fill(false);
+  slots.forEach(sl => {
+    const [sh, sm] = (sl.s || '').split(':').map(Number);
+    const [eh, em] = (sl.e || '').split(':').map(Number);
+    if (isNaN(sh) || isNaN(sm) || isNaN(eh) || isNaN(em)) return;
+    const si = Math.floor((sh * 60 + sm) / 30);
+    const ei = Math.ceil((eh * 60 + em) / 30);
+    for (let i = Math.max(0, si); i < Math.min(48, ei); i++) occupied[i] = true;
+  });
+  for (let i = 0; i < 48; i++) {
+    const el = document.getElementById('tb_' + i);
+    if (el) el.classList.toggle('occupied', occupied[i]);
+  }
+}
+
 function openSlotModal(roomId) {
   showToast("Opening slot modal for room " + roomId);
   modalRoomId = roomId;
@@ -603,6 +723,12 @@ function openSlotModal(roomId) {
   document.getElementById('m_recurring').checked = false;
   document.getElementById('m_coderow').style.opacity = '1';
   document.getElementById('m_coderow').style.pointerEvents = '';
+  // Day-view time picker — built once, then just re-synced on every open
+  if (!modalGridBuilt) {
+    document.getElementById('modalTimeGrid').innerHTML = buildTimeGridHtml();
+    modalGridBuilt = true;
+  }
+  syncGridFromModalTimes(); // highlights the 09:00–10:00 default
   // Day buttons
   setModalDay(state.schedDay);
   // Recurring disabled for tomorrow
@@ -637,6 +763,7 @@ function setModalDay(d) {
     lbl.textContent = 'Repeat daily (recurring)';
     lbl.style.opacity = '1';
   }
+  renderGridOccupancy(); // today/tomorrow have different existing slots
 }
 
 function modalToggleCode(checked) {
@@ -2304,13 +2431,18 @@ function applyUpdate() {
           <button class="modal-day-btn active" id="mdayBtn0" onclick="setModalDay(0)">Today</button>
           <button class="modal-day-btn" id="mdayBtn1" onclick="setModalDay(1)">Tomorrow</button>
         </div>
+        <div class="modal-grid-hint">
+          <span>Tap a block to start, tap another to select the range · <span style="color:var(--amber)">●</span> = already has a slot</span>
+          <span class="grid-clear-link" onclick="clearGridSelection()">Clear</span>
+        </div>
+        <div class="time-grid" id="modalTimeGrid"></div>
         <div class="modal-row">
           <label class="modal-label" for="m_start">Start</label>
-          <input class="modal-time" type="time" id="m_start" value="09:00">
+          <input class="modal-time" type="time" id="m_start" value="09:00" oninput="syncGridFromModalTimes()">
         </div>
         <div class="modal-row">
           <label class="modal-label" for="m_end">End</label>
-          <input class="modal-time" type="time" id="m_end" value="10:00">
+          <input class="modal-time" type="time" id="m_end" value="10:00" oninput="syncGridFromModalTimes()">
         </div>
         <div class="modal-divider"></div>
         <div class="modal-check-row">
