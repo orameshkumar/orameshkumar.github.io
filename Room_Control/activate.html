@@ -138,8 +138,13 @@
 </div>
 
 <script>
-// ── Config ────────────────────────────────────────────────────
-const FIREBASE_URL = 'https://roomcontrol-1d14d-default-rtdb.asia-southeast1.firebasedatabase.app';
+// ── Config — supplied via ?db=&p= baked into each profile's QR/activation link ──
+// p = the profile's numeric Firebase key (/profiles/{p}/...) — profiles sharing
+// one database are namespaced this way; the profile's name is never part of
+// the path, just a display property, so it's not needed here at all.
+const FIREBASE_URL   = new URLSearchParams(location.search).get('db') || '';
+const PROFILE_NUM    = new URLSearchParams(location.search).get('p') || '';
+const PROFILE_PREFIX = PROFILE_NUM ? '/profiles/' + PROFILE_NUM : '';
 
 // ── State ─────────────────────────────────────────────────────
 let allRooms     = [];
@@ -182,8 +187,11 @@ function getAdminCode(seed) {
 async function fbGet(path) {
   try {
     // Add timestamp to bust any HTTP cache layer
-    const url = FIREBASE_URL + path + '.json?nc=' + Date.now();
-    const res = await fetch(url, { cache: 'no-store' });
+    const url = FIREBASE_URL + PROFILE_PREFIX + path + '.json?nc=' + Date.now();
+    // Explicit Accept — without it, Firebase can occasionally serve the SSE
+    // event-stream format on this URL instead of plain JSON while a listener
+    // is open on the same path, which breaks res.json()
+    const res = await fetch(url, { cache: 'no-store', headers: { 'Accept': 'application/json' } });
     if (!res.ok) return null;
     return await res.json();
   } catch(e) {
@@ -193,9 +201,9 @@ async function fbGet(path) {
 
 async function fbPut(path, value) {
   try {
-    await fetch(FIREBASE_URL + path + '.json', {
+    await fetch(FIREBASE_URL + PROFILE_PREFIX + path + '.json', {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
       body: JSON.stringify(value)
     });
     return true;
@@ -211,6 +219,17 @@ function userIsBusy() {
 }
 
 async function loadSlots() {
+  if (!FIREBASE_URL || !PROFILE_NUM) {
+    document.getElementById('loadingState').style.display = 'none';
+    document.getElementById('slotList').style.display = 'block';
+    document.getElementById('slotList').innerHTML =
+      `<div class="no-slots">This activation link is missing its configuration.<br>
+        <span style="font-size:12px;color:var(--muted);margin-top:8px;display:block">
+          Please re-scan the QR code from the Room Controller dashboard.
+        </span>
+      </div>`;
+    return;
+  }
   if (loadingSlots) return;
   if (userIsBusy()) return;  // don't refresh while PIN pad is open
   loadingSlots = true;
@@ -532,28 +551,30 @@ document.getElementById('headerDate').textContent =
 
 loadSlots();
 
-// Safety timeout — if still showing loading after 10 sec, retry once
-setTimeout(() => {
-  const ls = document.getElementById('loadingState');
-  if (ls && ls.style.display !== 'none') {
-    loadingSlots = false;
-    loadSlots();
-  }
-}, 10000);
+if (FIREBASE_URL && PROFILE_NUM) {
+  // Safety timeout — if still showing loading after 10 sec, retry once
+  setTimeout(() => {
+    const ls = document.getElementById('loadingState');
+    if (ls && ls.style.display !== 'none') {
+      loadingSlots = false;
+      loadSlots();
+    }
+  }, 10000);
 
-// Full refresh every 10 seconds — always fresh from Firebase, no cache
-setInterval(() => loadSlots(), 10000);
+  // Full refresh every 10 seconds — always fresh from Firebase, no cache
+  setInterval(() => loadSlots(), 10000);
 
-// Firebase SSE — instant full refresh when any data changes
-(function startSSE() {
-  try {
-    const es = new EventSource(FIREBASE_URL + '/rooms.json');
-    // Do NOT reset loadingSlots — let the guard prevent concurrent loads
-    es.addEventListener('put',   () => loadSlots());
-    es.addEventListener('patch', () => loadSlots());
-    es.onerror = () => es.close();
-  } catch(e) {}
-})();
+  // Firebase SSE — instant full refresh when any data changes
+  (function startSSE() {
+    try {
+      const es = new EventSource(FIREBASE_URL + PROFILE_PREFIX + '/rooms.json');
+      // Do NOT reset loadingSlots — let the guard prevent concurrent loads
+      es.addEventListener('put',   () => loadSlots());
+      es.addEventListener('patch', () => loadSlots());
+      es.onerror = () => es.close();
+    } catch(e) {}
+  })();
+}
 
 // Reload slots whenever page becomes visible again (user switches back to tab/app)
 // Refresh handlers — all use scheduleRefresh to debounce

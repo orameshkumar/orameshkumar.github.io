@@ -30,6 +30,8 @@
 
     .header { padding: 16px 16px 0; display: flex; align-items: center; justify-content: space-between; }
     .header h1 { font-size: 20px; font-weight: 600; }
+    .header-profile { font-size: 12px; color: var(--accent); font-weight: 500; margin-top: 1px; }
+    .header-profile-select { font-size: 12px; color: var(--accent); font-weight: 500; margin-top: 2px; background: var(--card); border: 1px solid var(--border); border-radius: 6px; padding: 2px 6px; cursor: pointer; max-width: 160px; }
     .header-right { display: flex; align-items: center; gap: 10px; }
     .live-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); transition: background 0.4s; }
     .live-dot.connected { background: var(--green); animation: pulse 2s infinite; }
@@ -165,6 +167,25 @@
       border: 1px solid var(--border); background: transparent;
       font-size: 12px; color: var(--muted); cursor: pointer; min-height: 36px; }
     .modal-day-btn.active { background: var(--accent); color: white; border-color: var(--accent); }
+
+    /* ── Slot creation — day-view 30-min picker ─────────────────── */
+    .modal-grid-hint { font-size: 11px; color: var(--muted); margin-bottom: 8px;
+      display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+    .grid-clear-link { color: var(--accent); cursor: pointer; text-decoration: underline; flex-shrink: 0; }
+    /* 6 columns × 8 rows = all 48 half-hour blocks, but the container only
+       shows 3 rows at a time — scrolls vertically for the rest */
+    .time-grid { display: grid; grid-template-columns: repeat(6, 1fr); grid-auto-rows: 26px;
+      gap: 4px; margin-bottom: 10px; max-height: 90px; overflow-y: auto;
+      -webkit-overflow-scrolling: touch; }
+    .time-block { position: relative; padding: 2px; border-radius: 5px; border: 1px solid var(--border);
+      background: var(--card2); font-size: 10px; color: var(--muted); text-align: center;
+      cursor: pointer; user-select: none; font-family: inherit;
+      display: flex; align-items: center; justify-content: center; }
+    .time-block.selected { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .time-block.anchor { border-color: var(--amber); box-shadow: 0 0 0 2px rgba(240,160,48,0.35); }
+    .time-block.occupied::after { content: ''; position: absolute; top: 2px; right: 2px;
+      width: 4px; height: 4px; border-radius: 50%; background: var(--amber); }
+
     .settings-section { background: var(--card); border-radius: var(--radius); margin-bottom: 12px; overflow: hidden; }
     .settings-title { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; padding: 12px 14px 6px; }
     .settings-row { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-top: 1px solid var(--border); }
@@ -202,6 +223,16 @@
     .section-head { font-size: 13px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin: 16px 0 8px; }
     .fb-badge { display: inline-flex; align-items: center; gap: 5px; background: rgba(255,160,0,0.12); border: 1px solid rgba(255,160,0,0.3); border-radius: 20px; padding: 3px 10px; font-size: 11px; color: #ffb300; margin-bottom: 12px; }
     canvas { display: block; }
+    .profile-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 14px; border-top: 1px solid var(--border); cursor: pointer; }
+    .profile-row:first-child { border-top: none; }
+    .profile-row.active { cursor: default; background: rgba(74,143,255,0.08); }
+    .profile-name { font-size: 14px; font-weight: 500; }
+    .profile-active-tag { font-size: 10px; padding: 1px 7px; border-radius: 10px; background: rgba(74,143,255,0.2); color: var(--accent); font-weight: 600; margin-left: 4px; }
+    .profile-num-tag { font-size: 10px; padding: 1px 7px; border-radius: 10px; background: rgba(255,255,255,0.08); color: var(--muted); font-weight: 600; margin-left: 4px; font-family: monospace; }
+    .profile-url { font-size: 11px; color: var(--muted); margin-top: 2px; font-family: monospace; }
+    .profile-actions { display: flex; gap: 4px; flex-shrink: 0; }
+    .profile-btn { background: none; border: 1px solid var(--border); border-radius: 6px; color: var(--muted); font-size: 13px; padding: 4px 8px; cursor: pointer; }
+    .profile-btn:hover { color: var(--text); border-color: var(--text); }
     /* Slot activation styles */
     .slot-code { font-size: 11px; font-family: monospace; background: rgba(240,160,48,0.15); color: var(--amber); padding: 2px 7px; border-radius: 6px; font-weight: 700; letter-spacing: 2px; }
     .code-input-row { display: flex; gap: 6px; align-items: center; margin-bottom: 8px; }
@@ -230,6 +261,27 @@
     .all-btn.on  { border-color: var(--amber); color: var(--amber); }
     .all-btn.off { border-color: var(--red);   color: var(--red); }
     .all-btn.auto { border-color: var(--accent); color: var(--accent); }
+
+    /* ── License — soft gate ──────────────────────────────────── */
+    /* No blocking screen: the app stays usable without a license — only
+       override on/off works freely. Everything else (Settings changes,
+       schedule/slot editing) is dimmed and inert until activated. */
+    .license-banner { display: flex; align-items: center; justify-content: space-between; gap: 10px;
+      background: rgba(240,160,48,0.15); color: var(--amber); border-bottom: 1px solid rgba(240,160,48,0.3);
+      padding: 8px 16px; font-size: 12px; }
+    .license-banner-btn { background: var(--amber); color: #1a1a2e; border: none; border-radius: 6px;
+      padding: 5px 12px; font-size: 11px; font-weight: 600; cursor: pointer; flex-shrink: 0; }
+    body.license-locked #page-settings .settings-section:not(.license-exempt),
+    body.license-locked #page-settings .qr-section,
+    body.license-locked #page-settings .admin-code-box,
+    body.license-locked #page-settings > .save-btn,
+    body.license-locked #page-settings > .test-btn,
+    body.license-locked .add-slot-btn,
+    body.license-locked .copy-btn,
+    body.license-locked .slot-activate-btn,
+    body.license-locked .slot-del {
+      opacity: 0.45; pointer-events: none;
+    }
   </style>
 </head>
 <body>
@@ -238,8 +290,15 @@
   New version available!
   <button class="update-btn" onclick="applyUpdate()">Update now</button>
 </div>
+<div class="license-banner" id="licenseBanner" style="display:none">
+  <span>🔒 No active license — overrides work, everything else is view-only.</span>
+  <button class="license-banner-btn" onclick="openLicenseModal()">Activate</button>
+</div>
   <div class="header">
-    <h1>Room Controller</h1>
+    <div>
+      <h1>Room Controller</h1>
+      <div id="headerProfileArea"></div>
+    </div>
     <div class="header-right">
       <div class="live-dot" id="liveDot"></div>
       <span class="conn-label" id="connLabel">Connecting…</span>
@@ -287,7 +346,14 @@
   <div class="page" id="page-settings">
     <div class="fb-badge">🔥 Firebase Realtime Database</div>
     <div class="settings-section">
-      <div class="settings-title">Firebase config</div>
+      <div class="settings-title">Profiles</div>
+      <div id="profileList"></div>
+      <div class="settings-row">
+        <button class="add-slot-btn" onclick="clearProfileForm()">+ New profile</button>
+      </div>
+    </div>
+    <div class="settings-section">
+      <div class="settings-title">Firebase config — active profile</div>
       <div class="settings-row" style="flex-direction:column;align-items:stretch;gap:6px">
         <div class="settings-label">Database URL<div class="settings-sub">e.g. https://your-project-default-rtdb.firebaseio.com</div></div>
         <input class="settings-input" id="cfg-url" placeholder="https://your-project-default-rtdb.firebaseio.com">
@@ -304,6 +370,28 @@
         <input class="settings-input" id="cfg-seed" placeholder="1234" style="font-family:monospace;letter-spacing:2px">
       </div>
     </div>
+    <div class="settings-section license-exempt">
+      <div class="settings-title">License</div>
+      <div class="settings-row" style="flex-direction:column;align-items:stretch;gap:2px">
+        <div class="settings-label" id="licenseStatusLabel">No license active</div>
+        <div class="settings-sub" id="licenseStatusSub"></div>
+      </div>
+      <div class="settings-row">
+        <button class="test-btn" style="margin:0" onclick="openLicenseModal()">Enter / change license key</button>
+      </div>
+    </div>
+    <div class="settings-section">
+      <div class="settings-title">Relay wiring</div>
+      <div class="settings-sub" style="padding:0 14px 8px">Which relay contact your lights are physically wired to — the ESP32 uses this to invert its signal correctly. Applied immediately to this profile's Firebase; the ESP32 needs a reboot to pick it up.</div>
+      <div class="ov-btns" style="padding:0 14px 12px">
+        <button class="ov-btn" id="rw-nc" onclick="setRelayWiring('NC')">
+          <span class="ov-icon">🔒</span>Normally Closed<small>Fail-safe ON</small>
+        </button>
+        <button class="ov-btn" id="rw-no" onclick="setRelayWiring('NO')">
+          <span class="ov-icon">🔓</span>Normally Open<small>Fail-safe OFF</small>
+        </button>
+      </div>
+    </div>
     <div class="admin-code-box">
       <div class="admin-code-lbl">Today's admin code</div>
       <div class="admin-code-val" id="adminCodeDisplay">----</div>
@@ -312,6 +400,7 @@
     <div class="qr-section">
       <div class="settings-title" style="padding:0 0 8px">Activation page QR code</div>
       <div id="qrHidden" style="display:none">
+        <div class="qr-url" id="qrProfileName" style="font-weight:600;color:var(--text);margin-bottom:4px"></div>
         <div class="qr-box"><div id="qrCanvas"></div></div>
         <div class="qr-url" id="qrUrlText"></div>
       </div>
@@ -321,10 +410,15 @@
       </div>
     </div>
     <div class="settings-section">
-      <div class="settings-title">Room names</div>
+      <div class="settings-title">Room names &amp; GPIO pins</div>
+      <div class="settings-sub" style="padding:0 14px 8px">Used by the ESP32 firmware to know which pin controls each room</div>
       <div id="roomNameInputs"></div>
+      <div class="settings-row">
+        <button class="add-slot-btn" onclick="addRoom()">+ Add room</button>
+      </div>
     </div>
-    <button class="save-btn" onclick="saveSettings()">Save settings</button>
+    <button class="save-btn" onclick="saveActiveProfile()">Save changes to this profile</button>
+    <button class="test-btn" onclick="saveAsNewProfile()">Save as new profile</button>
     <button class="test-btn" onclick="testConnection()">Test Firebase connection</button>
     <div id="settingsMsg"></div>
     <div class="log-wrap">
@@ -335,15 +429,15 @@
 </div>
 
 <div class="bottom-nav">
-  <button class="nav-btn active" onclick="showPage('dashboard',this)">
+  <button class="nav-btn active" id="nav-dashboard" onclick="showPage('dashboard',this)">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
     Rooms
   </button>
-  <button class="nav-btn" onclick="showPage('timeline',this)">
+  <button class="nav-btn" id="nav-timeline" onclick="showPage('timeline',this)">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
     Timeline
   </button>
-  <button class="nav-btn" onclick="showPage('settings',this)">
+  <button class="nav-btn" id="nav-settings" onclick="showPage('settings',this)">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
     Settings
   </button>
@@ -355,22 +449,101 @@
 
 <script>
 // ── State ────────────────────────────────────────────────────
+// Matches the ESP32 sketch's current hardcoded RELAY_PINS[]/LED_PINS[] wiring —
+// used as sensible defaults until the ESP32 firmware reads these from Firebase.
+const DEFAULT_RELAY_PINS = [26, 27, 14, 12, 13, 15];
+const DEFAULT_LED_PINS   = [2, 4, 5, 18, 19, 21];
+
 const state = {
-  rooms: Array.from({length:6}, (_,i) => ({
+  rooms: makeBlankRooms(),
+  profiles: [],
+  activeProfileId: null,
+  log: [],
+  schedDay: 0,
+  licenseKey: null
+};
+
+function makeBlankRooms() {
+  return Array.from({length:6}, (_,i) => ({
     id: i+1, name: `Room ${i+1}`,
     override: null,
+    relayPin: DEFAULT_RELAY_PINS[i],
+    ledPin: DEFAULT_LED_PINS[i],
     expanded: false, panelTab: 'slot',
     slots: { 0: [], 1: [] },
     recurring: { days: [], start: '09:00', end: '10:00' }
-  })),
-  config: { dbUrl: '', apiKey: '', adminSeed: '1234' },
-  log: [],
-  schedDay: 0
-};
+  }));
+}
 const DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 let fbConnected = false;
 let fbListener = null;
 let tlView = '12h';
+// Tracks the savedAt this tab last read/wrote — lets persist() detect when
+// another tab has saved more recently, so a stale background tab can't
+// silently clobber a newer save (e.g. an old tab left open elsewhere).
+let lastKnownSavedAt = 0;
+
+// ── License gate ─────────────────────────────────────────────
+// Shared secret with the Room Controller entry in the License Generator app
+// (Pay Up Partners / Room Controller / etc registry). Stored as character
+// codes rather than a literal string to avoid casual discovery in source —
+// obfuscation, not encryption; keep this file private the same way the
+// generator itself is kept private.
+const LICENSE_SECRET = [82,79,79,77,67,84,82,76,95,76,73,67,95,50,48,50,53,95,36,101,99,114,51,116,95,75,51,121,33];
+
+function _licenseSecretString(codes) {
+  return codes.map(c => String.fromCharCode(c)).join('');
+}
+
+async function licenseHmacHex(message, secretCodes) {
+  const secret = _licenseSecretString(secretCodes);
+  const enc = new TextEncoder();
+  const keyData = enc.encode(secret);
+  const msgData = enc.encode(message);
+  const cryptoKey = await crypto.subtle.importKey('raw', keyData, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const sig = await crypto.subtle.sign('HMAC', cryptoKey, msgData);
+  const bytes = new Uint8Array(sig);
+  let hex = '';
+  for (let i = 0; i < bytes.length; i++) hex += ('0' + bytes[i].toString(16)).slice(-2);
+  return hex;
+}
+
+function decodeLicenseKey(raw) {
+  try {
+    const obj = JSON.parse(atob((raw || '').trim()));
+    if (!obj || typeof obj.n !== 'string' || typeof obj.h !== 'string') return null;
+    return obj;
+  } catch (e) { return null; }
+}
+
+function todayISO() {
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+
+// Validates a raw license key string against LICENSE_SECRET. Mirrors the
+// generation logic in the License Generator app exactly (perpetual: hash of
+// the name; date-restricted: hash of name+validFrom+validTo) so a key
+// produced there verifies here without any shared server round-trip.
+async function validateLicenseKey(raw) {
+  const obj = decodeLicenseKey(raw);
+  if (!obj) return { valid: false, reason: 'malformed' };
+  const isDateRestricted = obj.f !== undefined && obj.t !== undefined;
+  const message = isDateRestricted ? (obj.n + obj.f + obj.t) : obj.n;
+  const expectedHash = await licenseHmacHex(message, LICENSE_SECRET);
+  if (expectedHash !== obj.h) return { valid: false, reason: 'invalid' };
+  const result = {
+    valid: true, name: obj.n,
+    licenseType: isDateRestricted ? 'date-restricted' : 'perpetual',
+    validFrom: obj.f || null, validTo: obj.t || null
+  };
+  if (isDateRestricted) {
+    const today = todayISO();
+    if (today < obj.f) return { valid: false, reason: 'not-yet-active', name: obj.n, validFrom: obj.f, validTo: obj.t };
+    if (today > obj.t) return { valid: false, reason: 'expired', name: obj.n, validFrom: obj.f, validTo: obj.t };
+  }
+  return result;
+}
 
 // ── Code helpers ─────────────────────────────────────────────
 // Normalize Firebase slots — converts object {0:{...}} to array [{...}]
@@ -387,6 +560,7 @@ function normalizeSlots(slots) {
 let recModalRoomId = null;
 
 function openRecurringModal(roomId) {
+  if (!requireLicense('edit a recurring schedule')) return;
   recModalRoomId = roomId;
   const r = state.rooms.find(x => x.id === roomId);
   document.getElementById('recModalTitle').textContent = 'Recurring — ' + r.name;
@@ -421,6 +595,7 @@ function toggleRecDay(i) {
 }
 
 async function saveRecurringFromModal() {
+  if (!requireLicense('edit a recurring schedule')) return;
   if (!recModalRoomId) return;
   const r = state.rooms.find(x => x.id === recModalRoomId);
   const s = document.getElementById('rec_start').value;
@@ -437,8 +612,114 @@ async function saveRecurringFromModal() {
 let modalRoomId  = null;
 let modalDay     = 0;
 
+// ── Day-view 30-min time picker (inside the slot modal) ────────
+let modalGridBuilt    = false;
+let modalGridAnchor   = null; // block index waiting for its range partner, or null
+let modalGridSelStart = null; // first selected block index, or null if nothing selected
+let modalGridSelEnd   = null; // last selected block index (inclusive)
+
+function timeGridLabel(idx) {
+  const mins = idx * 30;
+  return String(Math.floor(mins / 60)).padStart(2, '0') + ':' + String(mins % 60).padStart(2, '0');
+}
+
+function buildTimeGridHtml() {
+  let html = '';
+  for (let i = 0; i < 48; i++) {
+    html += `<button type="button" class="time-block" id="tb_${i}" onclick="gridBlockClick(${i})">${timeGridLabel(i)}</button>`;
+  }
+  return html;
+}
+
+// Tap 1 sets the range's start anchor; tap 2 fills everything between it and
+// the new tap (in either order) and finalizes the range — the next tap then
+// starts a fresh single-block selection rather than extending indefinitely,
+// which keeps the two-tap gesture unambiguous on a touch screen.
+function gridBlockClick(idx) {
+  if (modalGridAnchor === null) {
+    modalGridAnchor = idx;
+    modalGridSelStart = idx;
+    modalGridSelEnd = idx;
+  } else {
+    modalGridSelStart = Math.min(modalGridAnchor, idx);
+    modalGridSelEnd   = Math.max(modalGridAnchor, idx);
+    modalGridAnchor = null;
+  }
+  renderGridSelection();
+  syncModalTimesFromGrid();
+}
+
+function clearGridSelection() {
+  modalGridAnchor = null;
+  modalGridSelStart = null;
+  modalGridSelEnd = null;
+  renderGridSelection();
+}
+
+function renderGridSelection() {
+  for (let i = 0; i < 48; i++) {
+    const el = document.getElementById('tb_' + i);
+    if (!el) continue;
+    const inRange = modalGridSelStart !== null && i >= modalGridSelStart && i <= modalGridSelEnd;
+    el.classList.toggle('selected', inRange);
+    el.classList.toggle('anchor', modalGridAnchor === i);
+  }
+}
+
+function syncModalTimesFromGrid() {
+  if (modalGridSelStart === null) return;
+  document.getElementById('m_start').value = timeGridLabel(modalGridSelStart);
+  document.getElementById('m_end').value   = timeGridLabel(modalGridSelEnd + 1);
+}
+
+// Reflects the modal's current Start/End inputs onto the grid when they land
+// exactly on 30-min boundaries (e.g. the 09:00–10:00 default, or after the
+// user picks via the grid itself). A manually-typed time that doesn't align
+// to a half-hour just leaves the grid unselected — it's a shortcut layer on
+// top of the inputs, not a replacement for them.
+function syncGridFromModalTimes() {
+  const toIdx = (t) => {
+    if (!t) return null;
+    const [h, m] = t.split(':').map(Number);
+    if (isNaN(h) || isNaN(m)) return null;
+    return (h * 60 + m) / 30;
+  };
+  const si = toIdx(document.getElementById('m_start').value);
+  const ei = toIdx(document.getElementById('m_end').value);
+  if (Number.isInteger(si) && Number.isInteger(ei) && si >= 0 && ei > si && ei <= 48) {
+    modalGridSelStart = si;
+    modalGridSelEnd = ei - 1;
+  } else {
+    modalGridSelStart = null;
+    modalGridSelEnd = null;
+  }
+  modalGridAnchor = null;
+  renderGridSelection();
+}
+
+// Marks blocks that overlap an existing slot for the modal's current
+// room+day with a small dot — purely informational, doesn't block picking
+// that range again (overlapping slots are allowed elsewhere in the app too).
+function renderGridOccupancy() {
+  const r = modalRoomId ? state.rooms.find(x => x.id === modalRoomId) : null;
+  const slots = (r && r.slots[modalDay]) || [];
+  const occupied = new Array(48).fill(false);
+  slots.forEach(sl => {
+    const [sh, sm] = (sl.s || '').split(':').map(Number);
+    const [eh, em] = (sl.e || '').split(':').map(Number);
+    if (isNaN(sh) || isNaN(sm) || isNaN(eh) || isNaN(em)) return;
+    const si = Math.floor((sh * 60 + sm) / 30);
+    const ei = Math.ceil((eh * 60 + em) / 30);
+    for (let i = Math.max(0, si); i < Math.min(48, ei); i++) occupied[i] = true;
+  });
+  for (let i = 0; i < 48; i++) {
+    const el = document.getElementById('tb_' + i);
+    if (el) el.classList.toggle('occupied', occupied[i]);
+  }
+}
+
 function openSlotModal(roomId) {
-  showToast("Opening slot modal for room " + roomId);
+  if (!requireLicense('add a slot')) return;
   modalRoomId = roomId;
   modalDay    = state.schedDay;
   const r     = state.rooms.find(x => x.id === roomId);
@@ -451,6 +732,12 @@ function openSlotModal(roomId) {
   document.getElementById('m_recurring').checked = false;
   document.getElementById('m_coderow').style.opacity = '1';
   document.getElementById('m_coderow').style.pointerEvents = '';
+  // Day-view time picker — built once, then just re-synced on every open
+  if (!modalGridBuilt) {
+    document.getElementById('modalTimeGrid').innerHTML = buildTimeGridHtml();
+    modalGridBuilt = true;
+  }
+  syncGridFromModalTimes(); // highlights the 09:00–10:00 default
   // Day buttons
   setModalDay(state.schedDay);
   // Recurring disabled for tomorrow
@@ -485,6 +772,7 @@ function setModalDay(d) {
     lbl.textContent = 'Repeat daily (recurring)';
     lbl.style.opacity = '1';
   }
+  renderGridOccupancy(); // today/tomorrow have different existing slots
 }
 
 function modalToggleCode(checked) {
@@ -504,6 +792,7 @@ function modalRefreshCode() {
 }
 
 async function saveSlotFromModal() {
+  if (!requireLicense('add a slot')) return;
   if (!modalRoomId) return;
   const r = state.rooms.find(x => x.id === modalRoomId);
   const s = document.getElementById('m_start').value;
@@ -555,6 +844,7 @@ function generate4DigitCode() {
 }
 
 async function editSlotCode(roomId, slotIdx) {
+  if (!requireLicense('change a slot code')) return;
   const r = state.rooms.find(x => x.id === roomId);
   const slot = r.slots[state.schedDay][slotIdx];
   const current = slot.code || '';
@@ -577,6 +867,18 @@ async function editSlotCode(roomId, slotIdx) {
   slot.lockedUntil = null;
   persist();
   await pushRoom(roomId - 1);
+  // pushRoom()'s per-slot write deliberately excludes activation fields (see
+  // its own comment) so routine saves can't clobber a real activation from
+  // activate.html — but that means this reset needs its own direct write,
+  // same technique as deactivateSlot(), or the old activatedAt stays live in
+  // Firebase and gets synced right back, silently undoing the reset above.
+  const base = `/rooms/room${roomId}/slots/${slotIdx}`;
+  await fbPatch(base, {
+    activatedAt: null,
+    activatedBy: null,
+    attempts: 0,
+    lockedUntil: null
+  });
   renderDashboard();
 }
 
@@ -622,6 +924,7 @@ function toMinsStr(t) {
 
 // ── Slot activation ───────────────────────────────────────────
 async function activateSlot(roomId, slotIdx) {
+  if (!requireLicense('activate a slot')) return;
   const r = state.rooms.find(x => x.id === roomId);
   const slot = r.slots[0][slotIdx];
   const now = Date.now();
@@ -642,6 +945,7 @@ async function activateSlot(roomId, slotIdx) {
 }
 
 async function deactivateSlot(roomId, slotIdx) {
+  if (!requireLicense('deactivate a slot')) return;
   const r = state.rooms.find(x => x.id === roomId);
   const slot = r.slots[0][slotIdx];
   slot.activatedAt = null;
@@ -667,18 +971,22 @@ async function deactivateSlot(roomId, slotIdx) {
 let qrGenerated = false;
 
 function showQR() {
+  const p = getActiveProfile();
+  if (!p.dbUrl) { showToast('Set this profile\'s Database URL first, then Show QR'); return; }
+  if (!p.fbNum) { showToast('Save this profile first — its Firebase number hasn\'t been assigned yet'); return; }
   const baseUrl = window.location.href
     .replace('index.html', '')
     .replace(/\/$/, '');
-  const activateUrl = baseUrl + '/activate.html';
+  const activateUrl = baseUrl + '/activate.html?db=' + encodeURIComponent(p.dbUrl) + '&p=' + p.fbNum;
 
   // Show the QR panel
   document.getElementById('qrHidden').style.display = 'block';
   document.getElementById('showQrBtn').style.display = 'none';
   document.getElementById('printQrBtn').style.display = 'block';
+  document.getElementById('qrProfileName').textContent = p.name;
   document.getElementById('qrUrlText').textContent = activateUrl;
 
-  // Generate QR only once — wait for QRCode library to load if needed
+  // Generate QR only once per profile — wait for QRCode library to load if needed
   if (!qrGenerated) {
     document.getElementById('qrCanvas').innerHTML = '';
     const tryGenerate = () => {
@@ -708,8 +1016,11 @@ function showQR() {
 }
 
 function printQR() {
+  const p = getActiveProfile();
+  if (!p.dbUrl) { showToast('Set this profile\'s Database URL first'); return; }
+  if (!p.fbNum) { showToast('Save this profile first — its Firebase number hasn\'t been assigned yet'); return; }
   const baseUrl = window.location.href.replace('index.html','').replace(/\/$/, '');
-  const activateUrl = baseUrl + '/activate.html';
+  const activateUrl = baseUrl + '/activate.html?db=' + encodeURIComponent(p.dbUrl) + '&p=' + p.fbNum;
   const win = window.open('', '_blank');
   // Use string concat to avoid script-closing tag inside string breaking parser
   const scriptTag = '<scr' + 'ipt src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></' + 'script>';
@@ -722,7 +1033,7 @@ function printQR() {
     '@media print{button{display:none;}}</style>' +
     scriptTag +
     '</head><body>' +
-    '<h2>Room Controller</h2>' +
+    '<h2>Room Controller — ' + p.name + '</h2>' +
     '<p>Scan to activate your room slot</p>' +
     '<div id="qr" style="display:inline-block;background:white;padding:12px;border:1px solid #ddd;border-radius:8px"></div>' +
     '<div class="url">' + activateUrl + '</div>' +
@@ -735,8 +1046,29 @@ function printQR() {
 
 // ── Persist ──────────────────────────────────────────────────
 function persist() {
+  // Guard against a stale tab (e.g. an old tab left open in the background)
+  // clobbering a newer save made by another tab. Peek at what's actually in
+  // localStorage right now — if it's newer than what this tab last knew
+  // about, someone else saved after we last synced; skip this write instead
+  // of overwriting their newer data with our possibly-stale in-memory state.
+  try {
+    const current = JSON.parse(localStorage.getItem('rc_fb') || '{}');
+    const currentSavedAt = current.savedAt || 0;
+    if (currentSavedAt > lastKnownSavedAt) {
+      lastKnownSavedAt = currentSavedAt;
+      addLog('error', 'Newer data found from another tab — reload this tab to avoid losing changes');
+      showToast('⚠️ Newer data from another tab — please reload');
+      return;
+    }
+  } catch(e) {}
+
+  const savedAt = Date.now();
+  lastKnownSavedAt = savedAt;
   localStorage.setItem('rc_fb', JSON.stringify({
-    rooms: state.rooms, config: state.config, log: state.log.slice(0,30)
+    rooms: state.rooms, profiles: state.profiles,
+    activeProfileId: state.activeProfileId, log: state.log.slice(0,30),
+    licenseKey: state.licenseKey,
+    savedAt
   }));
 }
 
@@ -751,22 +1083,116 @@ function hydrate() {
         state.rooms[i].slots[1] = normalizeSlots(state.rooms[i].slots[1]);
       }
     });
-    if (d.config) Object.assign(state.config, d.config);
     if (d.log) state.log = d.log;
+
+    if (Array.isArray(d.profiles) && d.profiles.length) {
+      state.profiles = d.profiles;
+      state.activeProfileId = d.activeProfileId || d.profiles[0].id;
+    } else if (d.config && (d.config.dbUrl || d.config.apiKey)) {
+      // Migrate legacy single-config format (pre-profiles) into a "Default" profile
+      const p = { id: makeProfileId(), name: 'Default',
+        dbUrl: d.config.dbUrl || '', apiKey: d.config.apiKey || '',
+        adminSeed: d.config.adminSeed || '1234', relayWiring: 'NC' };
+      state.profiles = [p];
+      state.activeProfileId = p.id;
+    }
+    if (d.licenseKey) state.licenseKey = d.licenseKey;
+    lastKnownSavedAt = d.savedAt || 0;
+  } catch(e) {}
+
+  if (!state.profiles.length) {
+    const p = { id: makeProfileId(), name: 'Default', dbUrl: '', apiKey: '', adminSeed: '1234', relayWiring: 'NC' };
+    state.profiles = [p];
+    state.activeProfileId = p.id;
+  }
+  if (!getActiveProfile()) state.activeProfileId = state.profiles[0].id;
+}
+
+function makeProfileId() {
+  return 'p_' + Date.now().toString(36) + Math.random().toString(36).slice(2,8);
+}
+
+function getActiveProfile() {
+  return state.profiles.find(p => p.id === state.activeProfileId) || state.profiles[0];
+}
+
+// Allocates this profile's numeric Firebase key (/profiles/{n}) the first
+// time it's saved with a dbUrl. Numbering is scoped per-database — reads
+// whatever's under /profiles at that specific dbUrl and picks the next one,
+// so two profiles pointing at different databases never need to coordinate.
+// Must be called while `p` is already the active profile (fbGet/fbSet below
+// resolve against getActiveProfile()), and BEFORE any room data is pushed,
+// since pushRoom()/etc. rely on p.fbNum already being set to build their paths.
+async function ensureProfileNumber(p) {
+  if (p.fbNum) return p.fbNum;
+  if (!p.dbUrl) return null;
+  const existing = await fbGet('/profiles'); // p.fbNum unset here → no prefix → correct bare path
+  let maxNum = 0;
+  if (existing && typeof existing === 'object') {
+    Object.keys(existing).forEach(k => {
+      const n = parseInt(k, 10);
+      if (!isNaN(n) && n > maxNum) maxNum = n;
+    });
+  }
+  const assigned = maxNum + 1;
+  await fbSet(`/profiles/${assigned}/name`, p.name); // still unprefixed — fbNum not set until after this
+  p.fbNum = assigned;
+  return assigned;
+}
+
+// Pushes a profile's display name to its own /profiles/{n}/name — built from
+// the EXPLICIT profile passed in, not the implicit active-profile helpers,
+// since renaming can target a profile that isn't currently active.
+async function pushProfileName(p) {
+  if (!p.dbUrl || !p.fbNum) return;
+  try {
+    await fetch(`${p.dbUrl}/profiles/${p.fbNum}/name.json`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify(p.name)
+    });
   } catch(e) {}
 }
 
+// Shown in the persistent header — same on Rooms, Timeline, and Settings —
+// so it's always clear which profile/site the current view belongs to.
+// With 2+ profiles it becomes a selector: picking one calls switchProfile(),
+// which already re-scopes the whole app (dashboard, timeline, Firebase
+// connection) — this is just another entry point into that same function.
+function updateHeaderProfile() {
+  const el = document.getElementById('headerProfileArea');
+  if (!el) return;
+  const active = getActiveProfile();
+  if (state.profiles.length <= 1) {
+    el.innerHTML = `<div class="header-profile">${active.name}</div>`;
+  } else {
+    el.innerHTML = `<select class="header-profile-select" onchange="switchProfile(this.value)">
+      ${state.profiles.map(p => `<option value="${p.id}"${p.id===active.id?' selected':''}>${p.name}</option>`).join('')}
+    </select>`;
+  }
+}
+
 // ── Firebase REST helpers ────────────────────────────────────
+// Profiles sharing one Firebase project are namespaced under /profiles/{n} —
+// name is just a display property, never part of the path (see
+// ensureProfileNumber()). No fbNum yet (not allocated) means no prefix —
+// this is exactly what lets ensureProfileNumber() itself read/write the
+// bare /profiles node before a number has been assigned.
+function profilePathPrefix(p) {
+  return (p && p.fbNum) ? `/profiles/${p.fbNum}` : '';
+}
+
 function fbUrl(path) {
-  return `${state.config.dbUrl}${path}.json`;
+  const p = getActiveProfile();
+  return `${p.dbUrl}${profilePathPrefix(p)}${path}.json`;
 }
 
 async function fbSet(path, value) {
-  if (!state.config.dbUrl) { showToast('Set Firebase URL in Settings'); return false; }
+  if (!getActiveProfile().dbUrl) { showToast('Set Firebase URL in Settings'); return false; }
   try {
     const res = await fetch(fbUrl(path), {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
       body: JSON.stringify(value)
     });
     if (!res.ok) throw new Error(await res.text());
@@ -781,11 +1207,11 @@ async function fbSet(path, value) {
 // PATCH — partial update, preserves fields not included
 // Use for room updates to preserve ESP32-written fields (lightOn, lastSeen)
 async function fbPatch(path, value) {
-  if (!state.config.dbUrl) { showToast('Set Firebase URL in Settings'); return false; }
+  if (!getActiveProfile().dbUrl) { showToast('Set Firebase URL in Settings'); return false; }
   try {
-    const res = await fetch(`${state.config.dbUrl}${path}.json`, {
+    const res = await fetch(fbUrl(path), {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
       body: JSON.stringify(value)
     });
     if (!res.ok) throw new Error(await res.text());
@@ -799,7 +1225,15 @@ async function fbPatch(path, value) {
 
 async function fbGet(path) {
   try {
-    const res = await fetch(fbUrl(path));
+    // Explicit Accept — without it, Firebase can occasionally serve the SSE
+    // event-stream format on this URL instead of plain JSON while a listener
+    // is open on the same path, which breaks res.json()
+    // cache: 'no-store' + a cache-busting query param — without both, a
+    // browser can still serve a stale cached response for a repeated GET on
+    // the exact same URL (confirmed: no-store alone wasn't enough), which
+    // silently breaks anything that reads-then-writes to decide what to do
+    // next, like ensureProfileNumber(). Matches activate.html's same fix.
+    const res = await fetch(fbUrl(path) + '?nc=' + Date.now(), { cache: 'no-store', headers: { 'Accept': 'application/json' } });
     if (!res.ok) throw new Error(await res.text());
     return await res.json();
   } catch(e) {
@@ -811,11 +1245,12 @@ async function fbGet(path) {
 
 // ── Firebase SSE listener (real-time) ───────────────────────
 function startFbListener() {
-  if (!state.config.dbUrl) return;
+  const p = getActiveProfile();
+  if (!p.dbUrl) return;
   if (fbListener) { fbListener.close(); fbListener = null; }
   // Firebase SSE requires Accept: text/event-stream header
   // EventSource sends this automatically but some browsers need the explicit param
-  const url = `${state.config.dbUrl}/rooms.json`;
+  const url = `${p.dbUrl}${profilePathPrefix(p)}/rooms.json`;
   let es;
   try {
     es = new EventSource(url);
@@ -858,7 +1293,7 @@ function syncFromFirebase(data) {
   // data is { room1: {...}, room2: {...}, ... }
   Object.keys(data || {}).forEach(key => {
     const idx = parseInt(key.replace('room','')) - 1;
-    if (idx < 0 || idx >= 6) return;
+    if (idx < 0 || idx >= state.rooms.length) return;
     const r = data[key];
 
     // Sync override — only accept null (clearing) from Firebase
@@ -901,7 +1336,7 @@ let pollingInterval = null;
 function startPolling() {
   if (pollingInterval) return; // already polling
   pollingInterval = setInterval(async () => {
-    if (!state.config.dbUrl) return;
+    if (!getActiveProfile().dbUrl) return;
 
     try {
       const data = await fbGet('/rooms');
@@ -929,6 +1364,8 @@ async function pushRoom(idx) {
   await fbPatch(roomBase, {
     override: r.override,
     name: r.name,
+    relayPin: r.relayPin,
+    ledPin: r.ledPin,
     updatedAt: Date.now()
   });
 
@@ -1046,6 +1483,7 @@ async function addSlot(id) {
 }
 
 async function deleteSlot(id, idx) {
+  if (!requireLicense('delete a slot')) return;
   const r = state.rooms.find(x => x.id === id);
   r.slots[state.schedDay].splice(idx, 1);
   persist(); await pushRoom(id-1); renderDashboard();
@@ -1141,6 +1579,7 @@ function toggleCopySource(src) {
 }
 
 async function copySlots(fromId) {
+  if (!requireLicense('copy slots')) return;
   if (copyState.selectedRooms.length === 0) { showToast('Select at least one target room'); return; }
   if (copyState.sources.length === 0) { showToast('Select at least one source'); return; }
 
@@ -1173,11 +1612,17 @@ async function copySlots(fromId) {
     const toRoom = state.rooms.find(r => r.id === toId);
 
     // Copy today + recurring slots → day 0
-    // Each copied slot gets a FRESH unique code + reset activation state
+    // Each copied slot gets a FRESH unique code + reset activation state.
+    // Written one-by-one at their own NEW indices — never as a wholesale
+    // overwrite of the whole slots array, since this room's existing slots
+    // (untouched by this copy) may have a real activation in Firebase from
+    // activate.html that hasn't synced to this browser yet; overwriting the
+    // whole array with this client's local snapshot would silently erase it.
     const day0slots = [...todaySlots, ...recurringSlots];
     if (day0slots.length > 0) {
       if (!toRoom.slots[0]) toRoom.slots[0] = [];
-      day0slots.forEach(sl => toRoom.slots[0].push({
+      const startIdx = normalizeSlots(toRoom.slots[0]).length;
+      const newSlots = day0slots.map(sl => ({
         ...sl,
         code: generate4DigitCode(),  // fresh code per room
         activatedAt: null,           // reset activation
@@ -1185,6 +1630,10 @@ async function copySlots(fromId) {
         attempts: 0,
         lockedUntil: null
       }));
+      newSlots.forEach(sl => toRoom.slots[0].push(sl));
+      for (let i = 0; i < newSlots.length; i++) {
+        await fbPatch(`/rooms/room${toId}/slots/${startIdx + i}`, newSlots[i]);
+      }
       // No merging — each copied slot is independent
     }
 
@@ -1200,17 +1649,16 @@ async function copySlots(fromId) {
         lockedUntil: null
       }));
       // No merging — each copied slot is independent
+      // slotsT IS safe to write wholesale — tomorrow's slots can never have a
+      // real activation yet (activate.html only ever shows today's slots),
+      // the same assumption pushRoom() already relies on for this field.
+      const slotsT = normalizeSlots(toRoom.slots[1]).map(sl => ({
+        s: sl.s, e: sl.e, recurring: sl.recurring, code: sl.code, date: sl.date
+      }));
+      await fbPatch(`/rooms/room${toId}`, { slotsT });
     }
 
-    // Write slots directly to Firebase path as well (belt and suspenders)
-    // pushRoom uses PATCH which may not work if slots node doesn't exist yet
-    const slotsToWrite = normalizeSlots(toRoom.slots[0]);
-    if (slotsToWrite.length > 0) {
-      await fbPatch(`/rooms/room${toId}`, {
-        slots: slotsToWrite,
-        updatedAt: Date.now()
-      });
-    }
+    await fbPatch(`/rooms/room${toId}`, { updatedAt: Date.now() });
     copied++;
   }
 
@@ -1432,44 +1880,301 @@ function renderTimeline() {
 
 // ── Settings ─────────────────────────────────────────────────
 function renderSettings() {
-  document.getElementById('cfg-url').value  = state.config.dbUrl;
-  document.getElementById('cfg-key').value  = state.config.apiKey;
-  document.getElementById('cfg-seed').value = state.config.adminSeed || '1234';
+  const p = getActiveProfile();
+  document.getElementById('profileList').innerHTML = state.profiles.map(renderProfileRow).join('');
+  document.getElementById('cfg-url').value  = p.dbUrl;
+  document.getElementById('cfg-key').value  = p.apiKey;
+  document.getElementById('cfg-seed').value = p.adminSeed || '1234';
   // Show admin code
-  const code = getAdminCode(state.config.adminSeed);
+  const code = getAdminCode(p.adminSeed);
   document.getElementById('adminCodeDisplay').textContent = code;
   document.getElementById('adminCodeDate').textContent =
     'Valid today: ' + new Date().toLocaleDateString([],{weekday:'short',month:'short',day:'numeric'});
+  const relayWiring = p.relayWiring || 'NC';
+  document.getElementById('rw-nc').className = 'ov-btn' + (relayWiring === 'NC' ? ' active-auto' : '');
+  document.getElementById('rw-no').className = 'ov-btn' + (relayWiring === 'NO' ? ' active-auto' : '');
   // QR generated only when user taps Show QR button
-  document.getElementById('roomNameInputs').innerHTML = state.rooms.map(r =>
-    `<div class="settings-row" style="flex-direction:column;align-items:stretch;gap:4px">
-      <div class="settings-label" style="font-size:12px;color:var(--muted)">Room ${r.id}</div>
-      <input class="settings-input" id="rname_${r.id}" value="${r.name}" style="font-family:-apple-system,sans-serif">
-    </div>`
-  ).join('');
+  document.getElementById('roomNameInputs').innerHTML = state.rooms.map(renderRoomSettingsRow).join('');
+  renderLicenseStatus();
   renderLog();
 }
 
-function saveSettings() {
-  state.config.dbUrl    = document.getElementById('cfg-url').value.trim().replace(/\/$/, '');
-  state.config.apiKey   = document.getElementById('cfg-key').value.trim();
-  state.config.adminSeed = document.getElementById('cfg-seed').value.trim() || '1234';
-  // Push seed to Firebase so activate.html can compute admin code
-  if (state.config.dbUrl) {
-    fbSet('/config/adminSeed', state.config.adminSeed);
+function setRelayWiring(mode) {
+  if (!requireLicense('change relay wiring')) return;
+  const p = getActiveProfile();
+  const current = p.relayWiring || 'NC';
+  if (mode === current) return; // already selected — nothing to confirm
+
+  const label = mode === 'NC' ? 'Normally Closed (fail-safe ON)' : 'Normally Open (fail-safe OFF)';
+  const confirmed = confirm(
+    `Change relay wiring to ${label}?\n\n` +
+    `Only do this if your relay's load side is physically wired to match — ` +
+    `otherwise every light will turn ON when it should turn OFF, and vice versa.\n\n` +
+    `Requires an ESP32 reboot to take effect.`
+  );
+  if (!confirmed) return;
+
+  p.relayWiring = mode;
+  persist();
+  renderSettings();
+  if (p.dbUrl) fbSet('/config/relayWiring', mode);
+  showToast(`Relay wiring set to ${mode === 'NC' ? 'Normally Closed' : 'Normally Open'} — reboot the ESP32 to apply`);
+}
+
+function renderRoomSettingsRow(r) {
+  const noLed = r.ledPin === null || r.ledPin === undefined;
+  return `<div class="settings-row" style="flex-direction:column;align-items:stretch;gap:4px">
+    <div style="display:flex;align-items:center;justify-content:space-between">
+      <div class="settings-label" style="font-size:12px;color:var(--muted)">Room ${r.id}</div>
+      <button class="profile-btn" onclick="deleteRoom(${r.id})" title="Delete room">🗑</button>
+    </div>
+    <input class="settings-input" id="rname_${r.id}" value="${r.name}" style="font-family:-apple-system,sans-serif">
+    <div style="display:flex;gap:8px">
+      <div style="flex:1">
+        <div class="settings-sub" style="margin-bottom:4px">Relay GPIO</div>
+        <input class="settings-input" id="rrelay_${r.id}" type="number" min="0" max="39" value="${r.relayPin ?? ''}" style="font-family:monospace">
+      </div>
+      <div style="flex:1">
+        <div class="settings-sub" style="margin-bottom:4px">LED GPIO</div>
+        <input class="settings-input" id="rled_${r.id}" type="number" min="0" max="39" value="${noLed ? '' : r.ledPin}" ${noLed ? 'disabled' : ''} style="font-family:monospace">
+        <label style="display:flex;align-items:center;gap:5px;margin-top:4px;font-size:11px;color:var(--muted);cursor:pointer">
+          <input type="checkbox" id="rnoled_${r.id}" ${noLed?'checked':''} onchange="toggleNoLed(${r.id}, this.checked)" style="width:14px;height:14px">
+          No LED for this room
+        </label>
+      </div>
+    </div>
+  </div>`;
+}
+
+function toggleNoLed(id, checked) {
+  const input = document.getElementById(`rled_${id}`);
+  if (!input) return;
+  input.disabled = checked;
+  if (checked) input.value = '';
+}
+
+function renderProfileRow(p) {
+  const isActive = p.id === state.activeProfileId;
+  return `<div class="profile-row${isActive?' active':''}" ${isActive?'':`onclick="switchProfile('${p.id}')"`}>
+    <div>
+      <div class="profile-name">${p.name}${isActive?' <span class="profile-active-tag">Active</span>':''}${p.fbNum ? ` <span class="profile-num-tag">#${p.fbNum}</span>` : ''}</div>
+      <div class="profile-url">${p.dbUrl ? truncateUrl(p.dbUrl) : 'No DB URL set yet'}</div>
+    </div>
+    <div class="profile-actions">
+      <button class="profile-btn" onclick="event.stopPropagation();renameProfile('${p.id}')" title="Rename">✎</button>
+      <button class="profile-btn" onclick="event.stopPropagation();deleteProfile('${p.id}')" title="Delete">🗑</button>
+    </div>
+  </div>`;
+}
+
+function truncateUrl(url) {
+  return url.length > 40 ? url.slice(0, 24) + '…' + url.slice(-12) : url;
+}
+
+// ── Profile management ────────────────────────────────────────
+async function switchProfile(id) {
+  if (id === state.activeProfileId) return;
+  const p = state.profiles.find(x => x.id === id);
+  if (!p) return;
+  resetConnectionForProfileChange();
+  state.activeProfileId = id;
+  state.rooms = makeBlankRooms();
+  persist();
+  updateHeaderProfile();
+  renderDashboard();
+  renderSettings();
+  addLog('ok', `Switched to profile "${p.name}"`);
+  showToast(`Switched to ${p.name} — connecting…`);
+  if (p.dbUrl) {
+    await ensureProfileNumber(p); // must resolve before the listener opens, so it reads the right /profiles/{n} path
+    persist();
+    startFbListener();
   }
+}
+
+function clearProfileForm() {
+  document.getElementById('cfg-url').value  = '';
+  document.getElementById('cfg-key').value  = '';
+  document.getElementById('cfg-seed').value = '1234';
+  showToast('Enter the new site\'s Firebase details, then tap "Save as new profile"');
+}
+
+function renameProfile(id) {
+  if (!requireLicense('rename a profile')) return;
+  const p = state.profiles.find(x => x.id === id);
+  if (!p) return;
+  const name = prompt('Rename profile:', p.name);
+  if (name === null) return;
+  p.name = name.trim() || p.name;
+  persist();
+  updateHeaderProfile();
+  renderSettings();
+  pushProfileName(p); // name is just a display property — safe to update in place, no path/data implications
+}
+
+function deleteProfile(id) {
+  if (!requireLicense('delete a profile')) return;
+  if (state.profiles.length <= 1) { showToast('At least one profile is required'); return; }
+  const p = state.profiles.find(x => x.id === id);
+  if (!p) return;
+  if (!confirm(`Delete profile "${p.name}"? This only removes it from this device — Firebase data is untouched.`)) return;
+  const wasActive = state.activeProfileId === id;
+  state.profiles = state.profiles.filter(x => x.id !== id);
+  if (wasActive) {
+    switchProfile(state.profiles[0].id);
+  } else {
+    persist();
+    updateHeaderProfile(); // option list shrank — refresh even though the active profile didn't change
+    renderSettings();
+  }
+}
+
+function resetConnectionForProfileChange() {
+  if (fbListener) { fbListener.close(); fbListener = null; }
+  if (pollingInterval) { clearInterval(pollingInterval); pollingInterval = null; }
+  setConnStatus(false);
+  qrGenerated = false;
+  document.getElementById('qrHidden').style.display = 'none';
+  document.getElementById('showQrBtn').style.display = 'block';
+  document.getElementById('printQrBtn').style.display = 'none';
+}
+
+async function saveActiveProfile() {
+  if (!requireLicense('save profile settings')) return;
+  const p = getActiveProfile();
+  resetConnectionForProfileChange();
+  p.dbUrl     = document.getElementById('cfg-url').value.trim().replace(/\/$/, '');
+  p.apiKey    = document.getElementById('cfg-key').value.trim();
+  p.adminSeed = document.getElementById('cfg-seed').value.trim() || '1234';
+  applyRoomNameEdits();
+  persist();
+  if (p.dbUrl) await ensureProfileNumber(p); // before finishSaveSettings, which pushes room data using this profile's number
+  persist();
+  finishSaveSettings(p, `Saved changes to "${p.name}"`);
+}
+
+async function saveAsNewProfile() {
+  if (!requireLicense('create a new profile')) return;
+  const name = prompt('Name for this new profile (e.g. site or building name):', 'New Site');
+  if (name === null) return;
+  resetConnectionForProfileChange();
+  const p = {
+    id: makeProfileId(),
+    name: name.trim() || 'New Site',
+    dbUrl: document.getElementById('cfg-url').value.trim().replace(/\/$/, ''),
+    apiKey: document.getElementById('cfg-key').value.trim(),
+    adminSeed: document.getElementById('cfg-seed').value.trim() || '1234',
+    relayWiring: 'NC'
+  };
+  state.profiles.push(p);
+  state.activeProfileId = p.id; // ensureProfileNumber below resolves against getActiveProfile(), so this must be set first
+  state.rooms = makeBlankRooms();
+  persist();
+  if (p.dbUrl) await ensureProfileNumber(p);
+  persist();
+  finishSaveSettings(p, `Created profile "${p.name}"`);
+}
+
+function applyRoomNameEdits() {
   state.rooms.forEach(r => {
-    const el = document.getElementById(`rname_${r.id}`);
-    if (el) r.name = el.value.trim() || `Room ${r.id}`;
+    const nameEl  = document.getElementById(`rname_${r.id}`);
+    const relayEl = document.getElementById(`rrelay_${r.id}`);
+    const ledEl   = document.getElementById(`rled_${r.id}`);
+    const noLedEl = document.getElementById(`rnoled_${r.id}`);
+    if (nameEl) r.name = nameEl.value.trim() || `Room ${r.id}`;
+    if (relayEl && relayEl.value !== '') r.relayPin = parseInt(relayEl.value, 10);
+    if (noLedEl && noLedEl.checked) r.ledPin = null;
+    else if (ledEl && ledEl.value !== '') r.ledPin = parseInt(ledEl.value, 10);
+  });
+}
+
+// Non-blocking check — same GPIO assigned to more than one relay/LED is a wiring conflict
+function checkPinConflicts() {
+  const usedBy = {};
+  let conflict = null;
+  state.rooms.forEach(r => {
+    [['Relay', r.relayPin], ['LED', r.ledPin]].forEach(([kind, pin]) => {
+      if (pin === undefined || pin === null || pin === '') return;
+      const prev = usedBy[pin];
+      if (prev && !conflict) conflict = `GPIO ${pin}: ${prev} and Room ${r.id} (${kind})`;
+      else if (!prev) usedBy[pin] = `Room ${r.id} (${kind})`;
+    });
+  });
+  return conflict;
+}
+
+// Non-blocking check — a room with no relay pin can't control anything physically
+function checkMissingRelayPins() {
+  return state.rooms
+    .filter(r => r.relayPin === null || r.relayPin === undefined || r.relayPin === '')
+    .map(r => r.name);
+}
+
+function finishSaveSettings(p, message) {
+  // Push seed to Firebase so activate.html can compute admin code
+  if (p.dbUrl) {
+    fbSet('/config/adminSeed', p.adminSeed);
+    pushAllRooms();
+    startFbListener();
+  }
+  updateHeaderProfile();
+  renderDashboard();
+  renderSettings();
+  const msg = document.getElementById('settingsMsg');
+  msg.className='status-msg ok'; msg.textContent = message + ' — connecting…';
+  setTimeout(() => msg.textContent='', 3000);
+  const conflict = checkPinConflicts();
+  const missingRelay = checkMissingRelayPins();
+  if (conflict) showToast('⚠️ GPIO conflict — ' + conflict);
+  else if (missingRelay.length) showToast(`⚠️ No relay GPIO set for: ${missingRelay.join(', ')}`);
+}
+
+// ── Room management ────────────────────────────────────────────
+function addRoom() {
+  if (!requireLicense('add a room')) return;
+  applyRoomNameEdits(); // preserve any unsaved edits to other rooms before mutating the list
+  const newId = state.rooms.length + 1;
+  state.rooms.push({
+    id: newId, name: `Room ${newId}`,
+    override: null,
+    relayPin: null, ledPin: null,
+    expanded: false, panelTab: 'slot',
+    slots: { 0: [], 1: [] },
+    recurring: { days: [], start: '09:00', end: '10:00' }
   });
   persist();
-  startFbListener();
-  const msg = document.getElementById('settingsMsg');
-  msg.className='status-msg ok'; msg.textContent='Settings saved — connecting…';
-  setTimeout(() => msg.textContent='', 3000);
+  renderDashboard();
+  renderSettings();
+  if (getActiveProfile().dbUrl) pushRoom(state.rooms.length - 1);
+  showToast(`Added Room ${newId} — set its relay GPIO before use`);
+}
+
+async function deleteRoom(id) {
+  if (!requireLicense('delete a room')) return;
+  if (state.rooms.length <= 1) { showToast('At least one room is required'); return; }
+  const r = state.rooms.find(x => x.id === id);
+  if (!r) return;
+  if (!confirm(`Delete "${r.name}"? This removes it from the dashboard and Firebase for this profile.`)) return;
+  applyRoomNameEdits(); // preserve any unsaved edits to the remaining rooms
+  const oldCount = state.rooms.length;
+  state.rooms = state.rooms.filter(x => x.id !== id);
+  state.rooms.forEach((rm, i) => { rm.id = i + 1; }); // keep ids contiguous 1..N for simple Firebase paths
+  persist();
+  renderDashboard();
+  renderSettings();
+  if (getActiveProfile().dbUrl) {
+    // Renumbering shifted every room after the deleted one down by one path —
+    // clear the now-orphaned trailing Firebase nodes before rewriting the rest
+    for (let n = state.rooms.length + 1; n <= oldCount; n++) {
+      await fbSet(`/rooms/room${n}`, null);
+    }
+    await pushAllRooms();
+  }
+  showToast(`Deleted "${r.name}"`);
 }
 
 async function testConnection() {
+  if (!requireLicense('test the Firebase connection')) return;
   const msg = document.getElementById('settingsMsg');
   msg.className='status-msg ok'; msg.textContent='Testing…';
   const val = await fbGet('/rooms/room1/name');
@@ -1513,10 +2218,12 @@ function setConnStatus(ok) {
 
 // ── Navigation ────────────────────────────────────────────────
 function showPage(name, btn) {
+  if (!btn) btn = document.getElementById(`nav-${name}`);
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
   document.getElementById(`page-${name}`).classList.add('active');
-  btn.classList.add('active');
+  if (btn) btn.classList.add('active');
+  localStorage.setItem('rc_lastTab', name); // restored on next load — see boot sequence
   if (name === 'dashboard') renderDashboard();
   if (name === 'timeline')  renderTimeline();
   if (name === 'settings')  renderSettings();
@@ -1535,20 +2242,135 @@ function updateClock() {
     new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
 }
 
+// ── License gate UI ──────────────────────────────────────────
+function _licenseStatusMessage(result) {
+  if (!result) return { icon: '🔒', title: 'No License Active', msg: 'Activate a license to unlock full editing.' };
+  switch (result.reason) {
+    case 'expired':
+      return { icon: '⏳', title: 'License Expired',
+        msg: `The license for ${result.name} expired on ${result.validTo}. Enter a new license key to unlock full editing.` };
+    case 'not-yet-active':
+      return { icon: '⏳', title: 'License Not Yet Active',
+        msg: `This license for ${result.name} becomes valid on ${result.validFrom}.` };
+    case 'malformed':
+    case 'invalid':
+      return { icon: '⚠️', title: 'Invalid License Key', msg: 'That key could not be verified. Check it and try again.' };
+    default:
+      return { icon: '🔒', title: 'No License Active', msg: 'Activate a license to unlock full editing.' };
+  }
+}
+
+// Without a valid license the app stays fully open for day-to-day use —
+// viewing every page and toggling manual override on/off always works.
+// Only actions that change configuration or schedules (Settings edits,
+// slot/recurring creation, profile/room management) require an active
+// license. This flag is the single thing every gated action checks.
+let licenseValid = false;
+
+// Call at the top of any mutating action other than override on/off.
+// Returns true (and lets the caller proceed) only when licensed; otherwise
+// explains why and blocks it.
+function requireLicense(actionLabel) {
+  if (licenseValid) return true;
+  showToast('🔒 Activate a license to ' + (actionLabel || 'do this') + ' — see Settings → License');
+  return false;
+}
+
+function applyLicenseUIState() {
+  document.body.classList.toggle('license-locked', !licenseValid);
+  const banner = document.getElementById('licenseBanner');
+  if (banner) banner.style.display = licenseValid ? 'none' : '';
+}
+
+async function refreshLicenseState() {
+  const result = state.licenseKey ? await validateLicenseKey(state.licenseKey) : { valid: false };
+  licenseValid = result.valid;
+  applyLicenseUIState();
+  renderLicenseStatus();
+  return result;
+}
+
+// Re-checks periodically so a date-restricted license that expires while the
+// app is left open (e.g. an installed dashboard nobody closes) locks editing
+// again immediately, instead of only being caught on the next reload.
+function startLicenseWatch() {
+  setInterval(refreshLicenseState, 3600000);
+}
+
+// ── License status (Settings page) ───────────────────────────
+// Reads the cached licenseValid flag rather than re-validating on every
+// render (renderSettings() calls this often) — refreshLicenseState() is
+// what actually re-checks the key.
+function renderLicenseStatus() {
+  const labelEl = document.getElementById('licenseStatusLabel');
+  const subEl = document.getElementById('licenseStatusSub');
+  if (!labelEl || !subEl) return;
+  if (!state.licenseKey) { labelEl.textContent = 'No license active'; subEl.textContent = ''; return; }
+  const obj = decodeLicenseKey(state.licenseKey) || {};
+  if (!licenseValid) {
+    labelEl.textContent = 'License inactive';
+    subEl.textContent = obj.n ? `Was licensed to ${obj.n}` : '';
+    return;
+  }
+  labelEl.textContent = `Licensed to ${obj.n || ''}`;
+  subEl.textContent = (obj.f && obj.t) ? `Valid ${obj.f} – ${obj.t}` : 'Perpetual license';
+}
+
+function openLicenseModal() {
+  document.getElementById('licenseModalInput').value = '';
+  document.getElementById('licenseModalError').style.display = 'none';
+  document.getElementById('licenseModal').classList.add('show');
+}
+function closeLicenseModal() {
+  document.getElementById('licenseModal').classList.remove('show');
+}
+function licenseModalBackdropClick(e) {
+  if (e.target.id === 'licenseModal') closeLicenseModal();
+}
+async function saveLicenseFromModal() {
+  const raw = (document.getElementById('licenseModalInput').value || '').trim();
+  const errEl = document.getElementById('licenseModalError');
+  if (!raw) { errEl.textContent = 'Please enter a license key.'; errEl.style.display = ''; return; }
+  const result = await validateLicenseKey(raw);
+  if (!result.valid) { errEl.textContent = _licenseStatusMessage(result).msg; errEl.style.display = ''; return; }
+  state.licenseKey = raw;
+  persist();
+  closeLicenseModal();
+  await refreshLicenseState();
+  showToast('✅ License activated');
+}
+
 // ── Boot ──────────────────────────────────────────────────────
 hydrate();
-updateClock();
-setInterval(updateClock, 10000);
-setInterval(checkSchedules, 60000);
-setInterval(() => {
-  if (document.getElementById('page-dashboard').classList.contains('active')) renderDashboard();
-  if (document.getElementById('page-timeline').classList.contains('active'))  renderTimeline();
-}, 30000);
+bootApp();
+refreshLicenseState();
+startLicenseWatch();
 
-if (state.config.dbUrl) startFbListener();
-renderDashboard();
+function bootApp() {
+  _appBooted = true;
+  updateHeaderProfile();
+  updateClock();
+  setInterval(updateClock, 10000);
+  setInterval(checkSchedules, 60000);
+  setInterval(() => {
+    if (document.getElementById('page-dashboard').classList.contains('active')) renderDashboard();
+    if (document.getElementById('page-timeline').classList.contains('active'))  renderTimeline();
+  }, 30000);
 
-// Service worker registration with update detection
+  if (getActiveProfile().dbUrl) startFbListener();
+  renderDashboard();
+
+  // Restore whichever tab was open before the last reload, instead of always
+  // landing back on Rooms
+  const lastTab = localStorage.getItem('rc_lastTab');
+  if (lastTab && lastTab !== 'dashboard' && document.getElementById(`page-${lastTab}`)) {
+    showPage(lastTab);
+  }
+}
+
+// Service worker registration with update detection — kept independent of
+// the license gate so offline caching and update checks work even before
+// a license is activated.
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('sw.js').then(reg => {
     // Check for updates every 60 seconds
@@ -1621,13 +2443,18 @@ function applyUpdate() {
           <button class="modal-day-btn active" id="mdayBtn0" onclick="setModalDay(0)">Today</button>
           <button class="modal-day-btn" id="mdayBtn1" onclick="setModalDay(1)">Tomorrow</button>
         </div>
+        <div class="modal-grid-hint">
+          <span>Tap a block to start, tap another to select the range · <span style="color:var(--amber)">●</span> = already has a slot</span>
+          <span class="grid-clear-link" onclick="clearGridSelection()">Clear</span>
+        </div>
+        <div class="time-grid" id="modalTimeGrid"></div>
         <div class="modal-row">
           <label class="modal-label" for="m_start">Start</label>
-          <input class="modal-time" type="time" id="m_start" value="09:00">
+          <input class="modal-time" type="time" id="m_start" value="09:00" oninput="syncGridFromModalTimes()">
         </div>
         <div class="modal-row">
           <label class="modal-label" for="m_end">End</label>
-          <input class="modal-time" type="time" id="m_end" value="10:00">
+          <input class="modal-time" type="time" id="m_end" value="10:00" oninput="syncGridFromModalTimes()">
         </div>
         <div class="modal-divider"></div>
         <div class="modal-check-row">
@@ -1651,6 +2478,22 @@ function applyUpdate() {
     </div>
   </div>
 
+  <!-- ── License key modal (Settings → License) ──────────────── -->
+  <div class="modal-overlay" id="licenseModal" onclick="licenseModalBackdropClick(event)">
+    <div class="modal-box">
+      <div class="modal-header">
+        <span class="modal-title">License Key</span>
+        <button class="modal-close" onclick="closeLicenseModal()">×</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size:12px;color:var(--muted);margin-bottom:12px">Paste a new Room Controller license key to activate or renew.</p>
+        <textarea class="settings-input" id="licenseModalInput" rows="3" placeholder="Paste license key here" autocomplete="off" style="margin-bottom:12px"></textarea>
+        <div id="licenseModalError" class="status-msg err" style="display:none;margin-bottom:10px"></div>
+        <button class="modal-save-btn" onclick="saveLicenseFromModal()">Save &amp; Activate</button>
+        <button class="modal-cancel-btn" onclick="closeLicenseModal()">Cancel</button>
+      </div>
+    </div>
+  </div>
 
 </body>
 </html>
