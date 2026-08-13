@@ -242,6 +242,17 @@
     .all-btn.on  { border-color: var(--amber); color: var(--amber); }
     .all-btn.off { border-color: var(--red);   color: var(--red); }
     .all-btn.auto { border-color: var(--accent); color: var(--accent); }
+
+    /* ── License gate ─────────────────────────────────────────── */
+    .license-gate { position: fixed; inset: 0; background: var(--bg); z-index: 300;
+      display: none; align-items: center; justify-content: center; padding: 20px; }
+    .license-gate.show { display: flex; }
+    .license-gate-box { background: var(--card); border-radius: var(--radius); padding: 24px 20px;
+      width: min(92vw, 400px); box-shadow: 0 8px 32px rgba(0,0,0,0.5); text-align: center; }
+    .license-gate-icon { font-size: 40px; margin-bottom: 10px; }
+    .license-gate-title { font-size: 18px; font-weight: 600; margin-bottom: 8px; }
+    .license-gate-msg { font-size: 13px; color: var(--muted); margin-bottom: 16px; line-height: 1.5; }
+    .license-gate-box textarea.settings-input { min-height: 70px; resize: vertical; font-size: 12px; margin-bottom: 12px; }
   </style>
 </head>
 <body>
@@ -327,6 +338,16 @@
       </div>
     </div>
     <div class="settings-section">
+      <div class="settings-title">License</div>
+      <div class="settings-row" style="flex-direction:column;align-items:stretch;gap:2px">
+        <div class="settings-label" id="licenseStatusLabel">No license active</div>
+        <div class="settings-sub" id="licenseStatusSub"></div>
+      </div>
+      <div class="settings-row">
+        <button class="test-btn" style="margin:0" onclick="openLicenseModal()">Enter / change license key</button>
+      </div>
+    </div>
+    <div class="settings-section">
       <div class="settings-title">Relay wiring</div>
       <div class="settings-sub" style="padding:0 14px 8px">Which relay contact your lights are physically wired to — the ESP32 uses this to invert its signal correctly. Applied immediately to this profile's Firebase; the ESP32 needs a reboot to pick it up.</div>
       <div class="ov-btns" style="padding:0 14px 12px">
@@ -393,6 +414,18 @@
 
 </div>
 
+<!-- ── License gate — blocks the app until a valid key is active ──────── -->
+<div class="license-gate" id="licenseGate">
+  <div class="license-gate-box">
+    <div class="license-gate-icon" id="lgIcon">🔒</div>
+    <div class="license-gate-title" id="lgTitle">License Required</div>
+    <div class="license-gate-msg" id="lgMsg">Enter your Room Controller license key to continue.</div>
+    <textarea class="settings-input" id="lgKeyInput" rows="3" placeholder="Paste license key here" autocomplete="off"></textarea>
+    <div id="lgError" class="status-msg err" style="display:none;margin-bottom:10px"></div>
+    <button class="save-btn" onclick="activateLicenseFromGate()">Activate</button>
+  </div>
+</div>
+
 <script>
 // ── State ────────────────────────────────────────────────────
 // Matches the ESP32 sketch's current hardcoded RELAY_PINS[]/LED_PINS[] wiring —
@@ -405,7 +438,8 @@ const state = {
   profiles: [],
   activeProfileId: null,
   log: [],
-  schedDay: 0
+  schedDay: 0,
+  licenseKey: null
 };
 
 function makeBlankRooms() {
@@ -427,6 +461,68 @@ let tlView = '12h';
 // another tab has saved more recently, so a stale background tab can't
 // silently clobber a newer save (e.g. an old tab left open elsewhere).
 let lastKnownSavedAt = 0;
+
+// ── License gate ─────────────────────────────────────────────
+// Shared secret with the Room Controller entry in the License Generator app
+// (Pay Up Partners / Room Controller / etc registry). Stored as character
+// codes rather than a literal string to avoid casual discovery in source —
+// obfuscation, not encryption; keep this file private the same way the
+// generator itself is kept private.
+const LICENSE_SECRET = [82,79,79,77,67,84,82,76,95,76,73,67,95,50,48,50,53,95,36,101,99,114,51,116,95,75,51,121,33];
+
+function _licenseSecretString(codes) {
+  return codes.map(c => String.fromCharCode(c)).join('');
+}
+
+async function licenseHmacHex(message, secretCodes) {
+  const secret = _licenseSecretString(secretCodes);
+  const enc = new TextEncoder();
+  const keyData = enc.encode(secret);
+  const msgData = enc.encode(message);
+  const cryptoKey = await crypto.subtle.importKey('raw', keyData, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const sig = await crypto.subtle.sign('HMAC', cryptoKey, msgData);
+  const bytes = new Uint8Array(sig);
+  let hex = '';
+  for (let i = 0; i < bytes.length; i++) hex += ('0' + bytes[i].toString(16)).slice(-2);
+  return hex;
+}
+
+function decodeLicenseKey(raw) {
+  try {
+    const obj = JSON.parse(atob((raw || '').trim()));
+    if (!obj || typeof obj.n !== 'string' || typeof obj.h !== 'string') return null;
+    return obj;
+  } catch (e) { return null; }
+}
+
+function todayISO() {
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+
+// Validates a raw license key string against LICENSE_SECRET. Mirrors the
+// generation logic in the License Generator app exactly (perpetual: hash of
+// the name; date-restricted: hash of name+validFrom+validTo) so a key
+// produced there verifies here without any shared server round-trip.
+async function validateLicenseKey(raw) {
+  const obj = decodeLicenseKey(raw);
+  if (!obj) return { valid: false, reason: 'malformed' };
+  const isDateRestricted = obj.f !== undefined && obj.t !== undefined;
+  const message = isDateRestricted ? (obj.n + obj.f + obj.t) : obj.n;
+  const expectedHash = await licenseHmacHex(message, LICENSE_SECRET);
+  if (expectedHash !== obj.h) return { valid: false, reason: 'invalid' };
+  const result = {
+    valid: true, name: obj.n,
+    licenseType: isDateRestricted ? 'date-restricted' : 'perpetual',
+    validFrom: obj.f || null, validTo: obj.t || null
+  };
+  if (isDateRestricted) {
+    const today = todayISO();
+    if (today < obj.f) return { valid: false, reason: 'not-yet-active', name: obj.n, validFrom: obj.f, validTo: obj.t };
+    if (today > obj.t) return { valid: false, reason: 'expired', name: obj.n, validFrom: obj.f, validTo: obj.t };
+  }
+  return result;
+}
 
 // ── Code helpers ─────────────────────────────────────────────
 // Normalize Firebase slots — converts object {0:{...}} to array [{...}]
@@ -831,6 +927,7 @@ function persist() {
   localStorage.setItem('rc_fb', JSON.stringify({
     rooms: state.rooms, profiles: state.profiles,
     activeProfileId: state.activeProfileId, log: state.log.slice(0,30),
+    licenseKey: state.licenseKey,
     savedAt
   }));
 }
@@ -859,6 +956,7 @@ function hydrate() {
       state.profiles = [p];
       state.activeProfileId = p.id;
     }
+    if (d.licenseKey) state.licenseKey = d.licenseKey;
     lastKnownSavedAt = d.savedAt || 0;
   } catch(e) {}
 
@@ -1655,6 +1753,7 @@ function renderSettings() {
   document.getElementById('rw-no').className = 'ov-btn' + (relayWiring === 'NO' ? ' active-auto' : '');
   // QR generated only when user taps Show QR button
   document.getElementById('roomNameInputs').innerHTML = state.rooms.map(renderRoomSettingsRow).join('');
+  renderLicenseStatus();
   renderLog();
 }
 
@@ -1993,28 +2092,146 @@ function updateClock() {
     new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
 }
 
-// ── Boot ──────────────────────────────────────────────────────
-hydrate();
-updateHeaderProfile();
-updateClock();
-setInterval(updateClock, 10000);
-setInterval(checkSchedules, 60000);
-setInterval(() => {
-  if (document.getElementById('page-dashboard').classList.contains('active')) renderDashboard();
-  if (document.getElementById('page-timeline').classList.contains('active'))  renderTimeline();
-}, 30000);
-
-if (getActiveProfile().dbUrl) startFbListener();
-renderDashboard();
-
-// Restore whichever tab was open before the last reload, instead of always
-// landing back on Rooms
-const lastTab = localStorage.getItem('rc_lastTab');
-if (lastTab && lastTab !== 'dashboard' && document.getElementById(`page-${lastTab}`)) {
-  showPage(lastTab);
+// ── License gate UI ──────────────────────────────────────────
+function _licenseGateMessage(result) {
+  if (!result) return { icon: '🔒', title: 'License Required', msg: 'Enter your Room Controller license key to continue.' };
+  switch (result.reason) {
+    case 'expired':
+      return { icon: '⏳', title: 'License Expired',
+        msg: `The license for ${result.name} expired on ${result.validTo}. Enter a new license key to continue.` };
+    case 'not-yet-active':
+      return { icon: '⏳', title: 'License Not Yet Active',
+        msg: `This license for ${result.name} becomes valid on ${result.validFrom}.` };
+    case 'malformed':
+    case 'invalid':
+      return { icon: '⚠️', title: 'Invalid License Key', msg: 'That key could not be verified. Check it and try again.' };
+    default:
+      return { icon: '🔒', title: 'License Required', msg: 'Enter your Room Controller license key to continue.' };
+  }
 }
 
-// Service worker registration with update detection
+function showLicenseGate(result) {
+  const info = _licenseGateMessage(result);
+  document.getElementById('lgIcon').textContent = info.icon;
+  document.getElementById('lgTitle').textContent = info.title;
+  document.getElementById('lgMsg').textContent = info.msg;
+  document.getElementById('lgError').style.display = 'none';
+  document.getElementById('licenseGate').classList.add('show');
+}
+
+function hideLicenseGate() {
+  document.getElementById('licenseGate').classList.remove('show');
+}
+
+let _appBooted = false;
+
+async function activateLicenseFromGate() {
+  const input = document.getElementById('lgKeyInput');
+  const raw = (input.value || '').trim();
+  const errEl = document.getElementById('lgError');
+  if (!raw) { errEl.textContent = 'Please enter a license key.'; errEl.style.display = ''; return; }
+  const result = await validateLicenseKey(raw);
+  if (!result.valid) {
+    errEl.textContent = _licenseGateMessage(result).msg;
+    errEl.style.display = '';
+    return;
+  }
+  state.licenseKey = raw;
+  persist();
+  hideLicenseGate();
+  if (!_appBooted) bootApp();
+  renderLicenseStatus();
+}
+
+async function checkLicenseAndBoot() {
+  if (!state.licenseKey) { showLicenseGate(null); return; }
+  const result = await validateLicenseKey(state.licenseKey);
+  if (!result.valid) { showLicenseGate(result); return; }
+  bootApp();
+}
+
+// Re-checks periodically so a date-restricted license that expires while the
+// app is left open (e.g. an installed dashboard nobody closes) locks it
+// immediately, instead of only being caught on the next reload.
+function startLicenseWatch() {
+  setInterval(async () => {
+    if (!state.licenseKey) return;
+    const result = await validateLicenseKey(state.licenseKey);
+    if (!result.valid) showLicenseGate(result);
+  }, 3600000);
+}
+
+// ── License status (Settings page) ───────────────────────────
+async function renderLicenseStatus() {
+  const labelEl = document.getElementById('licenseStatusLabel');
+  const subEl = document.getElementById('licenseStatusSub');
+  if (!labelEl || !subEl) return;
+  if (!state.licenseKey) { labelEl.textContent = 'No license active'; subEl.textContent = ''; return; }
+  const result = await validateLicenseKey(state.licenseKey);
+  if (!result.valid) {
+    labelEl.textContent = _licenseGateMessage(result).title;
+    subEl.textContent = result.name ? `Was licensed to ${result.name}` : '';
+    return;
+  }
+  labelEl.textContent = `Licensed to ${result.name}`;
+  subEl.textContent = result.licenseType === 'date-restricted'
+    ? `Valid ${result.validFrom} – ${result.validTo}` : 'Perpetual license';
+}
+
+function openLicenseModal() {
+  document.getElementById('licenseModalInput').value = '';
+  document.getElementById('licenseModalError').style.display = 'none';
+  document.getElementById('licenseModal').classList.add('show');
+}
+function closeLicenseModal() {
+  document.getElementById('licenseModal').classList.remove('show');
+}
+function licenseModalBackdropClick(e) {
+  if (e.target.id === 'licenseModal') closeLicenseModal();
+}
+async function saveLicenseFromModal() {
+  const raw = (document.getElementById('licenseModalInput').value || '').trim();
+  const errEl = document.getElementById('licenseModalError');
+  if (!raw) { errEl.textContent = 'Please enter a license key.'; errEl.style.display = ''; return; }
+  const result = await validateLicenseKey(raw);
+  if (!result.valid) { errEl.textContent = _licenseGateMessage(result).msg; errEl.style.display = ''; return; }
+  state.licenseKey = raw;
+  persist();
+  closeLicenseModal();
+  renderLicenseStatus();
+  showToast('✅ License activated');
+}
+
+// ── Boot ──────────────────────────────────────────────────────
+hydrate();
+startLicenseWatch();
+checkLicenseAndBoot();
+
+function bootApp() {
+  _appBooted = true;
+  updateHeaderProfile();
+  updateClock();
+  setInterval(updateClock, 10000);
+  setInterval(checkSchedules, 60000);
+  setInterval(() => {
+    if (document.getElementById('page-dashboard').classList.contains('active')) renderDashboard();
+    if (document.getElementById('page-timeline').classList.contains('active'))  renderTimeline();
+  }, 30000);
+
+  if (getActiveProfile().dbUrl) startFbListener();
+  renderDashboard();
+
+  // Restore whichever tab was open before the last reload, instead of always
+  // landing back on Rooms
+  const lastTab = localStorage.getItem('rc_lastTab');
+  if (lastTab && lastTab !== 'dashboard' && document.getElementById(`page-${lastTab}`)) {
+    showPage(lastTab);
+  }
+}
+
+// Service worker registration with update detection — kept independent of
+// the license gate so offline caching and update checks work even before
+// a license is activated.
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('sw.js').then(reg => {
     // Check for updates every 60 seconds
@@ -2117,6 +2334,22 @@ function applyUpdate() {
     </div>
   </div>
 
+  <!-- ── License key modal (Settings → License) ──────────────── -->
+  <div class="modal-overlay" id="licenseModal" onclick="licenseModalBackdropClick(event)">
+    <div class="modal-box">
+      <div class="modal-header">
+        <span class="modal-title">License Key</span>
+        <button class="modal-close" onclick="closeLicenseModal()">×</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size:12px;color:var(--muted);margin-bottom:12px">Paste a new Room Controller license key to activate or renew.</p>
+        <textarea class="settings-input" id="licenseModalInput" rows="3" placeholder="Paste license key here" autocomplete="off" style="margin-bottom:12px"></textarea>
+        <div id="licenseModalError" class="status-msg err" style="display:none;margin-bottom:10px"></div>
+        <button class="modal-save-btn" onclick="saveLicenseFromModal()">Save &amp; Activate</button>
+        <button class="modal-cancel-btn" onclick="closeLicenseModal()">Cancel</button>
+      </div>
+    </div>
+  </div>
 
 </body>
 </html>
