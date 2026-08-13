@@ -274,6 +274,8 @@
     body.license-locked #page-settings .settings-section:not(.license-exempt),
     body.license-locked #page-settings .qr-section,
     body.license-locked #page-settings .admin-code-box,
+    body.license-locked #page-settings > .save-btn,
+    body.license-locked #page-settings > .test-btn,
     body.license-locked .add-slot-btn,
     body.license-locked .copy-btn,
     body.license-locked .slot-activate-btn,
@@ -2172,6 +2174,7 @@ async function deleteRoom(id) {
 }
 
 async function testConnection() {
+  if (!requireLicense('test the Firebase connection')) return;
   const msg = document.getElementById('settingsMsg');
   msg.className='status-msg ok'; msg.textContent='Testing…';
   const val = await fbGet('/rooms/room1/name');
