@@ -48,11 +48,12 @@
     { name: "ABC Store", secret: [65,66,67,95,76,73,67,95,50,48,50,53,95,36,116,48,114,51,95,75,51,121,33] },
     { name: "Build Calc", secret: [66,117,105,108,100,67,97,108,99] },
     { name: "Pay Your Shuttle", secret: [80,97,121,89,111,117,114,83,104,117,116,116,108,101] },
-    { name: "Patient Queue Management", secret: [80,97,116,105,101,110,116,81,117,101,117,101,77,97,110,97,103,101,109,101,110,116] }
+    { name: "Patient Queue Management", secret: [80,97,116,105,101,110,116,81,117,101,117,101,77,97,110,97,103,101,109,101,110,116] },
+    { name: "Room Controller", secret: [82,79,79,77,67,84,82,76,95,76,73,67,95,50,48,50,53,95,36,101,99,114,51,116,95,75,51,121,33] }
   ];
 
   // Protected app names that cannot be modified or deleted (case-insensitive)
-  var PROTECTED_APPS = ["pay up partners", "abc store", "build calc", "pay your shuttle", "patient queue management"];
+  var PROTECTED_APPS = ["pay up partners", "abc store", "build calc", "pay your shuttle", "patient queue management", "room controller"];
 
   // Backup metadata localStorage key
   var BACKUP_META_KEY = 'license_gen_backup_meta';
