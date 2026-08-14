@@ -1263,7 +1263,7 @@ function startFbListener() {
   es.addEventListener('put', e => {
     try {
       const d = JSON.parse(e.data);
-      if (d.data) syncFromFirebase(d.data);
+      applyFirebasePathUpdate(d.path, d.data);
       setConnStatus(true);
     } catch(err) {}
   });
@@ -1271,7 +1271,7 @@ function startFbListener() {
   es.addEventListener('patch', e => {
     try {
       const d = JSON.parse(e.data);
-      if (d.data) syncFromFirebase(d.data);
+      applyFirebasePathUpdate(d.path, d.data);
     } catch(err) {}
   });
 
@@ -1289,43 +1289,104 @@ function startFbListener() {
 // Track when PWA last wrote override to prevent immediate sync overwrite
 const overrideWriteTime = {};
 
+// Firebase's SSE stream reports `path` relative to the listener's own root
+// (this listener is on /rooms.json) — e.g. "/" for the initial snapshot,
+// "/room2" for a whole-room write, "/room2/slots" for a full slots-array
+// replace (this is exactly what the ESP32's midnight rollover does — a
+// PUT at this exact path), or "/room2/slots/0" for a single slot's fields
+// (activate.html / activateSlot / deactivateSlot all write at this depth).
+// The old code always assumed the top-level {room1:{...}} shape and passed
+// d.data straight to syncFromFirebase() regardless of path, so any deeper
+// write — including a full midnight-rollover rewrite — was silently
+// misinterpreted as a rooms-keyed object and dropped.
+function applyFirebasePathUpdate(path, value) {
+  const segments = (path || '/').split('/').filter(Boolean);
+
+  if (segments.length === 0) {
+    syncFromFirebase(value); // whole /rooms tree — initial snapshot or a poll
+    return;
+  }
+
+  const roomMatch = segments[0].match(/^room(\d+)$/);
+  if (!roomMatch) return;
+  const idx = parseInt(roomMatch[1], 10) - 1;
+  if (idx < 0 || idx >= state.rooms.length) return;
+  const room = state.rooms[idx];
+
+  if (segments.length === 1) {
+    syncFromFirebase({ [segments[0]]: value }); // whole room object replaced/patched
+    return;
+  }
+
+  const field = segments[1];
+
+  if (field === 'slots' && segments.length === 2) {
+    // The whole slots array was replaced wholesale — merging it field-by-
+    // field against stale local indices would miss slots that were added
+    // or removed (exactly what happens after a midnight rollover). Trust
+    // Firebase outright instead.
+    room.slots[0] = normalizeSlots(value);
+    renderDashboard();
+    persist();
+    return;
+  }
+
+  if (field === 'slots' && segments.length === 3) {
+    // One slot's fields patched — merge whatever fields Firebase reports,
+    // matching PATCH semantics (leave everything else on the slot alone).
+    const slotIdx = parseInt(segments[2], 10);
+    const localSlot = room.slots[0] && room.slots[0][slotIdx];
+    if (!localSlot || !value || typeof value !== 'object') return;
+    Object.assign(localSlot, value);
+    renderDashboard();
+    persist();
+    return;
+  }
+
+  if (field === 'lightOn') {
+    room.lightOn = value;
+    renderDashboard();
+    return;
+  }
+
+  if (field === 'override') {
+    // Only accept null (clearing) from Firebase — true/false are set by
+    // the PWA only, local state is authoritative for those, and this
+    // guards against a stale snapshot flipping a just-set override back.
+    const lastWrite = overrideWriteTime[idx] || 0;
+    if (value === null && (Date.now() - lastWrite) >= 30000) {
+      room.override = null;
+      renderDashboard();
+      persist();
+    }
+    return;
+  }
+  // Other fields (name, relayPin, ledPin, ...) are PWA-owned and only ever
+  // read by the ESP32 at boot — nothing else writes them, so there's
+  // nothing to live-sync here.
+}
+
 function syncFromFirebase(data) {
-  // data is { room1: {...}, room2: {...}, ... }
+  // data is { room1: {...}, room2: {...}, ... } — always the complete,
+  // authoritative state for whatever rooms it includes (the initial SSE
+  // snapshot, a full poll, or a whole-room object forwarded from
+  // applyFirebasePathUpdate) — safe to replace local slots outright rather
+  // than merge them field-by-field.
   Object.keys(data || {}).forEach(key => {
     const idx = parseInt(key.replace('room','')) - 1;
     if (idx < 0 || idx >= state.rooms.length) return;
     const r = data[key];
+    const room = state.rooms[idx];
 
-    // Sync override — only accept null (clearing) from Firebase
-    // true/false are set by PWA only — local state is authoritative
-    // Prevents stale Firebase snapshot from flipping override back
     const lastWrite = overrideWriteTime[idx] || 0;
     const justWrote = (Date.now() - lastWrite) < 30000;
     if (r.override === null && !justWrote) {
-      state.rooms[idx].override = null;
+      room.override = null;
     }
 
-    // Sync lightOn from ESP32
-    if (r.lightOn !== undefined) state.rooms[idx].lightOn = r.lightOn;
+    if (r.lightOn !== undefined) room.lightOn = r.lightOn;
 
-    // Sync slot activation state — catches activations from activate.html
-    // Normalize Firebase slots (may be object with numeric keys)
-    const fbSlots = normalizeSlots(r.slots);
-    if (fbSlots.length > 0) {
-      fbSlots.forEach((fbSlot, si) => {
-        const localSlot = state.rooms[idx].slots[0] && state.rooms[idx].slots[0][si];
-        if (!localSlot) return;
-        // Only sync activation fields — don't overwrite time/code/recurring
-        // Sync activation fields from Firebase
-        // For activatedAt: Firebase is the source of truth
-        // (targeted writes from activate.html and activateSlot use direct paths)
-        if (fbSlot.activatedAt  !== undefined) localSlot.activatedAt  = fbSlot.activatedAt;
-        if (fbSlot.activatedBy  !== undefined) localSlot.activatedBy  = fbSlot.activatedBy;
-        if (fbSlot.attempts     !== undefined) localSlot.attempts     = fbSlot.attempts;
-        if (fbSlot.lockedUntil  !== undefined) localSlot.lockedUntil  = fbSlot.lockedUntil;
-        if (fbSlot.expired      !== undefined) localSlot.expired      = fbSlot.expired;
-      });
-    }
+    if (r.slots !== undefined) room.slots[0] = normalizeSlots(r.slots);
   });
   renderDashboard();
   persist();
