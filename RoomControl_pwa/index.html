@@ -381,6 +381,13 @@
       </div>
     </div>
     <div class="settings-section">
+      <div class="settings-title">WhatsApp reminder message</div>
+      <div class="settings-sub" style="padding:0 14px 8px">Used by every slot's WhatsApp reminder button (manual or imported). Available placeholders: <code>{NAME}</code> <code>{ROOM}</code> <code>{DATE}</code> <code>{START}</code> <code>{END}</code> <code>{CODE}</code></div>
+      <div class="settings-row" style="flex-direction:column;align-items:stretch;gap:6px">
+        <textarea class="settings-input" id="cfg-whatsapp-template" rows="3" style="font-family:inherit" placeholder="Hi {NAME}, your booking for {ROOM} on {DATE} from {START} to {END} is confirmed. Your access code: {CODE}"></textarea>
+      </div>
+    </div>
+    <div class="settings-section">
       <div class="settings-title">Relay wiring</div>
       <div class="settings-sub" style="padding:0 14px 8px">Which relay contact your lights are physically wired to — the ESP32 uses this to invert its signal correctly. Applied immediately to this profile's Firebase; the ESP32 needs a reboot to pick it up.</div>
       <div class="ov-btns" style="padding:0 14px 12px">
@@ -645,9 +652,23 @@ function escapeRegExp(s) {
 // match the same way, since real SMS spacing varies release to release and
 // shouldn't be the reason a field fails to extract.
 function flexibleLiteralPattern(text) {
-  const trimmed = (text || '').trim();
-  if (!trimmed) return '';
-  return trimmed.split(/\s+/).map(escapeRegExp).join('\\s*');
+  if (!text) return '';
+  // Splits into alternating word/whitespace tokens WITHOUT trimming first
+  // (the capturing group in the split regex keeps whitespace runs as their
+  // own elements) — same-line whitespace (plain spaces, e.g. the gap after
+  // "Venue:") stays optional since label spacing varies by sender, but any
+  // whitespace run that includes a line break stays REQUIRED: that's a
+  // real line boundary in the message, not formatting variance, and
+  // collapsing it to optional lets a capture bleed straight across two
+  // fields that are actually on separate lines.
+  return text.split(/(\s+)/).filter(Boolean).map(tok => {
+    // A plain "one or more whitespace" pattern would also match a single
+    // inter-word space (e.g. inside "Spark, Sholinganallur") — too loose to
+    // stand in for "the line actually ends here". Require an actual
+    // newline character specifically, with surrounding spaces optional.
+    if (/^\s+$/.test(tok)) return tok.includes('\n') ? '\\s*\\n\\s*' : '\\s*';
+    return escapeRegExp(tok);
+  }).join('');
 }
 
 // Builds one independent regex per placeholder: the (flexible) literal text
@@ -723,19 +744,24 @@ function parseBookingSms(templateText, smsText) {
   return anyMatched ? result : null;
 }
 
-// "06:00 PM" / "6:00pm" / "18:00" -> "18:00". Returns null if it doesn't
-// look like a time at all, so the caller can flag it for manual entry.
+// "06:00 PM" / "6:00pm" / "18:00" -> "18:00", including when the captured
+// field has trailing text after the time itself (e.g. "7:00 pm: nonac - 1
+// court" — some senders put extra info on the same line, colon-separated,
+// and that colon collides with the one inside the time). Matches the time
+// at the START of the string rather than requiring the whole string to be
+// just the time. Returns null if it doesn't look like a time at all, so
+// the caller can flag it for manual entry.
 function normalizeTimeTo24h(raw) {
   if (!raw) return null;
   const s = raw.trim();
-  let m = s.match(/^(\d{1,2}):(\d{2})\s*([AaPp][Mm])$/);
+  let m = s.match(/^(\d{1,2}):(\d{2})\s*([AaPp][Mm])/);
   if (m) {
     let h = parseInt(m[1], 10);
     const ampm = m[3].toLowerCase();
     if (ampm === 'am') { if (h === 12) h = 0; } else if (h !== 12) { h += 12; }
     return String(h).padStart(2, '0') + ':' + m[2];
   }
-  m = s.match(/^(\d{1,2}):(\d{2})$/);
+  m = s.match(/^(\d{1,2}):(\d{2})/);
   if (m) return String(parseInt(m[1], 10)).padStart(2, '0') + ':' + m[2];
   return null;
 }
@@ -749,10 +775,12 @@ function normalizeDateGuessYear(raw) {
   if (!raw) return null;
   const s = raw.trim();
   let day, monthName;
-  let m = s.match(/^(\d{1,2})\s+([A-Za-z]+)$/);
+  // Ordinal suffix (1st/2nd/3rd/9th/22nd/...) is optional and stripped -
+  // "27 July" and "August 9th" both need to parse, day-first or month-first.
+  let m = s.match(/^(\d{1,2})(?:st|nd|rd|th)?\s+([A-Za-z]+)$/i);
   if (m) { day = parseInt(m[1], 10); monthName = m[2].toLowerCase(); }
   else {
-    m = s.match(/^([A-Za-z]+)\s+(\d{1,2})$/);
+    m = s.match(/^([A-Za-z]+)\s+(\d{1,2})(?:st|nd|rd|th)?$/i);
     if (m) { monthName = m[1].toLowerCase(); day = parseInt(m[2], 10); }
   }
   if (day === undefined) return null;
@@ -797,9 +825,67 @@ function phoneDigitsOnly(raw) {
   return raw.replace(/[^\d]/g, '');
 }
 
+// ── WhatsApp reminder message ──────────────────────────────────
+// A per-profile editable template (Settings → WhatsApp reminder message) —
+// {NAME}/{ROOM}/{DATE}/{START}/{END}/{CODE} get filled in with the actual
+// slot's details. Shared by both manual slot creation and booking import,
+// so there's exactly one message format to configure, not two.
+const DEFAULT_WHATSAPP_TEMPLATE = 'Hi {NAME}, your booking for {ROOM} on {DATE} from {START} to {END} is confirmed. Your access code: {CODE}';
+
+function fillWhatsAppTemplate(template, data) {
+  return (template || '').replace(/\{([A-Z_]+)\}/g, (match, key) => {
+    const val = data[key];
+    return (val === undefined || val === null || val === '') ? '' : String(val);
+  });
+}
+
+// Shared by the per-slot reminder button and the post-import result
+// screen — the one place that actually builds and opens a wa.me link.
+function sendSlotWhatsAppReminder(roomId, slotIdx) {
+  const r = state.rooms.find(x => x.id === roomId);
+  const slot = r && r.slots[0] && r.slots[0][slotIdx];
+  if (!slot || !slot.phone) { showToast('No phone number saved for this slot'); return; }
+  const digits = phoneDigitsOnly(slot.phone);
+  if (!digits) { showToast('⚠️ No valid phone number'); return; }
+  const p = getActiveProfile();
+  const text = fillWhatsAppTemplate(p.whatsappTemplate || DEFAULT_WHATSAPP_TEMPLATE, {
+    NAME: slot.bookedBy || '', ROOM: r.name, DATE: slot.date || todayStr(),
+    START: slot.s, END: slot.e, CODE: slot.code || ''
+  });
+  window.open(`https://wa.me/${digits}?text=${encodeURIComponent(text)}`, '_blank');
+}
+
 // ── Import Booking page ───────────────────────────────────────
 function makeTemplateId() {
   return 't_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+}
+
+// Seeded into every profile so real templates are available out of the
+// box, verified against real sample SMS from each app. A profile keeps
+// its own copy (editable/deletable per-profile, matching how templates are
+// otherwise stored) rather than these being some separate shared list.
+const DEFAULT_BOOKING_TEMPLATES = [
+  { name: 'Playo', body: '[PLAYO] New booking confirmed! \nID: {BOOKING_ID} \nSport: {SPORT}\nVenue: {ROOM}\nSlot: {START} - {END}, {DATE}, {WEEKDAY}\nCourt: {COURT}\nUser: {NAME} ({PHONE})\nTrack live on your Playo Partner App.' },
+  { name: 'Turf Town', body: "*New booking!*\nYou've received a Turf Town booking from *{NAME} ({PHONE})*\n\n{ROOM}\n{DATE}, {WEEKDAY}, {START} - {END}\n{SPORT}\n\nAdvance Paid: Rs. {ADVANCE}\nBalance to Collect: Rs. {BALANCE}\n\n(Booking ID: {BOOKING_ID})" }
+];
+
+// Backfills any default templates this profile doesn't already have (by
+// name, case-insensitive) — matches the same "ensure defaults present"
+// pattern the license generator uses for its own app registry. Safe to
+// call repeatedly; only adds what's missing, never touches existing ones
+// (so a template you've since edited is left alone).
+function ensureDefaultBookingTemplates(p) {
+  if (!p) return false;
+  if (!p.templates) p.templates = [];
+  let added = false;
+  DEFAULT_BOOKING_TEMPLATES.forEach(def => {
+    const exists = p.templates.some(t => t.name.toLowerCase() === def.name.toLowerCase());
+    if (!exists) {
+      p.templates.push({ id: makeTemplateId(), name: def.name, body: def.body });
+      added = true;
+    }
+  });
+  return added;
 }
 
 // Set by parseBookingFromSms(), read by confirmBookingImport() — which
@@ -810,6 +896,7 @@ let bookingLastResult = null;
 
 function renderImportPage() {
   const p = getActiveProfile();
+  if (ensureDefaultBookingTemplates(p)) persist();
   const templates = p.templates || [];
   const sel = document.getElementById('bkTemplateSelect');
   if (!sel) return;
@@ -986,6 +1073,7 @@ async function confirmBookingImport() {
     activatedAt: null, activatedBy: null, attempts: 0, lockedUntil: null, expired: false,
     date: todayStr(),
     bookedBy: name || null,
+    phone: phone || null,
     sourceApp: bookingLastParse ? bookingLastParse.templateName : null,
     extra: (bookingLastParse && bookingLastParse.extra) || {}
   };
@@ -995,7 +1083,7 @@ async function confirmBookingImport() {
   await pushRoom(r.id - 1); // same write path Add Slot already uses — s/e/recurring/code/date only
   renderDashboard();
 
-  bookingLastResult = { room: r.name, date: slot.date, start, end, code, phone, name };
+  bookingLastResult = { roomId: r.id, slotIdx: r.slots[0].length - 1 };
   document.getElementById('bkResultMsg').textContent =
     `${r.name} · ${start}–${end} · code ${code}` + (name ? ` · ${name}` : '');
   document.getElementById('bkWhatsAppBtn').style.display = phone ? '' : 'none';
@@ -1003,18 +1091,11 @@ async function confirmBookingImport() {
   showToast('✓ Booking created');
 }
 
+// Reuses the same template-driven sender every slot's reminder button
+// uses — see sendSlotWhatsAppReminder().
 function sendBookingWhatsApp() {
-  if (!bookingLastResult || !bookingLastResult.phone) { showToast('No phone number to message'); return; }
-  const digits = phoneDigitsOnly(bookingLastResult.phone);
-  if (!digits) { showToast('⚠️ No valid phone number'); return; }
-  const lines = [];
-  if (bookingLastResult.name) lines.push(`Hi ${bookingLastResult.name},`);
-  lines.push(`Booking confirmed: ${bookingLastResult.room}`);
-  lines.push(`Date: ${bookingLastResult.date}`);
-  lines.push(`Time: ${bookingLastResult.start} - ${bookingLastResult.end}`);
-  lines.push(`Your activation code: ${bookingLastResult.code}`);
-  const text = encodeURIComponent(lines.join('\n'));
-  window.open(`https://wa.me/${digits}?text=${text}`, '_blank');
+  if (!bookingLastResult) { showToast('No phone number to message'); return; }
+  sendSlotWhatsAppReminder(bookingLastResult.roomId, bookingLastResult.slotIdx);
 }
 
 
@@ -1191,6 +1272,8 @@ function openSlotModal(roomId) {
   document.getElementById('m_start').value    = '09:00';
   document.getElementById('m_end').value      = '10:00';
   document.getElementById('m_code').value     = '';
+  document.getElementById('m_name').value     = '';
+  document.getElementById('m_phone').value    = '';
   document.getElementById('m_reqcode').checked  = true;
   document.getElementById('m_recurring').checked = false;
   document.getElementById('m_coderow').style.opacity = '1';
@@ -1274,6 +1357,8 @@ async function saveSlotFromModal() {
     ? (codeInput.length === 4 && /^[0-9]{4}$/.test(codeInput) ? codeInput : generate4DigitCode())
     : null;
   const recurring    = document.getElementById('m_recurring').checked && modalDay === 0;
+  const bookedBy     = document.getElementById('m_name').value.trim() || null;
+  const phone        = document.getElementById('m_phone').value.trim() || null;
 
   // Build date string
   let dateStr;
@@ -1290,7 +1375,8 @@ async function saveSlotFromModal() {
     code: slotCode,
     activatedAt: null, activatedBy: null,
     attempts: 0, lockedUntil: null, expired: false,
-    date: dateStr
+    date: dateStr,
+    bookedBy, phone
   });
 
   const savedRoomId = modalRoomId; // save before closeSlotModal clears it
@@ -2269,6 +2355,7 @@ function renderRoomCard(r) {
               <div style="display:flex;gap:5px;margin-left:auto">
                 ${!isActive && !isLocked && !isExpired ? `<button class="slot-activate-btn" onclick="activateSlot(${r.id},${i})">Activate</button>` : ''}
                 ${isActive ? `<button class="slot-deactivate-btn" onclick="deactivateSlot(${r.id},${i})">Deactivate</button>` : ''}
+                ${s.phone ? `<button class="slot-activate-btn" style="border-color:var(--green);color:var(--green)" onclick="sendSlotWhatsAppReminder(${r.id},${i})" title="Send WhatsApp reminder to ${s.bookedBy || s.phone}">💬</button>` : ''}
                 <button class="slot-del" onclick="deleteSlot(${r.id},${i})">×</button>
               </div>
             </div>`;}).join('')
@@ -2416,6 +2503,7 @@ function renderSettings() {
   document.getElementById('cfg-url').value  = p.dbUrl;
   document.getElementById('cfg-key').value  = p.apiKey;
   document.getElementById('cfg-seed').value = p.adminSeed || '1234';
+  document.getElementById('cfg-whatsapp-template').value = p.whatsappTemplate || DEFAULT_WHATSAPP_TEMPLATE;
   // Show admin code
   const code = getAdminCode(p.adminSeed);
   document.getElementById('adminCodeDisplay').textContent = code;
@@ -2578,6 +2666,7 @@ async function saveActiveProfile() {
   p.dbUrl     = document.getElementById('cfg-url').value.trim().replace(/\/$/, '');
   p.apiKey    = document.getElementById('cfg-key').value.trim();
   p.adminSeed = document.getElementById('cfg-seed').value.trim() || '1234';
+  p.whatsappTemplate = document.getElementById('cfg-whatsapp-template').value.trim() || DEFAULT_WHATSAPP_TEMPLATE;
   applyRoomNameEdits();
   const pinConflict = checkPinConflicts();
   if (pinConflict) {
@@ -3009,6 +3098,15 @@ function applyUpdate() {
             oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,4)">
           <button class="code-refresh-btn" onclick="modalRefreshCode()" title="Generate random">🔄</button>
           <span style="font-size:11px;color:var(--muted)">Blank = auto-generate</span>
+        </div>
+        <div class="modal-divider"></div>
+        <div class="modal-row">
+          <label class="modal-label" for="m_name">Name</label>
+          <input class="settings-input" id="m_name" placeholder="Optional — for WhatsApp reminder">
+        </div>
+        <div class="modal-row">
+          <label class="modal-label" for="m_phone">Phone</label>
+          <input class="settings-input" id="m_phone" placeholder="Optional — enables reminder button" style="font-family:inherit">
         </div>
         <div class="modal-divider"></div>
         <div class="modal-check-row">
