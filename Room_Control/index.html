@@ -1291,14 +1291,16 @@ const overrideWriteTime = {};
 
 // Firebase's SSE stream reports `path` relative to the listener's own root
 // (this listener is on /rooms.json) — e.g. "/" for the initial snapshot,
-// "/room2" for a whole-room write, "/room2/slots" for a full slots-array
-// replace (this is exactly what the ESP32's midnight rollover does — a
-// PUT at this exact path), or "/room2/slots/0" for a single slot's fields
-// (activate.html / activateSlot / deactivateSlot all write at this depth).
-// The old code always assumed the top-level {room1:{...}} shape and passed
-// d.data straight to syncFromFirebase() regardless of path, so any deeper
-// write — including a full midnight-rollover rewrite — was silently
-// misinterpreted as a rooms-keyed object and dropped.
+// "/room2" for a whole-room write, or "/room2/lightOn" / "/room2/override"
+// for a single field.
+//
+// Slots are deliberately NOT live-synced here (nor in syncFromFirebase()
+// below) — real-time slot updates turned out to be a recurring source of
+// sync bugs (stale slots surviving a midnight rollover, a fully-removed
+// slots key not clearing locally, index misalignment). Slot data is now
+// only ever refreshed once, explicitly, via checkDailySlotRefresh() — see
+// that function for why. Room light status and manual override still sync
+// live, since those aren't what caused the trouble.
 function applyFirebasePathUpdate(path, value) {
   const segments = (path || '/').split('/').filter(Boolean);
 
@@ -1320,28 +1322,7 @@ function applyFirebasePathUpdate(path, value) {
 
   const field = segments[1];
 
-  if (field === 'slots' && segments.length === 2) {
-    // The whole slots array was replaced wholesale — merging it field-by-
-    // field against stale local indices would miss slots that were added
-    // or removed (exactly what happens after a midnight rollover). Trust
-    // Firebase outright instead.
-    room.slots[0] = normalizeSlots(value);
-    renderDashboard();
-    persist();
-    return;
-  }
-
-  if (field === 'slots' && segments.length === 3) {
-    // One slot's fields patched — merge whatever fields Firebase reports,
-    // matching PATCH semantics (leave everything else on the slot alone).
-    const slotIdx = parseInt(segments[2], 10);
-    const localSlot = room.slots[0] && room.slots[0][slotIdx];
-    if (!localSlot || !value || typeof value !== 'object') return;
-    Object.assign(localSlot, value);
-    renderDashboard();
-    persist();
-    return;
-  }
+  if (field === 'slots') return; // handled once-daily by checkDailySlotRefresh() instead
 
   if (field === 'lightOn') {
     room.lightOn = value;
@@ -1367,11 +1348,10 @@ function applyFirebasePathUpdate(path, value) {
 }
 
 function syncFromFirebase(data) {
-  // data is { room1: {...}, room2: {...}, ... } — always the complete,
-  // authoritative state for whatever rooms it includes (the initial SSE
-  // snapshot, a full poll, or a whole-room object forwarded from
-  // applyFirebasePathUpdate) — safe to replace local slots outright rather
-  // than merge them field-by-field.
+  // data is { room1: {...}, room2: {...}, ... } — the initial SSE snapshot,
+  // a full poll, or a whole-room object forwarded from
+  // applyFirebasePathUpdate. Only override/lightOn are applied here — see
+  // applyFirebasePathUpdate()'s comment for why slots are excluded.
   Object.keys(data || {}).forEach(key => {
     const idx = parseInt(key.replace('room','')) - 1;
     if (idx < 0 || idx >= state.rooms.length) return;
@@ -1385,11 +1365,38 @@ function syncFromFirebase(data) {
     }
 
     if (r.lightOn !== undefined) room.lightOn = r.lightOn;
-
-    if (r.slots !== undefined) room.slots[0] = normalizeSlots(r.slots);
   });
   renderDashboard();
   persist();
+}
+
+// ── Once-daily slot refresh ───────────────────────────────────
+// Slots are no longer kept live via SSE (see applyFirebasePathUpdate()) —
+// instead, once per profile per day, this confirms the ESP32 has actually
+// finished today's midnight rollover before touching anything locally.
+// The ESP32 writes /config/lastRolloverEpochDay every time it completes a
+// rollover; this compares that marker against the last one this profile
+// has already reflected. Different marker → do a full refresh. Same
+// marker → already refreshed for this rollover, skip. No marker at all
+// (ESP32 hasn't rolled over since being flashed with this firmware, or is
+// unreachable) → nothing to confirm, leave local slots exactly as they are.
+async function checkDailySlotRefresh(p) {
+  if (!p || !p.dbUrl) return;
+  const marker = await fbGet('/config/lastRolloverEpochDay');
+  if (marker === null || marker === undefined) return;
+  if (p.slotsRolloverMarker === marker) return;
+
+  const data = await fbGet('/rooms');
+  if (!data) return;
+  Object.keys(data).forEach(key => {
+    const idx = parseInt(key.replace('room', ''), 10) - 1;
+    if (idx < 0 || idx >= state.rooms.length) return;
+    state.rooms[idx].slots[0] = normalizeSlots(data[key] && data[key].slots);
+  });
+  p.slotsRolloverMarker = marker;
+  persist();
+  renderDashboard();
+  addLog('ok', 'Slots refreshed for today');
 }
 
 // ── Polling fallback when SSE fails ──────────────────────────
@@ -2050,6 +2057,7 @@ async function switchProfile(id) {
     await ensureProfileNumber(p); // must resolve before the listener opens, so it reads the right /profiles/{n} path
     persist();
     startFbListener();
+    checkDailySlotRefresh(p); // this profile's own slots — see function comment
   }
 }
 
@@ -2418,7 +2426,10 @@ function bootApp() {
     if (document.getElementById('page-timeline').classList.contains('active'))  renderTimeline();
   }, 30000);
 
-  if (getActiveProfile().dbUrl) startFbListener();
+  if (getActiveProfile().dbUrl) {
+    startFbListener();
+    checkDailySlotRefresh(getActiveProfile()); // once per profile per day — see function comment
+  }
   renderDashboard();
 
   // Restore whichever tab was open before the last reload, instead of always
