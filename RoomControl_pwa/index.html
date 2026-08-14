@@ -2116,6 +2116,12 @@ async function saveActiveProfile() {
   p.apiKey    = document.getElementById('cfg-key').value.trim();
   p.adminSeed = document.getElementById('cfg-seed').value.trim() || '1234';
   applyRoomNameEdits();
+  const pinConflict = checkPinConflicts();
+  if (pinConflict) {
+    showToast('⚠️ Fix GPIO conflict before saving — ' + pinConflict);
+    return; // not persisted — same pin on two rooms means they're the same
+            // physical relay, so this can never be a valid saved state
+  }
   persist();
   if (p.dbUrl) await ensureProfileNumber(p); // before finishSaveSettings, which pushes room data using this profile's number
   persist();
