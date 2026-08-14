@@ -1386,7 +1386,14 @@ function syncFromFirebase(data) {
 
     if (r.lightOn !== undefined) room.lightOn = r.lightOn;
 
-    if (r.slots !== undefined) room.slots[0] = normalizeSlots(r.slots);
+    // No `!== undefined` guard here on purpose — Firebase removes a path
+    // entirely when it's set to empty/null (e.g. the ESP32's midnight
+    // rollover writing "[]" when there's nothing left for today), so a
+    // cleared slots key shows up as the .slots property being absent, not
+    // explicitly null. Guarding on "!== undefined" would skip exactly that
+    // case and leave a stale local slot behind. normalizeSlots() already
+    // returns [] for undefined/null, so it's safe to always assign.
+    room.slots[0] = normalizeSlots(r.slots);
   });
   renderDashboard();
   persist();
