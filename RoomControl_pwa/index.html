@@ -426,6 +426,74 @@
       <div id="logList"><div style="font-size:12px;color:var(--muted)">No activity yet</div></div>
     </div>
   </div>
+
+  <!-- Import Booking (from a 3rd-party app's SMS) -->
+  <div class="page" id="page-import">
+    <div class="settings-section">
+      <div class="settings-title">Booking template</div>
+      <div class="settings-row">
+        <select class="settings-input" id="bkTemplateSelect" onchange="onBookingTemplateChange()" style="flex:1"></select>
+      </div>
+      <div class="settings-row">
+        <button class="add-slot-btn" onclick="openTemplateModal()" style="flex:1">+ New template</button>
+        <button class="profile-btn" onclick="deleteSelectedTemplate()" title="Delete this template">🗑</button>
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <div class="settings-title">Paste booking SMS</div>
+      <div class="settings-row" style="flex-direction:column;align-items:stretch;gap:6px">
+        <textarea class="settings-input" id="bkSmsInput" rows="6" placeholder="Paste the booking SMS text here" style="font-family:inherit"></textarea>
+      </div>
+      <div class="settings-row">
+        <button class="save-btn" style="margin:0" onclick="parseBookingFromSms()">Parse</button>
+      </div>
+      <div id="bkParseMsg" style="padding:0 14px 10px"></div>
+    </div>
+
+    <div class="settings-section" id="bkReviewSection" style="display:none">
+      <div class="settings-title">Review before creating</div>
+      <div class="settings-row" style="flex-direction:column;align-items:stretch;gap:6px">
+        <div class="settings-label">Room</div>
+        <select class="settings-input" id="bkRoom"></select>
+      </div>
+      <div class="settings-row" style="flex-direction:column;align-items:stretch;gap:6px">
+        <div class="settings-label">Date</div>
+        <input class="settings-input" type="date" id="bkDate">
+      </div>
+      <div class="settings-row">
+        <div style="flex:1">
+          <div class="settings-label" style="margin-bottom:4px">Start</div>
+          <input class="settings-input" type="time" id="bkStart">
+        </div>
+        <div style="flex:1">
+          <div class="settings-label" style="margin-bottom:4px">End</div>
+          <input class="settings-input" type="time" id="bkEnd">
+        </div>
+      </div>
+      <div class="settings-row" style="flex-direction:column;align-items:stretch;gap:6px">
+        <div class="settings-label">Booked by</div>
+        <input class="settings-input" id="bkName" placeholder="Guest name">
+      </div>
+      <div class="settings-row" style="flex-direction:column;align-items:stretch;gap:6px">
+        <div class="settings-label">Phone</div>
+        <input class="settings-input" id="bkPhone" placeholder="+91XXXXXXXXXX">
+      </div>
+      <div id="bkExtraFields" class="settings-sub" style="padding:0 14px 10px"></div>
+      <div id="bkWeekdayWarning" class="status-msg err" style="display:none;margin:0 14px 10px"></div>
+      <div class="settings-row">
+        <button class="save-btn" style="margin:0" onclick="confirmBookingImport()">Create Booking</button>
+      </div>
+    </div>
+
+    <div class="settings-section" id="bkResultSection" style="display:none">
+      <div class="settings-title">Booking created</div>
+      <div id="bkResultMsg" class="settings-sub" style="padding:0 14px 10px"></div>
+      <div class="settings-row">
+        <button class="test-btn" style="margin:0" onclick="sendBookingWhatsApp()" id="bkWhatsAppBtn">📱 Send WhatsApp confirmation</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <div class="bottom-nav">
@@ -440,6 +508,10 @@
   <button class="nav-btn" id="nav-settings" onclick="showPage('settings',this)">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
     Settings
+  </button>
+  <button class="nav-btn" id="nav-import" onclick="showPage('import',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+    Import
   </button>
 </div>
 
@@ -552,6 +624,332 @@ function normalizeSlots(slots) {
   if (Array.isArray(slots)) return slots;
   // Firebase converted array to object with numeric keys
   return Object.keys(slots).sort((a,b) => parseInt(a)-parseInt(b)).map(k => slots[k]).filter(Boolean);
+}
+
+// ── Booking-import template engine ────────────────────────────
+// A template is the sample SMS text with the variable parts replaced by
+// {PLACEHOLDER} tokens, e.g. "Venue: {ROOM}". Compiling it turns every
+// literal span of text into an escaped, required anchor and every
+// placeholder into a capture group — so a booking gets matched by the
+// exact wording *around* each value, not by guessing at structure.
+function escapeRegExp(s) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function compileBookingTemplate(templateText) {
+  const placeholderRe = /\{([A-Z_]+)\}/g;
+  const names = [];
+  const literalChunks = []; // chunk[i] = literal text immediately before placeholder i
+  let lastIndex = 0;
+  let m;
+  while ((m = placeholderRe.exec(templateText)) !== null) {
+    literalChunks.push(templateText.slice(lastIndex, m.index));
+    names.push(m[1]);
+    lastIndex = placeholderRe.lastIndex;
+  }
+  // Text after the LAST placeholder (typically a footer sentence) is only
+  // required up to its own line — anything from the next newline onward is
+  // dropped entirely, since footers are the most likely thing to vary
+  // release to release even from the same sender.
+  const trailingLiteral = templateText.slice(lastIndex);
+  const newlineIdx = trailingLiteral.indexOf('\n');
+  const sameLineTail = newlineIdx === -1 ? trailingLiteral : trailingLiteral.slice(0, newlineIdx);
+
+  let pattern = '';
+  literalChunks.forEach((literal, i) => {
+    pattern += escapeRegExp(literal);
+    const isLast = i === literalChunks.length - 1;
+    // Every capture is non-greedy (bounded by whatever literal comes next)
+    // EXCEPT the last one when there's no same-line text after it to force
+    // it to expand — a non-greedy group with nothing anchoring its end
+    // would otherwise just match empty.
+    pattern += (isLast && !sameLineTail) ? '([^\\n]*)' : '([^\\n]*?)';
+  });
+  pattern += escapeRegExp(sameLineTail);
+  return { regex: new RegExp(pattern), names };
+}
+
+// Applies a compiled template against pasted SMS text. Returns a plain
+// {PLACEHOLDER_NAME: value} object, or null if the template doesn't match
+// at all (wrong template picked, or the sender changed their wording).
+function parseBookingSms(templateText, smsText) {
+  if (!templateText || !smsText) return null;
+  const { regex, names } = compileBookingTemplate(templateText);
+  const match = regex.exec(smsText);
+  if (!match) return null;
+  const result = {};
+  names.forEach((name, i) => { result[name] = (match[i + 1] || '').trim(); });
+  return result;
+}
+
+// "06:00 PM" / "6:00pm" / "18:00" -> "18:00". Returns null if it doesn't
+// look like a time at all, so the caller can flag it for manual entry.
+function normalizeTimeTo24h(raw) {
+  if (!raw) return null;
+  const s = raw.trim();
+  let m = s.match(/^(\d{1,2}):(\d{2})\s*([AaPp][Mm])$/);
+  if (m) {
+    let h = parseInt(m[1], 10);
+    const ampm = m[3].toLowerCase();
+    if (ampm === 'am') { if (h === 12) h = 0; } else if (h !== 12) { h += 12; }
+    return String(h).padStart(2, '0') + ':' + m[2];
+  }
+  m = s.match(/^(\d{1,2}):(\d{2})$/);
+  if (m) return String(parseInt(m[1], 10)).padStart(2, '0') + ':' + m[2];
+  return null;
+}
+
+const BOOKING_MONTH_NAMES = ['january','february','march','april','may','june','july','august','september','october','november','december'];
+
+// "27 July" / "July 27" (no year) -> "YYYY-MM-DD", guessing the year: this
+// year, unless that date has already passed, in which case next year —
+// the standard heuristic for a recurring annual date with no year given.
+function normalizeDateGuessYear(raw) {
+  if (!raw) return null;
+  const s = raw.trim();
+  let day, monthName;
+  let m = s.match(/^(\d{1,2})\s+([A-Za-z]+)$/);
+  if (m) { day = parseInt(m[1], 10); monthName = m[2].toLowerCase(); }
+  else {
+    m = s.match(/^([A-Za-z]+)\s+(\d{1,2})$/);
+    if (m) { monthName = m[1].toLowerCase(); day = parseInt(m[2], 10); }
+  }
+  if (day === undefined) return null;
+  const monthIdx = BOOKING_MONTH_NAMES.findIndex(mn => mn.startsWith(monthName));
+  if (monthIdx < 0 || day < 1 || day > 31) return null;
+  const now = new Date();
+  let year = now.getFullYear();
+  const today0 = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  let candidate = new Date(year, monthIdx, day);
+  if (candidate < today0) { year += 1; candidate = new Date(year, monthIdx, day); }
+  return year + '-' + String(monthIdx + 1).padStart(2, '0') + '-' + String(day).padStart(2, '0');
+}
+
+// Strips everything but letters/digits, so "Room1", "Room 1", and
+// "Room-1" all compare equal — SMS text routinely drops or adds spacing
+// that a plain lowercase/trim comparison would treat as a mismatch.
+function condenseForMatch(s) {
+  return s.toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+// Matches an extracted room name against this profile's actual configured
+// rooms — exact match first, then whitespace/punctuation-insensitive exact
+// match, then a loose substring match either way, since SMS text may add
+// or drop a word entirely (e.g. "Room1" vs "Room 1 - Main").
+function matchRoomByName(extractedName) {
+  if (!extractedName) return null;
+  const norm = extractedName.trim().toLowerCase();
+  if (!norm) return null;
+  const condensedNorm = condenseForMatch(extractedName);
+  return state.rooms.find(r => r.name.trim().toLowerCase() === norm)
+    || state.rooms.find(r => condensedNorm && condenseForMatch(r.name) === condensedNorm)
+    || state.rooms.find(r => {
+      const rn = r.name.trim().toLowerCase();
+      return rn && (norm.includes(rn) || rn.includes(norm));
+    })
+    || null;
+}
+
+// wa.me needs digits only (with country code) — no "+", spaces, or parens.
+function phoneDigitsOnly(raw) {
+  if (!raw) return '';
+  return raw.replace(/[^\d]/g, '');
+}
+
+// ── Import Booking page ───────────────────────────────────────
+function makeTemplateId() {
+  return 't_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+}
+
+// Set by parseBookingFromSms(), read by confirmBookingImport() — which
+// template matched and any extra (non-core) fields it captured.
+let bookingLastParse = null;
+// Set by confirmBookingImport(), read by sendBookingWhatsApp().
+let bookingLastResult = null;
+
+function renderImportPage() {
+  const p = getActiveProfile();
+  const templates = p.templates || [];
+  const sel = document.getElementById('bkTemplateSelect');
+  if (!sel) return;
+  const prevValue = sel.value;
+  sel.innerHTML = templates.length
+    ? templates.map(t => `<option value="${t.id}">${t.name}</option>`).join('')
+    : '<option value="">No templates yet — add one below</option>';
+  if (templates.some(t => t.id === prevValue)) sel.value = prevValue;
+}
+
+function openTemplateModal() {
+  document.getElementById('tmplName').value = '';
+  document.getElementById('tmplBody').value = '';
+  document.getElementById('tmplError').style.display = 'none';
+  document.getElementById('templateModal').classList.add('show');
+}
+function closeTemplateModal() {
+  document.getElementById('templateModal').classList.remove('show');
+}
+function templateModalBackdropClick(e) {
+  if (e.target.id === 'templateModal') closeTemplateModal();
+}
+
+function saveNewTemplate() {
+  if (!requireLicense('save a booking template')) return;
+  const name = document.getElementById('tmplName').value.trim();
+  const body = document.getElementById('tmplBody').value;
+  const errEl = document.getElementById('tmplError');
+  if (!name) { errEl.textContent = 'Please name this template (e.g. the app it comes from).'; errEl.style.display = ''; return; }
+  if (!body.trim() || !/\{[A-Z_]+\}/.test(body)) {
+    errEl.textContent = 'Template needs at least one {TOKEN} placeholder.';
+    errEl.style.display = '';
+    return;
+  }
+  const p = getActiveProfile();
+  if (!p.templates) p.templates = [];
+  const t = { id: makeTemplateId(), name, body };
+  p.templates.push(t);
+  persist();
+  closeTemplateModal();
+  renderImportPage();
+  document.getElementById('bkTemplateSelect').value = t.id;
+  showToast('✓ Template saved: ' + name);
+}
+
+function deleteSelectedTemplate() {
+  if (!requireLicense('delete a booking template')) return;
+  const p = getActiveProfile();
+  const sel = document.getElementById('bkTemplateSelect');
+  const id = sel.value;
+  const t = (p.templates || []).find(x => x.id === id);
+  if (!t) return;
+  if (!confirm(`Delete template "${t.name}"?`)) return;
+  p.templates = p.templates.filter(x => x.id !== id);
+  persist();
+  renderImportPage();
+  onBookingTemplateChange();
+  showToast('Template deleted');
+}
+
+function onBookingTemplateChange() {
+  document.getElementById('bkParseMsg').innerHTML = '';
+  document.getElementById('bkReviewSection').style.display = 'none';
+  document.getElementById('bkResultSection').style.display = 'none';
+}
+
+// Fields the review form already has dedicated inputs for — anything else
+// a template captures is shown as read-only extra reference info instead.
+const BOOKING_KNOWN_FIELDS = ['ROOM', 'DATE', 'START', 'END', 'NAME', 'PHONE', 'WEEKDAY'];
+
+function parseBookingFromSms() {
+  if (!requireLicense('import a booking')) return;
+  const p = getActiveProfile();
+  const templates = p.templates || [];
+  const templateId = document.getElementById('bkTemplateSelect').value;
+  const template = templates.find(t => t.id === templateId);
+  const msgEl = document.getElementById('bkParseMsg');
+  const sms = document.getElementById('bkSmsInput').value;
+
+  if (!template) { msgEl.innerHTML = '<div class="status-msg err">Pick or create a template first.</div>'; return; }
+  if (!sms.trim()) { msgEl.innerHTML = '<div class="status-msg err">Paste the SMS text first.</div>'; return; }
+
+  const extracted = parseBookingSms(template.body, sms);
+  if (!extracted) {
+    msgEl.innerHTML = `<div class="status-msg err">Could not match this text against "${template.name}" — check the template, or pick a different one.</div>`;
+    document.getElementById('bkReviewSection').style.display = 'none';
+    return;
+  }
+  msgEl.innerHTML = `<div class="status-msg ok">✓ Parsed using "${template.name}" — review before creating</div>`;
+
+  const room = matchRoomByName(extracted.ROOM);
+  const roomSel = document.getElementById('bkRoom');
+  roomSel.innerHTML = state.rooms.map(r => `<option value="${r.id}">${r.name}</option>`).join('');
+  if (room) roomSel.value = room.id;
+
+  const normalizedDate = normalizeDateGuessYear(extracted.DATE) || todayStr();
+  document.getElementById('bkDate').value  = normalizedDate;
+  document.getElementById('bkStart').value = normalizeTimeTo24h(extracted.START) || '';
+  document.getElementById('bkEnd').value   = normalizeTimeTo24h(extracted.END) || '';
+  document.getElementById('bkName').value  = extracted.NAME || '';
+  document.getElementById('bkPhone').value = extracted.PHONE || '';
+
+  // Weekday is redundant with the date, so use it as a free sanity check
+  // rather than a required field — flag a mismatch, don't block on it.
+  const warnEl = document.getElementById('bkWeekdayWarning');
+  if (extracted.WEEKDAY && normalizedDate) {
+    const actualWeekday = new Date(normalizedDate + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long' });
+    if (actualWeekday.toLowerCase() !== extracted.WEEKDAY.trim().toLowerCase()) {
+      warnEl.textContent = `⚠️ SMS says "${extracted.WEEKDAY}" but ${normalizedDate} is a ${actualWeekday} — double-check the date.`;
+      warnEl.style.display = '';
+    } else {
+      warnEl.style.display = 'none';
+    }
+  } else {
+    warnEl.style.display = 'none';
+  }
+
+  const extra = {};
+  Object.keys(extracted).forEach(k => {
+    if (!BOOKING_KNOWN_FIELDS.includes(k) && extracted[k]) extra[k] = extracted[k];
+  });
+  document.getElementById('bkExtraFields').textContent = Object.keys(extra).length
+    ? 'Also captured: ' + Object.entries(extra).map(([k, v]) => `${k}: ${v}`).join(' · ')
+    : '';
+
+  bookingLastParse = { templateName: template.name, extra };
+  document.getElementById('bkReviewSection').style.display = '';
+  document.getElementById('bkResultSection').style.display = 'none';
+}
+
+// Creates a one-time slot on TODAY for the reviewed/confirmed fields — v1
+// scope is explicitly today-only regardless of what date was parsed (see
+// project notes); the parsed date is shown for reference but doesn't
+// change which day-bucket the slot lands in.
+async function confirmBookingImport() {
+  if (!requireLicense('import a booking')) return;
+  const roomId = parseInt(document.getElementById('bkRoom').value, 10);
+  const r = state.rooms.find(x => x.id === roomId);
+  const start = document.getElementById('bkStart').value;
+  const end = document.getElementById('bkEnd').value;
+  const name = document.getElementById('bkName').value.trim();
+  const phone = document.getElementById('bkPhone').value.trim();
+
+  if (!r) { showToast('⚠️ Pick a room first'); return; }
+  if (!start || !end || start >= end) { showToast('⚠️ Invalid time range'); return; }
+
+  const code = generate4DigitCode();
+  const slot = {
+    s: start, e: end, recurring: false, code,
+    activatedAt: null, activatedBy: null, attempts: 0, lockedUntil: null, expired: false,
+    date: todayStr(),
+    bookedBy: name || null,
+    sourceApp: bookingLastParse ? bookingLastParse.templateName : null,
+    extra: (bookingLastParse && bookingLastParse.extra) || {}
+  };
+  if (!r.slots[0]) r.slots[0] = [];
+  r.slots[0].push(slot);
+  persist();
+  await pushRoom(r.id - 1); // same write path Add Slot already uses — s/e/recurring/code/date only
+  renderDashboard();
+
+  bookingLastResult = { room: r.name, date: slot.date, start, end, code, phone, name };
+  document.getElementById('bkResultMsg').textContent =
+    `${r.name} · ${start}–${end} · code ${code}` + (name ? ` · ${name}` : '');
+  document.getElementById('bkWhatsAppBtn').style.display = phone ? '' : 'none';
+  document.getElementById('bkResultSection').style.display = '';
+  showToast('✓ Booking created');
+}
+
+function sendBookingWhatsApp() {
+  if (!bookingLastResult || !bookingLastResult.phone) { showToast('No phone number to message'); return; }
+  const digits = phoneDigitsOnly(bookingLastResult.phone);
+  if (!digits) { showToast('⚠️ No valid phone number'); return; }
+  const lines = [];
+  if (bookingLastResult.name) lines.push(`Hi ${bookingLastResult.name},`);
+  lines.push(`Booking confirmed: ${bookingLastResult.room}`);
+  lines.push(`Date: ${bookingLastResult.date}`);
+  lines.push(`Time: ${bookingLastResult.start} - ${bookingLastResult.end}`);
+  lines.push(`Your activation code: ${bookingLastResult.code}`);
+  const text = encodeURIComponent(lines.join('\n'));
+  window.open(`https://wa.me/${digits}?text=${text}`, '_blank');
 }
 
 
@@ -1092,7 +1490,7 @@ function hydrate() {
       // Migrate legacy single-config format (pre-profiles) into a "Default" profile
       const p = { id: makeProfileId(), name: 'Default',
         dbUrl: d.config.dbUrl || '', apiKey: d.config.apiKey || '',
-        adminSeed: d.config.adminSeed || '1234', relayWiring: 'NC' };
+        adminSeed: d.config.adminSeed || '1234', relayWiring: 'NC', templates: [] };
       state.profiles = [p];
       state.activeProfileId = p.id;
     }
@@ -1101,7 +1499,7 @@ function hydrate() {
   } catch(e) {}
 
   if (!state.profiles.length) {
-    const p = { id: makeProfileId(), name: 'Default', dbUrl: '', apiKey: '', adminSeed: '1234', relayWiring: 'NC' };
+    const p = { id: makeProfileId(), name: 'Default', dbUrl: '', apiKey: '', adminSeed: '1234', relayWiring: 'NC', templates: [] };
     state.profiles = [p];
     state.activeProfileId = p.id;
   }
@@ -2139,7 +2537,8 @@ async function saveAsNewProfile() {
     dbUrl: document.getElementById('cfg-url').value.trim().replace(/\/$/, ''),
     apiKey: document.getElementById('cfg-key').value.trim(),
     adminSeed: document.getElementById('cfg-seed').value.trim() || '1234',
-    relayWiring: 'NC'
+    relayWiring: 'NC',
+    templates: []
   };
   state.profiles.push(p);
   state.activeProfileId = p.id; // ensureProfileNumber below resolves against getActiveProfile(), so this must be set first
@@ -2302,6 +2701,7 @@ function showPage(name, btn) {
   if (name === 'dashboard') renderDashboard();
   if (name === 'timeline')  renderTimeline();
   if (name === 'settings')  renderSettings();
+  if (name === 'import')    renderImportPage();
 }
 
 // ── Toast ─────────────────────────────────────────────────────
@@ -2569,6 +2969,33 @@ function applyUpdate() {
         <div id="licenseModalError" class="status-msg err" style="display:none;margin-bottom:10px"></div>
         <button class="modal-save-btn" onclick="saveLicenseFromModal()">Save &amp; Activate</button>
         <button class="modal-cancel-btn" onclick="closeLicenseModal()">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Booking template modal ────────────────────────────────── -->
+  <div class="modal-overlay" id="templateModal" onclick="templateModalBackdropClick(event)">
+    <div class="modal-box">
+      <div class="modal-header">
+        <span class="modal-title">New Booking Template</span>
+        <button class="modal-close" onclick="closeTemplateModal()">×</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size:12px;color:var(--muted);margin-bottom:12px">
+          Paste one real sample SMS from this app below, then swap the variable
+          parts for tokens: <code>{ROOM}</code> <code>{DATE}</code> <code>{START}</code>
+          <code>{END}</code> <code>{NAME}</code> <code>{PHONE}</code>. Any other
+          <code>{TOKEN}</code> is kept as extra reference info on the slot.
+        </p>
+        <div class="modal-row">
+          <label class="modal-label" for="tmplName">Name</label>
+          <input class="settings-input" id="tmplName" placeholder="e.g. Playo">
+        </div>
+        <textarea class="settings-input" id="tmplBody" rows="8" style="margin-top:10px;font-family:inherit" placeholder="Paste sample SMS, then swap values for {TOKENS}"></textarea>
+        <div id="tmplError" class="status-msg err" style="display:none;margin-top:10px"></div>
+        <div class="modal-divider"></div>
+        <button class="modal-save-btn" onclick="saveNewTemplate()">Save Template</button>
+        <button class="modal-cancel-btn" onclick="closeTemplateModal()">Cancel</button>
       </div>
     </div>
   </div>
