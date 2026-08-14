@@ -436,6 +436,7 @@
       </div>
       <div class="settings-row">
         <button class="add-slot-btn" onclick="openTemplateModal()" style="flex:1">+ New template</button>
+        <button class="profile-btn" onclick="openEditTemplateModal()" title="Edit this template">✎</button>
         <button class="profile-btn" onclick="deleteSelectedTemplate()" title="Delete this template">🗑</button>
       </div>
     </div>
@@ -628,14 +629,33 @@ function normalizeSlots(slots) {
 
 // ── Booking-import template engine ────────────────────────────
 // A template is the sample SMS text with the variable parts replaced by
-// {PLACEHOLDER} tokens, e.g. "Venue: {ROOM}". Compiling it turns every
-// literal span of text into an escaped, required anchor and every
-// placeholder into a capture group — so a booking gets matched by the
-// exact wording *around* each value, not by guessing at structure.
+// {PLACEHOLDER} tokens, e.g. "Venue: {ROOM}". Each placeholder gets matched
+// independently — using only its own immediately-surrounding text, not the
+// whole template as one pattern — so a wording change or slight mismatch
+// near ONE field (a missing space, a reordered line) doesn't prevent every
+// OTHER field from still being extracted. Whatever the SMS actually
+// provides gets filled in; the rest is left for the user to type in
+// manually rather than blocked outright.
 function escapeRegExp(s) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+// Turns a chunk of literal template text into a matcher that's flexible on
+// whitespace — "Venue: " and "Venue:" (or extra/missing spaces anywhere)
+// match the same way, since real SMS spacing varies release to release and
+// shouldn't be the reason a field fails to extract.
+function flexibleLiteralPattern(text) {
+  const trimmed = (text || '').trim();
+  if (!trimmed) return '';
+  return trimmed.split(/\s+/).map(escapeRegExp).join('\\s*');
+}
+
+// Builds one independent regex per placeholder: the (flexible) literal text
+// right before it, a capture, then a non-consuming lookahead for whatever
+// literal text comes right after it (so two adjacent placeholders never
+// fight over the same anchor). No lookahead (nothing follows, or the
+// following text is empty after trimming) means capture greedily to end of
+// line instead of leaving it unanchored.
 function compileBookingTemplate(templateText) {
   const placeholderRe = /\{([A-Z_]+)\}/g;
   const names = [];
@@ -647,39 +667,60 @@ function compileBookingTemplate(templateText) {
     names.push(m[1]);
     lastIndex = placeholderRe.lastIndex;
   }
-  // Text after the LAST placeholder (typically a footer sentence) is only
-  // required up to its own line — anything from the next newline onward is
-  // dropped entirely, since footers are the most likely thing to vary
-  // release to release even from the same sender.
   const trailingLiteral = templateText.slice(lastIndex);
   const newlineIdx = trailingLiteral.indexOf('\n');
+  // Only same-line trailing text (e.g. the closing ")" after a phone
+  // number) is used to bound the last field — a footer sentence starting
+  // on the next line is dropped, since that's the part most likely to
+  // vary even from the same sender.
   const sameLineTail = newlineIdx === -1 ? trailingLiteral : trailingLiteral.slice(0, newlineIdx);
 
-  let pattern = '';
-  literalChunks.forEach((literal, i) => {
-    pattern += escapeRegExp(literal);
-    const isLast = i === literalChunks.length - 1;
-    // Every capture is non-greedy (bounded by whatever literal comes next)
-    // EXCEPT the last one when there's no same-line text after it to force
-    // it to expand — a non-greedy group with nothing anchoring its end
-    // would otherwise just match empty.
-    pattern += (isLast && !sameLineTail) ? '([^\\n]*)' : '([^\\n]*?)';
+  return names.map((name, i) => {
+    const beforePattern = flexibleLiteralPattern(literalChunks[i]);
+    const isLast = i === names.length - 1;
+    const afterLiteral = isLast ? sameLineTail : literalChunks[i + 1];
+    const afterPattern = flexibleLiteralPattern(afterLiteral);
+    // When there's a following anchor to stop at, the capture must be able
+    // to cross a newline to reach it — many fields sit on their own line
+    // with the next field's label starting on the line after (e.g. "ID:
+    // IMSQVXAO" then "Sport:" on the next line). Non-greedy still keeps it
+    // to the shortest span that satisfies the lookahead. Only the
+    // no-anchor fallback stays restricted to "rest of this line".
+    const capture = afterPattern ? '([\\s\\S]*?)' : '([^\\n]*)';
+    const lookahead = afterPattern ? '(?=' + afterPattern + ')' : '';
+    return { name, regex: new RegExp(beforePattern + capture + lookahead) };
   });
-  pattern += escapeRegExp(sameLineTail);
-  return { regex: new RegExp(pattern), names };
 }
 
-// Applies a compiled template against pasted SMS text. Returns a plain
-// {PLACEHOLDER_NAME: value} object, or null if the template doesn't match
-// at all (wrong template picked, or the sender changed their wording).
+// Applies a template against pasted SMS text. Returns a plain
+// {PLACEHOLDER_NAME: value} object — fields that couldn't be matched come
+// back as '' rather than aborting the whole thing — or null only if NOT A
+// SINGLE field matched at all (almost certainly the wrong template).
+//
+// Each field searches only the text AFTER wherever the previous field's
+// match ended, not the whole message from the start — a plain "," or " "
+// anchor is not unique on its own (e.g. a Slot line with two commas in
+// it), so without this a short generic anchor can lock onto an earlier,
+// wrong occurrence. When a field fails to match, the cursor does NOT
+// advance, so the next field still searches from the same place rather
+// than being dragged past text it needed to see.
 function parseBookingSms(templateText, smsText) {
   if (!templateText || !smsText) return null;
-  const { regex, names } = compileBookingTemplate(templateText);
-  const match = regex.exec(smsText);
-  if (!match) return null;
+  const matchers = compileBookingTemplate(templateText);
   const result = {};
-  names.forEach((name, i) => { result[name] = (match[i + 1] || '').trim(); });
-  return result;
+  let anyMatched = false;
+  let searchFrom = 0;
+  matchers.forEach(({ name, regex }) => {
+    const m = regex.exec(smsText.slice(searchFrom));
+    if (m) {
+      result[name] = (m[1] || '').trim();
+      anyMatched = true;
+      searchFrom += m.index + m[0].length;
+    } else {
+      result[name] = '';
+    }
+  });
+  return anyMatched ? result : null;
 }
 
 // "06:00 PM" / "6:00pm" / "18:00" -> "18:00". Returns null if it doesn't
@@ -779,21 +820,44 @@ function renderImportPage() {
   if (templates.some(t => t.id === prevValue)) sel.value = prevValue;
 }
 
+// Tracks which template is being edited (null = the modal is in "new
+// template" mode instead). Read into a local before closeTemplateModal()
+// clears it, since save/close happen back-to-back on confirm.
+let editingTemplateId = null;
+
 function openTemplateModal() {
+  editingTemplateId = null;
+  document.getElementById('templateModalTitle').textContent = 'New Booking Template';
   document.getElementById('tmplName').value = '';
   document.getElementById('tmplBody').value = '';
   document.getElementById('tmplError').style.display = 'none';
   document.getElementById('templateModal').classList.add('show');
 }
+
+function openEditTemplateModal() {
+  const p = getActiveProfile();
+  const sel = document.getElementById('bkTemplateSelect');
+  const t = (p.templates || []).find(x => x.id === sel.value);
+  if (!t) { showToast('Pick a template to edit first'); return; }
+  editingTemplateId = t.id;
+  document.getElementById('templateModalTitle').textContent = 'Edit Booking Template';
+  document.getElementById('tmplName').value = t.name;
+  document.getElementById('tmplBody').value = t.body;
+  document.getElementById('tmplError').style.display = 'none';
+  document.getElementById('templateModal').classList.add('show');
+}
+
 function closeTemplateModal() {
   document.getElementById('templateModal').classList.remove('show');
+  editingTemplateId = null;
 }
 function templateModalBackdropClick(e) {
   if (e.target.id === 'templateModal') closeTemplateModal();
 }
 
-function saveNewTemplate() {
-  if (!requireLicense('save a booking template')) return;
+function saveTemplateFromModal() {
+  const isEdit = !!editingTemplateId;
+  if (!requireLicense(isEdit ? 'edit a booking template' : 'save a booking template')) return;
   const name = document.getElementById('tmplName').value.trim();
   const body = document.getElementById('tmplBody').value;
   const errEl = document.getElementById('tmplError');
@@ -805,13 +869,14 @@ function saveNewTemplate() {
   }
   const p = getActiveProfile();
   if (!p.templates) p.templates = [];
-  const t = { id: makeTemplateId(), name, body };
-  p.templates.push(t);
+  let t = isEdit ? p.templates.find(x => x.id === editingTemplateId) : null;
+  if (t) { t.name = name; t.body = body; }
+  else { t = { id: makeTemplateId(), name, body }; p.templates.push(t); }
   persist();
   closeTemplateModal();
   renderImportPage();
   document.getElementById('bkTemplateSelect').value = t.id;
-  showToast('✓ Template saved: ' + name);
+  showToast((isEdit ? '✓ Template updated: ' : '✓ Template saved: ') + name);
 }
 
 function deleteSelectedTemplate() {
@@ -2977,7 +3042,7 @@ function applyUpdate() {
   <div class="modal-overlay" id="templateModal" onclick="templateModalBackdropClick(event)">
     <div class="modal-box">
       <div class="modal-header">
-        <span class="modal-title">New Booking Template</span>
+        <span class="modal-title" id="templateModalTitle">New Booking Template</span>
         <button class="modal-close" onclick="closeTemplateModal()">×</button>
       </div>
       <div class="modal-body">
@@ -2994,7 +3059,7 @@ function applyUpdate() {
         <textarea class="settings-input" id="tmplBody" rows="8" style="margin-top:10px;font-family:inherit" placeholder="Paste sample SMS, then swap values for {TOKENS}"></textarea>
         <div id="tmplError" class="status-msg err" style="display:none;margin-top:10px"></div>
         <div class="modal-divider"></div>
-        <button class="modal-save-btn" onclick="saveNewTemplate()">Save Template</button>
+        <button class="modal-save-btn" onclick="saveTemplateFromModal()">Save Template</button>
         <button class="modal-cancel-btn" onclick="closeTemplateModal()">Cancel</button>
       </div>
     </div>
