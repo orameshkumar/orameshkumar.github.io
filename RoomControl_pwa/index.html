@@ -1915,7 +1915,27 @@ function applyFirebasePathUpdate(path, value) {
 
   const field = segments[1];
 
-  if (field === 'slots') return; // handled once-daily by checkDailySlotRefresh() instead
+  // Live-sync ONLY the activation-status sub-fields activate.html writes
+  // (activatedAt/activatedBy/attempts/lockedUntil) — deliberately narrow:
+  // live-syncing full slot objects was the source of past bugs (stale
+  // slots surviving rollover, index misalignment — see the comment above
+  // startFbListener()), but these four fields are exclusively owned by
+  // activate.html and never touched by pushRoom(), so there's nothing to
+  // race against. Without this, activating a slot via the QR page never
+  // shows up on the dashboard until the next once-daily slot refresh.
+  if (field === 'slots' && segments.length >= 4) {
+    const slotIdx  = parseInt(segments[2], 10);
+    const subField = segments[3];
+    if (['activatedAt', 'activatedBy', 'attempts', 'lockedUntil'].includes(subField) &&
+        room.slots[0] && room.slots[0][slotIdx]) {
+      room.slots[0][slotIdx][subField] = value;
+      renderDashboard();
+      persist();
+    }
+    return;
+  }
+
+  if (field === 'slots') return; // structural slot changes — handled once-daily by checkDailySlotRefresh() instead
 
   if (field === 'lightOn') {
     room.lightOn = value;
