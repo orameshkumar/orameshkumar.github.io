@@ -2038,16 +2038,42 @@ async function pushRoom(idx) {
       s: sl.s, e: sl.e,
       recurring: sl.recurring,
       code: sl.code,
-      date: sl.date
-      // activatedAt/By/attempts/lockedUntil/expired NOT written here
-      // They are managed exclusively by activateSlot/deactivateSlot/activate.html
+      date: sl.date,
+      // expired IS explicitly reset here (unlike activatedAt/attempts/
+      // lockedUntil, which stay ESP32/activate.html-owned) — PATCH only
+      // touches fields it's given, so without this a slot that reuses a
+      // Firebase index a past, unactivated booking already expired (e.g.
+      // a recurring slot hitting the same index every day, or a fresh
+      // slot created after an old one was deleted) silently inherits
+      // that stale expired:true forever. Safe to always clear: any slot
+      // still in r.slots[0] that's genuinely past its end time is already
+      // hidden from activate.html's own "not yet ended" filter regardless
+      // of this flag, so there's nothing visible to regress.
+      expired: false
+      // activatedAt/By/attempts/lockedUntil NOT written here — managed
+      // exclusively by activateSlot/deactivateSlot/activate.html
     });
+  }
+
+  // Prune ghost slot entries left behind when the array shrinks (e.g.
+  // after deleting a slot) — the loop above only ever PATCHes indices
+  // still in use, so anything beyond today's count would otherwise sit
+  // in Firebase forever and get picked up by the ESP32's blind index
+  // scan alongside the real slots.
+  const existingSlots = await fbGet(`${roomBase}/slots`);
+  if (existingSlots && typeof existingSlots === 'object' && !Array.isArray(existingSlots)) {
+    for (const key of Object.keys(existingSlots)) {
+      const ghostIdx = parseInt(key, 10);
+      if (!isNaN(ghostIdx) && ghostIdx >= todaySlots.length) {
+        await fbSet(`${roomBase}/slots/${ghostIdx}`, null);
+      }
+    }
   }
 
   // Write slotsT (tomorrow) — these are never activated so safe to write fully
   const tomorrowSlots = normalizeSlots(r.slots[1]);
   const slotsT = tomorrowSlots.map(sl => ({
-    s: sl.s, e: sl.e, recurring: sl.recurring, code: sl.code, date: sl.date
+    s: sl.s, e: sl.e, recurring: sl.recurring, code: sl.code, date: sl.date, expired: false
   }));
   await fbPatch(roomBase, { slotsT });
 
