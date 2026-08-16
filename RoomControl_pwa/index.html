@@ -384,6 +384,11 @@
       <div class="settings-title">WhatsApp reminder message</div>
       <div class="settings-sub" style="padding:0 14px 8px">Used by every slot's WhatsApp reminder button (manual or imported). Available placeholders: <code>{NAME}</code> <code>{ROOM}</code> <code>{DATE}</code> <code>{START}</code> <code>{END}</code> <code>{CODE}</code></div>
       <div class="settings-row" style="flex-direction:column;align-items:stretch;gap:6px">
+        <div class="settings-label">Default country code</div>
+        <input class="settings-input" id="cfg-whatsapp-country-code" placeholder="91" style="max-width:120px">
+        <div class="settings-sub" style="padding:0">Added automatically when a saved number doesn't start with "+" — e.g. a plain 10-digit local number. Leave the country out of the phone field itself; type "+" there only if a booking's number is from a different country.</div>
+      </div>
+      <div class="settings-row" style="flex-direction:column;align-items:stretch;gap:6px">
         <textarea class="settings-input" id="cfg-whatsapp-template" rows="3" style="font-family:inherit" placeholder="Hi {NAME}, your booking for {ROOM} on {DATE} from {START} to {END} is confirmed. Your access code: {CODE}"></textarea>
       </div>
     </div>
@@ -825,6 +830,28 @@ function phoneDigitsOnly(raw) {
   return raw.replace(/[^\d]/g, '');
 }
 
+// wa.me has no way to signal "these digits already include a country
+// code" — if we send a bare local number, WhatsApp guesses the country
+// from device locale and can mangle it in the process (dropping what it
+// thinks is a redundant leading 0, then showing the wrong "+" code). So a
+// country code must be prepended here rather than left to WhatsApp.
+// "+" in the saved number means the booker already typed a full
+// international number — trust it as-is. Otherwise it's a local number:
+// drop a single leading trunk "0" (the local-dialing convention, invalid
+// once a country code is added) and prepend the profile's default code,
+// unless the digits already start with it.
+function buildWhatsAppNumber(raw, countryCode) {
+  if (!raw) return '';
+  const hasPlus = raw.trim().startsWith('+');
+  let digits = phoneDigitsOnly(raw);
+  if (!digits) return '';
+  const cc = phoneDigitsOnly(countryCode || '');
+  if (hasPlus || !cc) return digits;
+  if (digits.startsWith(cc) && digits.length > 10) return digits; // already includes the country code
+  if (digits.startsWith('0')) digits = digits.slice(1);
+  return cc + digits;
+}
+
 // ── WhatsApp reminder message ──────────────────────────────────
 // A per-profile editable template (Settings → WhatsApp reminder message) —
 // {NAME}/{ROOM}/{DATE}/{START}/{END}/{CODE} get filled in with the actual
@@ -845,9 +872,9 @@ function sendSlotWhatsAppReminder(roomId, slotIdx) {
   const r = state.rooms.find(x => x.id === roomId);
   const slot = r && r.slots[0] && r.slots[0][slotIdx];
   if (!slot || !slot.phone) { showToast('No phone number saved for this slot'); return; }
-  const digits = phoneDigitsOnly(slot.phone);
-  if (!digits) { showToast('⚠️ No valid phone number'); return; }
   const p = getActiveProfile();
+  const digits = buildWhatsAppNumber(slot.phone, p.whatsappCountryCode);
+  if (!digits) { showToast('⚠️ No valid phone number'); return; }
   const text = fillWhatsAppTemplate(p.whatsappTemplate || DEFAULT_WHATSAPP_TEMPLATE, {
     NAME: slot.bookedBy || '', ROOM: r.name, DATE: slot.date || todayStr(),
     START: slot.s, END: slot.e, CODE: slot.code || ''
@@ -2504,6 +2531,7 @@ function renderSettings() {
   document.getElementById('cfg-key').value  = p.apiKey;
   document.getElementById('cfg-seed').value = p.adminSeed || '1234';
   document.getElementById('cfg-whatsapp-template').value = p.whatsappTemplate || DEFAULT_WHATSAPP_TEMPLATE;
+  document.getElementById('cfg-whatsapp-country-code').value = p.whatsappCountryCode || '91';
   // Show admin code
   const code = getAdminCode(p.adminSeed);
   document.getElementById('adminCodeDisplay').textContent = code;
@@ -2667,6 +2695,7 @@ async function saveActiveProfile() {
   p.apiKey    = document.getElementById('cfg-key').value.trim();
   p.adminSeed = document.getElementById('cfg-seed').value.trim() || '1234';
   p.whatsappTemplate = document.getElementById('cfg-whatsapp-template').value.trim() || DEFAULT_WHATSAPP_TEMPLATE;
+  p.whatsappCountryCode = document.getElementById('cfg-whatsapp-country-code').value.trim().replace(/[^\d]/g, '') || '91';
   applyRoomNameEdits();
   const pinConflict = checkPinConflicts();
   if (pinConflict) {
