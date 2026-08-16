@@ -271,6 +271,8 @@
       padding: 8px 16px; font-size: 12px; }
     .license-banner-btn { background: var(--amber); color: #1a1a2e; border: none; border-radius: 6px;
       padding: 5px 12px; font-size: 11px; font-weight: 600; cursor: pointer; flex-shrink: 0; }
+    .product-info { line-height: 1.6; }
+    .product-info a { color: var(--accent); text-decoration: none; }
     body.license-locked #page-settings .settings-section:not(.license-exempt),
     body.license-locked #page-settings .qr-section,
     body.license-locked #page-settings .admin-code-box,
@@ -291,7 +293,7 @@
   <button class="update-btn" onclick="applyUpdate()">Update now</button>
 </div>
 <div class="license-banner" id="licenseBanner" style="display:none">
-  <span>🔒 No active license — overrides work, everything else is view-only.</span>
+  <span>🔒 No active license — overrides work, everything else is view-only. Contact <span id="licenseBannerContact"></span> to activate.</span>
   <button class="license-banner-btn" onclick="openLicenseModal()">Activate</button>
 </div>
   <div class="header">
@@ -382,7 +384,7 @@
     </div>
     <div class="settings-section">
       <div class="settings-title">WhatsApp reminder message</div>
-      <div class="settings-sub" style="padding:0 14px 8px">Used by every slot's WhatsApp reminder button (manual or imported). Available placeholders: <code>{NAME}</code> <code>{ROOM}</code> <code>{DATE}</code> <code>{START}</code> <code>{END}</code> <code>{CODE}</code></div>
+      <div class="settings-sub" style="padding:0 14px 8px">Used by every slot's WhatsApp reminder button (manual or imported). Available placeholders: <code>{NAME}</code> <code>{ROOM}</code> <code>{DATE}</code> <code>{START}</code> <code>{END}</code> <code>{CODE}</code> <code>{SUPPORT}</code></div>
       <div class="settings-row" style="flex-direction:column;align-items:stretch;gap:6px">
         <div class="settings-label">Default country code</div>
         <input class="settings-input" id="cfg-whatsapp-country-code" placeholder="91" style="max-width:120px">
@@ -436,6 +438,10 @@
     <div class="log-wrap">
       <div class="log-title">Activity log</div>
       <div id="logList"><div style="font-size:12px;color:var(--muted)">No activity yet</div></div>
+    </div>
+    <div class="settings-section license-exempt">
+      <div class="settings-title">About</div>
+      <div class="settings-row" style="flex-direction:column;align-items:stretch;gap:6px;font-size:13px;color:var(--muted)" id="aboutProductInfo"></div>
     </div>
   </div>
 
@@ -532,6 +538,7 @@
 
 </div>
 
+<script src="product-info.js"></script>
 <script>
 // ── State ────────────────────────────────────────────────────
 // Matches the ESP32 sketch's current hardcoded RELAY_PINS[]/LED_PINS[] wiring —
@@ -857,7 +864,7 @@ function buildWhatsAppNumber(raw, countryCode) {
 // {NAME}/{ROOM}/{DATE}/{START}/{END}/{CODE} get filled in with the actual
 // slot's details. Shared by both manual slot creation and booking import,
 // so there's exactly one message format to configure, not two.
-const DEFAULT_WHATSAPP_TEMPLATE = 'Hi {NAME}, your booking for {ROOM} on {DATE} from {START} to {END} is confirmed. Your access code: {CODE}';
+const DEFAULT_WHATSAPP_TEMPLATE = 'Hi {NAME}, your booking for {ROOM} on {DATE} from {START} to {END} is confirmed. Your access code: {CODE}\n\n{SUPPORT}';
 
 function fillWhatsAppTemplate(template, data) {
   return (template || '').replace(/\{([A-Z_]+)\}/g, (match, key) => {
@@ -877,7 +884,7 @@ function sendSlotWhatsAppReminder(roomId, slotIdx) {
   if (!digits) { showToast('⚠️ No valid phone number'); return; }
   const text = fillWhatsAppTemplate(p.whatsappTemplate || DEFAULT_WHATSAPP_TEMPLATE, {
     NAME: slot.bookedBy || '', ROOM: r.name, DATE: slot.date || todayStr(),
-    START: slot.s, END: slot.e, CODE: slot.code || ''
+    START: slot.s, END: slot.e, CODE: slot.code || '', SUPPORT: productInfoLine()
   });
   window.open(`https://wa.me/${digits}?text=${encodeURIComponent(text)}`, '_blank');
 }
@@ -3006,6 +3013,9 @@ startLicenseWatch();
 
 function bootApp() {
   _appBooted = true;
+  document.getElementById('aboutProductInfo').innerHTML = productInfoHtml();
+  document.getElementById('licenseBannerContact').innerHTML =
+    `<a href="tel:${PRODUCT_INFO.phone}" style="color:inherit">${PRODUCT_INFO.phone}</a>`;
   updateHeaderProfile();
   updateClock();
   setInterval(updateClock, 10000);

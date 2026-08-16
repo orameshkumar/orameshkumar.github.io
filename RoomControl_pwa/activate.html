@@ -81,6 +81,8 @@
     .success-icon { font-size: 48px; margin-bottom: 12px; }
     .success-text { font-size: 18px; font-weight: 600; color: var(--green); }
     .success-sub  { font-size: 13px; color: var(--muted); margin-top: 6px; }
+    .product-info-footer { text-align: center; font-size: 12px; color: var(--muted); padding: 20px 16px 24px; line-height: 1.6; }
+    .product-info-footer a { color: var(--accent); text-decoration: none; }
   </style>
 </head>
 <body>
@@ -97,6 +99,8 @@
   </div>
   <div id="slotList" style="display:none"></div>
 </div>
+
+<div class="product-info-footer" id="productInfoFooter"></div>
 
 <!-- PIN pad overlay -->
 <div class="pin-overlay" id="pinOverlay">
@@ -137,7 +141,10 @@
   </div>
 </div>
 
+<script src="product-info.js"></script>
 <script>
+document.getElementById('productInfoFooter').innerHTML = productInfoHtml();
+
 // ── Config — supplied via ?db=&p= baked into each profile's QR/activation link ──
 // p = the profile's numeric Firebase key (/profiles/{p}/...) — profiles sharing
 // one database are namespaced this way; the profile's name is never part of
