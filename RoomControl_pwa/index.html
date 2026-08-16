@@ -1109,6 +1109,7 @@ async function confirmBookingImport() {
   const slot = {
     s: start, e: end, recurring: false, code,
     activatedAt: null, activatedBy: null, attempts: 0, lockedUntil: null, expired: false,
+    _fresh: true,
     date: todayStr(),
     bookedBy: name || null,
     phone: phone || null,
@@ -1413,6 +1414,7 @@ async function saveSlotFromModal() {
     code: slotCode,
     activatedAt: null, activatedBy: null,
     attempts: 0, lockedUntil: null, expired: false,
+    _fresh: true,
     date: dateStr,
     bookedBy, phone
   });
@@ -2054,7 +2056,7 @@ async function pushRoom(idx) {
   const todaySlots = normalizeSlots(r.slots[0]);
   for (let si = 0; si < todaySlots.length; si++) {
     const sl = todaySlots[si];
-    await fbPatch(`${roomBase}/slots/${si}`, {
+    const patch = {
       s: sl.s, e: sl.e,
       recurring: sl.recurring,
       code: sl.code,
@@ -2070,9 +2072,32 @@ async function pushRoom(idx) {
       // hidden from activate.html's own "not yet ended" filter regardless
       // of this flag, so there's nothing visible to regress.
       expired: false
-      // activatedAt/By/attempts/lockedUntil NOT written here — managed
-      // exclusively by activateSlot/deactivateSlot/activate.html
-    });
+      // activatedAt/By/attempts/lockedUntil NOT written here on every
+      // push — managed exclusively by activateSlot/deactivateSlot/
+      // activate.html, and blanket-resetting them on every save would
+      // turn off a light someone just legitimately activated if the
+      // owner edits a sibling slot in the same room around the same time.
+    };
+    // A BRAND NEW slot is the one case those fields must still be reset:
+    // otherwise it silently inherits whatever activatedAt/attempts/
+    // lockedUntil a previous, unrelated booking left behind at this same
+    // Firebase index (e.g. a slot created after an old one was deleted,
+    // or a second overlapping slot landing on an index a now-finished
+    // earlier slot had already activated) — the ESP32 then reads that
+    // stale activatedAt and switches the relay on for a slot no one
+    // actually activated. _fresh is set only at creation and cleared
+    // right after this first push, so later edits never re-trigger it.
+    if (sl._fresh) {
+      patch.activatedAt = null;
+      patch.activatedBy = null;
+      patch.attempts = 0;
+      patch.lockedUntil = null;
+      delete sl._fresh;
+      persist(); // clear the marker in storage now — otherwise a reload
+                 // before the next push would resurrect it and reset
+                 // activation state again on some later, unrelated save
+    }
+    await fbPatch(`${roomBase}/slots/${si}`, patch);
   }
 
   // Prune ghost slot entries left behind when the array shrinks (e.g.
@@ -2230,6 +2255,7 @@ async function applyRecurring(id) {
           recurring: true, code: generate4DigitCode(),
           activatedAt: null, activatedBy: null,
           attempts: 0, lockedUntil: null, expired: false,
+          _fresh: true,
           date: day === 0 ? todayStr() : (() => {
             const dt = new Date(); dt.setDate(dt.getDate()+1);
             return dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0');
