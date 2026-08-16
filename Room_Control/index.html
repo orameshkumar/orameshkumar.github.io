@@ -1607,7 +1607,7 @@ function printQR() {
   const win = window.open('', '_blank');
   // Use string concat to avoid script-closing tag inside string breaking parser
   const scriptTag = '<scr' + 'ipt src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></' + 'script>';
-  const inlineScript = '<scr' + 'ipt>window.onload=function(){new QRCode(document.getElementById("qr"),{text:"' + activateUrl + '",width:200,height:200,colorDark:"#000000",colorLight:"#ffffff",correctLevel:2});setTimeout(function(){window.print();},800);};</' + 'script>';
+  const inlineScript = '<scr' + 'ipt>window.onload=function(){new QRCode(document.getElementById("qr"),{text:"' + activateUrl + '",width:280,height:280,colorDark:"#000000",colorLight:"#ffffff",correctLevel:2});setTimeout(function(){window.print();},800);};</' + 'script>';
   const productFooterHtml =
     '<div style="margin-top:24px;font-size:12px;color:#999;line-height:1.6">' +
     '<strong style="color:#666">' + PRODUCT_INFO.name + '</strong> — ' + PRODUCT_INFO.tagline + '<br>' +
@@ -1617,7 +1617,7 @@ function printQR() {
     '<!DOCTYPE html><html><head><title>Room Controller QR</title>' +
     '<style>body{font-family:-apple-system,sans-serif;text-align:center;padding:40px;}' +
     'h2{font-size:22px;margin-bottom:4px;}p{color:#666;font-size:14px;margin-bottom:20px;}' +
-    '.url{font-size:12px;color:#999;margin-top:12px;word-break:break-all;}' +
+    '.url{font-size:12px;color:#999;margin:12px auto 0;max-width:320px;line-height:1.6;word-break:break-all;}' +
     '@media print{button{display:none;}}</style>' +
     scriptTag +
     '</head><body>' +
