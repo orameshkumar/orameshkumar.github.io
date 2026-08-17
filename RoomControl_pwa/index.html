@@ -227,6 +227,7 @@
     .profile-row:first-child { border-top: none; }
     .profile-row.active { cursor: default; background: rgba(74,143,255,0.08); }
     .profile-name { font-size: 14px; font-weight: 500; }
+    .profile-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 7px; vertical-align: middle; }
     .profile-active-tag { font-size: 10px; padding: 1px 7px; border-radius: 10px; background: rgba(74,143,255,0.2); color: var(--accent); font-weight: 600; margin-left: 4px; }
     .profile-num-tag { font-size: 10px; padding: 1px 7px; border-radius: 10px; background: rgba(255,255,255,0.08); color: var(--muted); font-weight: 600; margin-left: 4px; font-family: monospace; }
     .profile-url { font-size: 11px; color: var(--muted); margin-top: 2px; font-family: monospace; }
@@ -2730,9 +2731,24 @@ function renderTimeline() {
 }
 
 // ── Settings ─────────────────────────────────────────────────
+// Deterministic per-profile hue (0-359) from its id — used to tint the
+// Settings page background and mark each profile's row in the list, so
+// which profile you're currently looking at is visible at a glance
+// rather than only readable from the name text.
+function profileHue(id) {
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) hash = (hash * 31 + id.charCodeAt(i)) >>> 0;
+  return hash % 360;
+}
+
 function renderSettings() {
   const p = getActiveProfile();
   document.getElementById('profileList').innerHTML = state.profiles.map(renderProfileRow).join('');
+  // Subtle per-profile background tint on the whole Settings page — low
+  // saturation, dark theme lightness, so it stays readable and doesn't
+  // clash with the app's usual dark palette, just enough to notice which
+  // profile is active without reading anything.
+  document.getElementById('page-settings').style.background = `hsl(${profileHue(p.id)}, 30%, 8%)`;
   document.getElementById('cfg-url').value  = p.dbUrl;
   document.getElementById('cfg-key').value  = p.apiKey;
   document.getElementById('cfg-seed').value = p.adminSeed || '1234';
@@ -2808,9 +2824,10 @@ function toggleNoLed(id, checked) {
 
 function renderProfileRow(p) {
   const isActive = p.id === state.activeProfileId;
-  return `<div class="profile-row${isActive?' active':''}" ${isActive?'':`onclick="switchProfile('${p.id}')"`}>
+  const hue = profileHue(p.id);
+  return `<div class="profile-row${isActive?' active':''}" style="border-left:4px solid hsl(${hue},55%,${isActive?'55':'32'}%)" ${isActive?'':`onclick="switchProfile('${p.id}')"`}>
     <div>
-      <div class="profile-name">${p.name}${isActive?' <span class="profile-active-tag">Active</span>':''}${p.fbNum ? ` <span class="profile-num-tag">#${p.fbNum}</span>` : ''}</div>
+      <div class="profile-name"><span class="profile-dot" style="background:hsl(${hue},55%,55%)"></span>${p.name}${isActive?' <span class="profile-active-tag">Active</span>':''}${p.fbNum ? ` <span class="profile-num-tag">#${p.fbNum}</span>` : ''}</div>
       <div class="profile-url">${p.dbUrl ? truncateUrl(p.dbUrl) : 'No DB URL set yet'}</div>
     </div>
     <div class="profile-actions">
