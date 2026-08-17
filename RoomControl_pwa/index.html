@@ -431,6 +431,13 @@
         <button class="add-slot-btn" onclick="addRoom()">+ Add room</button>
       </div>
     </div>
+    <div class="settings-section">
+      <div class="settings-title">Slot maintenance</div>
+      <div class="settings-sub" style="padding:0 14px 8px">Normally the ESP32 does this automatically at midnight. Use this if a room is showing stale one-time slots that should already have been cleared (e.g. after a firmware update or an extended outage) — for every room, it drops today's one-time slots, promotes tomorrow's one-time slots into today, and keeps recurring slots as-is, then pushes the result to Firebase immediately.</div>
+      <div class="settings-row">
+        <button class="test-btn" style="margin:0" onclick="forceAllRoomsRollover()">Force slot rollover now</button>
+      </div>
+    </div>
     <button class="save-btn" onclick="saveActiveProfile()">Save changes to this profile</button>
     <button class="test-btn" onclick="saveAsNewProfile()">Save as new profile</button>
     <button class="test-btn" onclick="testConnection()">Test Firebase connection</button>
@@ -2126,6 +2133,39 @@ async function pushRoom(idx) {
   addLog(ok ? 'ok' : 'error', `room${r.id} → Firebase`);
   setConnStatus(ok);
   return ok;
+}
+
+// ── Manual slot rollover — same rule as the ESP32's midnightRollover() ──
+// Recurring slots stay, today's one-time slots are dropped, tomorrow's
+// one-time slots are promoted into today. Exists for when the device
+// missed a real midnight rollover (extended outage, a stale
+// lastRolloverEpochDay marker surviving a firmware update, etc.) and
+// stale one-time slots need clearing before the next real midnight —
+// runs entirely from here, no ESP32 involvement needed.
+function rolloverRoomLocally(r) {
+  const todaySlots    = normalizeSlots(r.slots[0]);
+  const tomorrowSlots  = normalizeSlots(r.slots[1]);
+  const resetFields = { activatedAt: null, activatedBy: null, attempts: 0, lockedUntil: null, expired: false, _fresh: true };
+
+  const keptRecurring = todaySlots.filter(sl => sl.recurring).map(sl => ({ ...sl, ...resetFields }));
+  const promoted = tomorrowSlots.filter(sl => !sl.recurring).map(sl => ({ ...sl, ...resetFields, date: todayStr() }));
+
+  r.slots[0] = [...keptRecurring, ...promoted];
+  r.slots[1] = [];
+}
+
+async function forceAllRoomsRollover() {
+  if (!requireLicense('force a slot rollover')) return;
+  for (const r of state.rooms) {
+    rolloverRoomLocally(r);
+  }
+  persist();
+  for (const r of state.rooms) {
+    await pushRoom(r.id - 1);
+  }
+  renderDashboard();
+  showToast('✓ Slot rollover forced for all rooms');
+  addLog('ok', 'Manual slot rollover — all rooms');
 }
 
 async function pushAllRooms() {
