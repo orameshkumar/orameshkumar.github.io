@@ -1972,8 +1972,13 @@ function applyFirebasePathUpdate(path, value) {
 function syncFromFirebase(data) {
   // data is { room1: {...}, room2: {...}, ... } — the initial SSE snapshot,
   // a full poll, or a whole-room object forwarded from
-  // applyFirebasePathUpdate. Only override/lightOn are applied here — see
-  // applyFirebasePathUpdate()'s comment for why slots are excluded.
+  // applyFirebasePathUpdate. Structural slot fields (s/e/code/date/
+  // recurring/expired) are still excluded — see applyFirebasePathUpdate()'s
+  // comment for why. Activation status is a narrow, deliberate exception,
+  // same as that function's per-field SSE handling: this is the polling
+  // fallback used when the SSE connection itself drops, so without this
+  // an activation from the QR page never reaches the dashboard while
+  // polling is active — only the next full reload or daily refresh would.
   Object.keys(data || {}).forEach(key => {
     const idx = parseInt(key.replace('room','')) - 1;
     if (idx < 0 || idx >= state.rooms.length) return;
@@ -1987,6 +1992,16 @@ function syncFromFirebase(data) {
     }
 
     if (r.lightOn !== undefined) room.lightOn = r.lightOn;
+
+    if (r.slots && room.slots[0]) {
+      normalizeSlots(r.slots).forEach((remoteSlot, i) => {
+        const localSlot = room.slots[0][i];
+        if (!localSlot) return;
+        ['activatedAt', 'activatedBy', 'attempts', 'lockedUntil'].forEach(f => {
+          if (remoteSlot[f] !== undefined) localSlot[f] = remoteSlot[f];
+        });
+      });
+    }
   });
   renderDashboard();
   persist();
@@ -2030,8 +2045,13 @@ function startPolling() {
 
     try {
       const data = await fbGet('/rooms');
-      if (data) syncFromFirebase(data);
-    } catch(e) {}
+      if (data) {
+        syncFromFirebase(data);
+        setConnStatus(true); // polling is working — without this the "Offline"
+                              // label set when SSE first dropped never clears,
+                              // even though data keeps arriving fine via polling
+      }
+    } catch(e) { setConnStatus(false); }
   }, 5000);
 }
 
