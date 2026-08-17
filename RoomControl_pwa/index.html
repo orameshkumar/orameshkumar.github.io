@@ -2136,21 +2136,31 @@ async function pushRoom(idx) {
 }
 
 // ── Manual slot rollover — same rule as the ESP32's midnightRollover() ──
-// Recurring slots stay, today's one-time slots are dropped, tomorrow's
-// one-time slots are promoted into today. Exists for when the device
-// missed a real midnight rollover (extended outage, a stale
-// lastRolloverEpochDay marker surviving a firmware update, etc.) and
-// stale one-time slots need clearing before the next real midnight —
-// runs entirely from here, no ESP32 involvement needed.
+// Recurring slots stay, today's one-time slots dated anything other than
+// today are dropped, tomorrow's one-time slots are promoted into today.
+// Exists for when the device missed a real midnight rollover (extended
+// outage, a stale lastRolloverEpochDay marker surviving a firmware
+// update, etc.) and stale one-time slots need clearing before the next
+// real midnight — runs entirely from here, no ESP32 involvement needed.
 function rolloverRoomLocally(r) {
   const todaySlots    = normalizeSlots(r.slots[0]);
   const tomorrowSlots  = normalizeSlots(r.slots[1]);
   const resetFields = { activatedAt: null, activatedBy: null, attempts: 0, lockedUntil: null, expired: false, _fresh: true };
+  const todayDateStr = todayStr();
 
   const keptRecurring = todaySlots.filter(sl => sl.recurring).map(sl => ({ ...sl, ...resetFields }));
+  // A one-time slot in today's bucket whose own date is still actually
+  // today was created after an earlier rollover ran today (or just now)
+  // — not stale, so it's kept exactly as-is (no reset: it isn't
+  // transitioning from anywhere, so any activation it already has must
+  // survive). Only a date that ISN'T today marks a genuine leftover from
+  // a previous day, dropped same as before. A missing date field (an
+  // older slot from before this field existed) can't be told apart from
+  // stale, so it's dropped too — same as the original behavior.
+  const keptOneTimeToday = todaySlots.filter(sl => !sl.recurring && sl.date === todayDateStr);
   const promoted = tomorrowSlots.filter(sl => !sl.recurring).map(sl => ({ ...sl, ...resetFields, date: todayStr() }));
 
-  r.slots[0] = [...keptRecurring, ...promoted];
+  r.slots[0] = [...keptRecurring, ...keptOneTimeToday, ...promoted];
   r.slots[1] = [];
 }
 
