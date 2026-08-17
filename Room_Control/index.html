@@ -556,6 +556,7 @@ const DEFAULT_LED_PINS   = [2, 4, 5, 18, 19, 21];
 
 const state = {
   rooms: makeBlankRooms(),
+  roomsByProfile: {}, // { [profileId]: rooms[] } — each profile's own room config
   profiles: [],
   activeProfileId: null,
   log: [],
@@ -1463,7 +1464,8 @@ async function editSlotCode(roomId, slotIdx) {
   slot.attempts    = 0;
   slot.lockedUntil = null;
   persist();
-  await pushRoom(roomId - 1);
+  const p = getActiveProfile(); // pinned once — same db for both calls below
+  await pushRoom(roomId - 1, p);
   // pushRoom()'s per-slot write deliberately excludes activation fields (see
   // its own comment) so routine saves can't clobber a real activation from
   // activate.html — but that means this reset needs its own direct write,
@@ -1475,7 +1477,7 @@ async function editSlotCode(roomId, slotIdx) {
     activatedBy: null,
     attempts: 0,
     lockedUntil: null
-  });
+  }, p);
   renderDashboard();
 }
 
@@ -1665,10 +1667,19 @@ function persist() {
     }
   } catch(e) {}
 
+  // Rooms are stored per-profile (roomsByProfile[id]), not as one flat
+  // array — otherwise switching profiles has nothing profile-specific to
+  // restore and silently falls back to blank 6-room defaults. Always
+  // capture the CURRENTLY active profile's rooms under its own key right
+  // before writing, so whichever profile is active always has an
+  // up-to-date snapshot regardless of which code path called persist().
+  state.roomsByProfile = state.roomsByProfile || {};
+  state.roomsByProfile[state.activeProfileId] = state.rooms;
+
   const savedAt = Date.now();
   lastKnownSavedAt = savedAt;
   localStorage.setItem('rc_fb', JSON.stringify({
-    rooms: state.rooms, profiles: state.profiles,
+    roomsByProfile: state.roomsByProfile, profiles: state.profiles,
     activeProfileId: state.activeProfileId, log: state.log.slice(0,30),
     licenseKey: state.licenseKey,
     savedAt
@@ -1678,16 +1689,9 @@ function persist() {
 function hydrate() {
   try {
     const d = JSON.parse(localStorage.getItem('rc_fb') || '{}');
-    if (d.rooms) d.rooms.forEach((r,i) => {
-      Object.assign(state.rooms[i], r);
-      // Normalize slots — Firebase/localStorage may store as object {0:[...]}
-      if (state.rooms[i].slots) {
-        state.rooms[i].slots[0] = normalizeSlots(state.rooms[i].slots[0]);
-        state.rooms[i].slots[1] = normalizeSlots(state.rooms[i].slots[1]);
-      }
-    });
-    if (d.log) state.log = d.log;
 
+    // Profiles first — rooms are looked up by active profile id below, so
+    // the id needs to be resolved before rooms can be.
     if (Array.isArray(d.profiles) && d.profiles.length) {
       state.profiles = d.profiles;
       state.activeProfileId = d.activeProfileId || d.profiles[0].id;
@@ -1699,6 +1703,30 @@ function hydrate() {
       state.profiles = [p];
       state.activeProfileId = p.id;
     }
+
+    state.roomsByProfile = (d.roomsByProfile && typeof d.roomsByProfile === 'object') ? d.roomsByProfile : {};
+    // Legacy pre-per-profile format: a flat top-level "rooms" array
+    // belonged to whichever profile was active when it was saved — migrate
+    // it in under that same id rather than losing it outright.
+    if (Array.isArray(d.rooms) && !state.roomsByProfile[state.activeProfileId]) {
+      state.roomsByProfile[state.activeProfileId] = d.rooms;
+    }
+
+    // Replaced wholesale, not merged into the initial blank scaffold —
+    // merging via Object.assign per index (the old behavior) could never
+    // shrink below that scaffold's 6 rooms, so a profile saved with fewer
+    // rooms than that would always regain the extra ones as blank
+    // defaults on next load.
+    const savedRooms = state.roomsByProfile[state.activeProfileId];
+    state.rooms = Array.isArray(savedRooms) ? savedRooms : makeBlankRooms();
+    state.rooms.forEach(r => {
+      if (r.slots) {
+        r.slots[0] = normalizeSlots(r.slots[0]);
+        r.slots[1] = normalizeSlots(r.slots[1]);
+      }
+    });
+
+    if (d.log) state.log = d.log;
     if (d.licenseKey) state.licenseKey = d.licenseKey;
     lastKnownSavedAt = d.savedAt || 0;
   } catch(e) {}
@@ -1729,7 +1757,7 @@ function getActiveProfile() {
 async function ensureProfileNumber(p) {
   if (p.fbNum) return p.fbNum;
   if (!p.dbUrl) return null;
-  const existing = await fbGet('/profiles'); // p.fbNum unset here → no prefix → correct bare path
+  const existing = await fbGet('/profiles', p); // p.fbNum unset here → no prefix → correct bare path
   let maxNum = 0;
   if (existing && typeof existing === 'object') {
     Object.keys(existing).forEach(k => {
@@ -1738,7 +1766,7 @@ async function ensureProfileNumber(p) {
     });
   }
   const assigned = maxNum + 1;
-  await fbSet(`/profiles/${assigned}/name`, p.name); // still unprefixed — fbNum not set until after this
+  await fbSet(`/profiles/${assigned}/name`, p.name, p); // still unprefixed — fbNum not set until after this
   p.fbNum = assigned;
   return assigned;
 }
@@ -1785,15 +1813,25 @@ function profilePathPrefix(p) {
   return (p && p.fbNum) ? `/profiles/${p.fbNum}` : '';
 }
 
-function fbUrl(path) {
-  const p = getActiveProfile();
+// profile is optional on every helper below — omit it for a one-off call
+// tied to whatever's active right now, but any multi-step operation
+// (several sequential awaited calls forming one logical save/read) MUST
+// capture `const p = getActiveProfile();` ONCE at its own start and pass
+// that SAME p to every call it makes. Without this, fbUrl() re-resolves
+// getActiveProfile() fresh on every individual fetch — if the user
+// switches profiles while that multi-step operation is still mid-flight,
+// later calls in the SAME operation silently start hitting a DIFFERENT
+// database than the earlier calls did, corrupting both.
+function fbUrl(path, profile) {
+  const p = profile || getActiveProfile();
   return `${p.dbUrl}${profilePathPrefix(p)}${path}.json`;
 }
 
-async function fbSet(path, value) {
-  if (!getActiveProfile().dbUrl) { showToast('Set Firebase URL in Settings'); return false; }
+async function fbSet(path, value, profile) {
+  const p = profile || getActiveProfile();
+  if (!p.dbUrl) { showToast('Set Firebase URL in Settings'); return false; }
   try {
-    const res = await fetch(fbUrl(path), {
+    const res = await fetch(fbUrl(path, p), {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
       body: JSON.stringify(value)
@@ -1809,10 +1847,11 @@ async function fbSet(path, value) {
 
 // PATCH — partial update, preserves fields not included
 // Use for room updates to preserve ESP32-written fields (lightOn, lastSeen)
-async function fbPatch(path, value) {
-  if (!getActiveProfile().dbUrl) { showToast('Set Firebase URL in Settings'); return false; }
+async function fbPatch(path, value, profile) {
+  const p = profile || getActiveProfile();
+  if (!p.dbUrl) { showToast('Set Firebase URL in Settings'); return false; }
   try {
-    const res = await fetch(fbUrl(path), {
+    const res = await fetch(fbUrl(path, p), {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
       body: JSON.stringify(value)
@@ -1826,7 +1865,7 @@ async function fbPatch(path, value) {
   }
 }
 
-async function fbGet(path) {
+async function fbGet(path, profile) {
   try {
     // Explicit Accept — without it, Firebase can occasionally serve the SSE
     // event-stream format on this URL instead of plain JSON while a listener
@@ -1836,7 +1875,7 @@ async function fbGet(path) {
     // the exact same URL (confirmed: no-store alone wasn't enough), which
     // silently breaks anything that reads-then-writes to decide what to do
     // next, like ensureProfileNumber(). Matches activate.html's same fix.
-    const res = await fetch(fbUrl(path) + '?nc=' + Date.now(), { cache: 'no-store', headers: { 'Accept': 'application/json' } });
+    const res = await fetch(fbUrl(path, profile) + '?nc=' + Date.now(), { cache: 'no-store', headers: { 'Accept': 'application/json' } });
     if (!res.ok) throw new Error(await res.text());
     return await res.json();
   } catch(e) {
@@ -2020,11 +2059,11 @@ function syncFromFirebase(data) {
 // unreachable) → nothing to confirm, leave local slots exactly as they are.
 async function checkDailySlotRefresh(p) {
   if (!p || !p.dbUrl) return;
-  const marker = await fbGet('/config/lastRolloverEpochDay');
+  const marker = await fbGet('/config/lastRolloverEpochDay', p);
   if (marker === null || marker === undefined) return;
   if (p.slotsRolloverMarker === marker) return;
 
-  const data = await fbGet('/rooms');
+  const data = await fbGet('/rooms', p);
   if (!data) return;
   Object.keys(data).forEach(key => {
     const idx = parseInt(key.replace('room', ''), 10) - 1;
@@ -2057,7 +2096,13 @@ function startPolling() {
 }
 
 // ── Write full room state to Firebase ───────────────────────
-async function pushRoom(idx) {
+// profile is optional — pass the SAME profile reference the caller
+// already captured when doing several rooms/calls in one logical
+// operation (see the note above fbUrl()), so a profile switch mid-flight
+// can't make different calls within this one push land on different
+// databases. Falls back to getActiveProfile() for simple one-off calls.
+async function pushRoom(idx, profile) {
+  const p = profile || getActiveProfile();
   const r = state.rooms[idx];
   // Use PATCH not PUT — only update fields PWA owns
   // This preserves lightOn, lastSeen written by ESP32
@@ -2078,7 +2123,7 @@ async function pushRoom(idx) {
     relayPin: r.relayPin,
     ledPin: r.ledPin,
     updatedAt: Date.now()
-  });
+  }, p);
 
   // Write each today slot individually — only structural fields, not activation
   const todaySlots = normalizeSlots(r.slots[0]);
@@ -2125,7 +2170,7 @@ async function pushRoom(idx) {
                  // before the next push would resurrect it and reset
                  // activation state again on some later, unrelated save
     }
-    await fbPatch(`${roomBase}/slots/${si}`, patch);
+    await fbPatch(`${roomBase}/slots/${si}`, patch, p);
   }
 
   // Prune ghost slot entries left behind when the array shrinks (e.g.
@@ -2133,12 +2178,12 @@ async function pushRoom(idx) {
   // still in use, so anything beyond today's count would otherwise sit
   // in Firebase forever and get picked up by the ESP32's blind index
   // scan alongside the real slots.
-  const existingSlots = await fbGet(`${roomBase}/slots`);
+  const existingSlots = await fbGet(`${roomBase}/slots`, p);
   if (existingSlots && typeof existingSlots === 'object' && !Array.isArray(existingSlots)) {
     for (const key of Object.keys(existingSlots)) {
       const ghostIdx = parseInt(key, 10);
       if (!isNaN(ghostIdx) && ghostIdx >= todaySlots.length) {
-        await fbSet(`${roomBase}/slots/${ghostIdx}`, null);
+        await fbSet(`${roomBase}/slots/${ghostIdx}`, null, p);
       }
     }
   }
@@ -2148,7 +2193,7 @@ async function pushRoom(idx) {
   const slotsT = tomorrowSlots.map(sl => ({
     s: sl.s, e: sl.e, recurring: sl.recurring, code: sl.code, date: sl.date, expired: false
   }));
-  await fbPatch(roomBase, { slotsT });
+  await fbPatch(roomBase, { slotsT }, p);
 
   const ok = true;
   addLog(ok ? 'ok' : 'error', `room${r.id} → Firebase`);
@@ -2199,6 +2244,8 @@ function localEpochDay() {
 
 async function forceAllRoomsRollover() {
   if (!requireLicense('force a slot rollover')) return;
+  // Pinned once for this whole operation — see the note above fbUrl().
+  const p = getActiveProfile();
   const today = localEpochDay();
   const todayDateStr = todayStr();
 
@@ -2218,7 +2265,7 @@ async function forceAllRoomsRollover() {
     normalizeSlots(r.slots[0]).some(sl => !sl.recurring && sl.date && sl.date !== todayDateStr)
   );
 
-  const remoteMarker = await fbGet('/config/lastRolloverEpochDay');
+  const remoteMarker = await fbGet('/config/lastRolloverEpochDay', p);
   if (!hasStaleSlot && remoteMarker !== null && parseInt(remoteMarker, 10) >= today) {
     const proceed = confirm(
       'Rollover already ran today.\n\n' +
@@ -2235,22 +2282,27 @@ async function forceAllRoomsRollover() {
   }
   persist();
   for (const r of state.rooms) {
-    await pushRoom(r.id - 1);
+    await pushRoom(r.id - 1, p);
   }
   // Record it — this is what lets the ESP32 skip its own midnight
   // rollover today instead of redundantly re-running it (and resetting
   // activation state on a slot someone activates between now and then).
-  await fbSet('/config/lastRolloverEpochDay', today);
+  await fbSet('/config/lastRolloverEpochDay', today, p);
   renderDashboard();
   showToast('✓ Slot rollover forced for all rooms');
   addLog('ok', 'Manual slot rollover — all rooms');
 }
 
-async function pushAllRooms() {
+async function pushAllRooms(profile) {
+  // Captured once, up front (unless the caller already pinned one) —
+  // every room's push in this same call goes to the SAME database even
+  // if the user switches profiles partway through this loop (see the
+  // note above fbUrl()).
+  const p = profile || getActiveProfile();
   // PATCH each room individually to preserve ESP32 fields
   let allOk = true;
   for (let i = 0; i < state.rooms.length; i++) {
-    const ok = await pushRoom(i);
+    const ok = await pushRoom(i, p);
     if (!ok) allOk = false;
   }
   addLog(allOk ? 'ok' : 'error', 'all_rooms → Firebase');
@@ -2276,13 +2328,14 @@ function getLightState(room) {
 // ── Schedule auto-check ──────────────────────────────────────
 let lastChecked = {};
 async function checkSchedules() {
+  const p = getActiveProfile(); // pinned once for this whole tick's pushes
   for (const room of state.rooms) {
     if (room.override !== null) continue;
     const wasOn = lastChecked[room.id] || false;
     const isOn  = isScheduledNow(room);
     if (isOn !== wasOn) {
       lastChecked[room.id] = isOn;
-      await pushRoom(room.id - 1);
+      await pushRoom(room.id - 1, p);
       addLog('ok', `${room.name} schedule → ${isOn ? 'ON' : 'OFF'}`);
     }
   }
@@ -2434,6 +2487,10 @@ async function copySlots(fromId) {
   if (copyState.selectedRooms.length === 0) { showToast('Select at least one target room'); return; }
   if (copyState.sources.length === 0) { showToast('Select at least one source'); return; }
 
+  // Pinned once — this whole multi-room, multi-call loop targets one
+  // database regardless of any profile switch mid-flight (see the note
+  // above fbUrl()).
+  const p = getActiveProfile();
   const fromRoom = state.rooms.find(r => r.id === fromId);
 
   // Collect what to copy based on selected sources
@@ -2483,7 +2540,7 @@ async function copySlots(fromId) {
       }));
       newSlots.forEach(sl => toRoom.slots[0].push(sl));
       for (let i = 0; i < newSlots.length; i++) {
-        await fbPatch(`/rooms/room${toId}/slots/${startIdx + i}`, newSlots[i]);
+        await fbPatch(`/rooms/room${toId}/slots/${startIdx + i}`, newSlots[i], p);
       }
       // No merging — each copied slot is independent
     }
@@ -2506,10 +2563,10 @@ async function copySlots(fromId) {
       const slotsT = normalizeSlots(toRoom.slots[1]).map(sl => ({
         s: sl.s, e: sl.e, recurring: sl.recurring, code: sl.code, date: sl.date
       }));
-      await fbPatch(`/rooms/room${toId}`, { slotsT });
+      await fbPatch(`/rooms/room${toId}`, { slotsT }, p);
     }
 
-    await fbPatch(`/rooms/room${toId}`, { updatedAt: Date.now() });
+    await fbPatch(`/rooms/room${toId}`, { updatedAt: Date.now() }, p);
     copied++;
   }
 
@@ -2847,8 +2904,16 @@ async function switchProfile(id) {
   const p = state.profiles.find(x => x.id === id);
   if (!p) return;
   resetConnectionForProfileChange();
+  // Save the outgoing profile's rooms under its own id before switching
+  // away, then restore the incoming profile's own rooms — falling back to
+  // blank defaults only the first time this profile is ever switched to.
+  // Previously this always reset to blank defaults on every switch,
+  // discarding whatever that profile's real room count/pins/names were
+  // until the next full save overwrote Firebase with those blank
+  // defaults too.
+  state.roomsByProfile[state.activeProfileId] = state.rooms;
   state.activeProfileId = id;
-  state.rooms = makeBlankRooms();
+  state.rooms = state.roomsByProfile[id] || makeBlankRooms();
   persist();
   updateHeaderProfile();
   renderDashboard();
@@ -2891,6 +2956,7 @@ function deleteProfile(id) {
   if (!confirm(`Delete profile "${p.name}"? This only removes it from this device — Firebase data is untouched.`)) return;
   const wasActive = state.activeProfileId === id;
   state.profiles = state.profiles.filter(x => x.id !== id);
+  delete state.roomsByProfile[id];
   if (wasActive) {
     switchProfile(state.profiles[0].id);
   } else {
@@ -2993,8 +3059,8 @@ function checkMissingRelayPins() {
 function finishSaveSettings(p, message) {
   // Push seed to Firebase so activate.html can compute admin code
   if (p.dbUrl) {
-    fbSet('/config/adminSeed', p.adminSeed);
-    pushAllRooms();
+    fbSet('/config/adminSeed', p.adminSeed, p);
+    pushAllRooms(p);
     startFbListener();
   }
   updateHeaderProfile();
@@ -3042,13 +3108,14 @@ async function deleteRoom(id) {
   persist();
   renderDashboard();
   renderSettings();
-  if (getActiveProfile().dbUrl) {
+  const p = getActiveProfile(); // pinned once for this whole cleanup+push sequence
+  if (p.dbUrl) {
     // Renumbering shifted every room after the deleted one down by one path —
     // clear the now-orphaned trailing Firebase nodes before rewriting the rest
     for (let n = state.rooms.length + 1; n <= oldCount; n++) {
-      await fbSet(`/rooms/room${n}`, null);
+      await fbSet(`/rooms/room${n}`, null, p);
     }
-    await pushAllRooms();
+    await pushAllRooms(p);
   }
   showToast(`Deleted "${r.name}"`);
 }
