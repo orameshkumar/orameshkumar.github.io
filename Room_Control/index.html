@@ -2169,18 +2169,34 @@ function localEpochDay() {
 async function forceAllRoomsRollover() {
   if (!requireLicense('force a slot rollover')) return;
   const today = localEpochDay();
+  const todayDateStr = todayStr();
 
-  // A genuine gate, not just an FYI: running the transform twice in one
-  // day isn't just a harmless duplicate — a slot this button already
-  // promoted from tomorrow now sits in today with recurring:false, so a
-  // second pass would treat it as an ordinary leftover one-time slot and
-  // DELETE it, same as it deletes any other one-time slot from today.
-  // Skipping outright when today's rollover is already recorded avoids
-  // that data loss, not just duplication.
+  // Re-running the transform on a day it already ran isn't just a
+  // harmless duplicate risk — a slot this button already promoted from
+  // tomorrow now sits in today with recurring:false, so a second pass
+  // would treat it as an ordinary leftover one-time slot and DELETE it.
+  // But the marker being "already today" doesn't always mean today's
+  // slots are actually clean — e.g. the ESP32 adopts today's date as its
+  // baseline on its first boot after a reflash WITHOUT running any
+  // cleanup. A one-time slot still sitting in today's list whose own
+  // date field ISN'T today is direct evidence it's genuinely stale (a
+  // correctly-promoted slot would already show today's date) — when
+  // that's true, just proceed, no need to ask. Otherwise ask rather than
+  // block outright: default to no (safe), but let the user override.
+  const hasStaleSlot = state.rooms.some(r =>
+    normalizeSlots(r.slots[0]).some(sl => !sl.recurring && sl.date && sl.date !== todayDateStr)
+  );
+
   const remoteMarker = await fbGet('/config/lastRolloverEpochDay');
-  if (remoteMarker !== null && parseInt(remoteMarker, 10) >= today) {
-    showToast('⚠️ Rollover already ran today — nothing more to do');
-    return;
+  if (!hasStaleSlot && remoteMarker !== null && parseInt(remoteMarker, 10) >= today) {
+    const proceed = confirm(
+      'Rollover already ran today.\n\n' +
+      'Running it again could delete a one-time slot that was already ' +
+      'correctly promoted into today earlier — only do this if you can ' +
+      'still see stale slots that should have been cleared.\n\n' +
+      'Proceed anyway?'
+    );
+    if (!proceed) { showToast('Rollover skipped'); return; }
   }
 
   for (const r of state.rooms) {
