@@ -2789,8 +2789,8 @@ function renderTimeline() {
 
 // ── Settings ─────────────────────────────────────────────────
 // Deterministic per-profile hue (0-359) from its id — used to tint the
-// Settings page background and mark each profile's row in the list, so
-// which profile you're currently looking at is visible at a glance
+// whole app's background and mark each profile's row in the Settings
+// list, so which profile you're currently on is visible at a glance
 // rather than only readable from the name text.
 function profileHue(id) {
   let hash = 0;
@@ -2798,14 +2798,25 @@ function profileHue(id) {
   return hash % 360;
 }
 
+// Applied to #app (wraps the header + every page — dashboard, timeline,
+// settings, import — but not the fixed bottom nav bar), so the tint is
+// visible no matter which page you're on, not just Settings, and stays
+// in sync everywhere it's called: bootApp() (initial load), switchProfile()
+// (immediate on switch), and renderSettings() (covers profile create/
+// rename/delete, since those all call it). With only one profile there's
+// nothing to distinguish it FROM, so it's skipped entirely rather than
+// showing an unexplained color cast for the common single-profile setup.
+function applyProfileTint() {
+  const el = document.getElementById('app');
+  if (!el) return;
+  if (state.profiles.length <= 1) { el.style.background = ''; return; }
+  el.style.background = `hsl(${profileHue(getActiveProfile().id)}, 40%, 10%)`;
+}
+
 function renderSettings() {
   const p = getActiveProfile();
   document.getElementById('profileList').innerHTML = state.profiles.map(renderProfileRow).join('');
-  // Subtle per-profile background tint on the whole Settings page — low
-  // saturation, dark theme lightness, so it stays readable and doesn't
-  // clash with the app's usual dark palette, just enough to notice which
-  // profile is active without reading anything.
-  document.getElementById('page-settings').style.background = `hsl(${profileHue(p.id)}, 30%, 8%)`;
+  applyProfileTint();
   document.getElementById('cfg-url').value  = p.dbUrl;
   document.getElementById('cfg-key').value  = p.apiKey;
   document.getElementById('cfg-seed').value = p.adminSeed || '1234';
@@ -3299,6 +3310,7 @@ function bootApp() {
   document.getElementById('aboutProductInfo').innerHTML = productInfoHtml();
   document.getElementById('licenseBannerContact').innerHTML =
     `<a href="tel:${PRODUCT_INFO.phone}" style="color:inherit">${PRODUCT_INFO.phone}</a>`;
+  applyProfileTint();
   updateHeaderProfile();
   updateClock();
   setInterval(updateClock, 10000);
