@@ -2170,12 +2170,17 @@ async function forceAllRoomsRollover() {
   if (!requireLicense('force a slot rollover')) return;
   const today = localEpochDay();
 
-  // Not a gate — just an FYI. The ESP32 checks this same marker before
-  // running its own rollover, so it won't redundantly re-run today's
-  // regardless; this is purely to warn a human clicking the button twice.
+  // A genuine gate, not just an FYI: running the transform twice in one
+  // day isn't just a harmless duplicate — a slot this button already
+  // promoted from tomorrow now sits in today with recurring:false, so a
+  // second pass would treat it as an ordinary leftover one-time slot and
+  // DELETE it, same as it deletes any other one-time slot from today.
+  // Skipping outright when today's rollover is already recorded avoids
+  // that data loss, not just duplication.
   const remoteMarker = await fbGet('/config/lastRolloverEpochDay');
   if (remoteMarker !== null && parseInt(remoteMarker, 10) >= today) {
-    showToast('⚠️ Rollover already ran today — proceeding anyway');
+    showToast('⚠️ Rollover already ran today — nothing more to do');
+    return;
   }
 
   for (const r of state.rooms) {
