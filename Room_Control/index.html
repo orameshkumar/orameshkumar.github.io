@@ -2154,8 +2154,30 @@ function rolloverRoomLocally(r) {
   r.slots[1] = [];
 }
 
+// Days since the Unix epoch, counted by LOCAL calendar date — matches
+// the ESP32's currentEpochDay() (time(nullptr)/86400 after configTime()
+// has shifted the clock to local time), so a value written by either
+// side means the same calendar day to the other. Built from Y/M/D
+// (local getters) rather than Date.now()/86400000 directly, since that
+// would use the UTC day and could disagree with the ESP32 for hours
+// around midnight IST.
+function localEpochDay() {
+  const d = new Date();
+  return Math.floor(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 86400000);
+}
+
 async function forceAllRoomsRollover() {
   if (!requireLicense('force a slot rollover')) return;
+  const today = localEpochDay();
+
+  // Not a gate — just an FYI. The ESP32 checks this same marker before
+  // running its own rollover, so it won't redundantly re-run today's
+  // regardless; this is purely to warn a human clicking the button twice.
+  const remoteMarker = await fbGet('/config/lastRolloverEpochDay');
+  if (remoteMarker !== null && parseInt(remoteMarker, 10) >= today) {
+    showToast('⚠️ Rollover already ran today — proceeding anyway');
+  }
+
   for (const r of state.rooms) {
     rolloverRoomLocally(r);
   }
@@ -2163,6 +2185,10 @@ async function forceAllRoomsRollover() {
   for (const r of state.rooms) {
     await pushRoom(r.id - 1);
   }
+  // Record it — this is what lets the ESP32 skip its own midnight
+  // rollover today instead of redundantly re-running it (and resetting
+  // activation state on a slot someone activates between now and then).
+  await fbSet('/config/lastRolloverEpochDay', today);
   renderDashboard();
   showToast('✓ Slot rollover forced for all rooms');
   addLog('ok', 'Manual slot rollover — all rooms');
