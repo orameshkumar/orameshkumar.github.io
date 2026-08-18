@@ -626,17 +626,30 @@ function todayISO() {
 // generation logic in the License Generator app exactly (perpetual: hash of
 // the name; date-restricted: hash of name+validFrom+validTo) so a key
 // produced there verifies here without any shared server round-trip.
+//
+// mr (max rooms) / mp (max profiles) are optional entitlement fields, only
+// ever appended to the signed message — never inserted into the middle of
+// the original name/date concatenation — so a key issued before these
+// existed still verifies with the exact same message it always did. Both
+// generator and validator must build this identically; see app.js's
+// generateLicense()/generateDateRestrictedLicense() for the matching half.
 async function validateLicenseKey(raw) {
   const obj = decodeLicenseKey(raw);
   if (!obj) return { valid: false, reason: 'malformed' };
   const isDateRestricted = obj.f !== undefined && obj.t !== undefined;
-  const message = isDateRestricted ? (obj.n + obj.f + obj.t) : obj.n;
+  let message = isDateRestricted ? (obj.n + obj.f + obj.t) : obj.n;
+  if (obj.mr !== undefined) message += '|mr' + obj.mr;
+  if (obj.mp !== undefined) message += '|mp' + obj.mp;
   const expectedHash = await licenseHmacHex(message, LICENSE_SECRET);
   if (expectedHash !== obj.h) return { valid: false, reason: 'invalid' };
   const result = {
     valid: true, name: obj.n,
     licenseType: isDateRestricted ? 'date-restricted' : 'perpetual',
-    validFrom: obj.f || null, validTo: obj.t || null
+    validFrom: obj.f || null, validTo: obj.t || null,
+    // undefined (not present in this key) means unlimited — callers should
+    // treat null/undefined as "no cap", not as zero.
+    maxRooms: obj.mr !== undefined ? obj.mr : null,
+    maxProfiles: obj.mp !== undefined ? obj.mp : null
   };
   if (isDateRestricted) {
     const today = todayISO();
@@ -3011,6 +3024,7 @@ async function saveActiveProfile() {
 
 async function saveAsNewProfile() {
   if (!requireLicense('create a new profile')) return;
+  if (!requireCapacity('profiles', state.profiles.length, 'create more profiles')) return;
   const name = prompt('Name for this new profile (e.g. site or building name):', 'New Site');
   if (name === null) return;
   resetConnectionForProfileChange();
@@ -3089,6 +3103,7 @@ function finishSaveSettings(p, message) {
 // ── Room management ────────────────────────────────────────────
 function addRoom() {
   if (!requireLicense('add a room')) return;
+  if (!requireCapacity('rooms', state.rooms.length, 'add more rooms')) return;
   applyRoomNameEdits(); // preserve any unsaved edits to other rooms before mutating the list
   const newId = state.rooms.length + 1;
   state.rooms.push({
@@ -3226,12 +3241,30 @@ function _licenseStatusMessage(result) {
 // license. This flag is the single thing every gated action checks.
 let licenseValid = false;
 
+// Capacity caps carried by the license itself (maxRooms/maxProfiles) —
+// null means unlimited, either because the key predates these fields or
+// because the generator deliberately left them blank. Set only by
+// refreshLicenseState(); addRoom()/saveAsNewProfile() read this to decide
+// whether to allow one more.
+let licenseEntitlements = { maxRooms: null, maxProfiles: null };
+
 // Call at the top of any mutating action other than override on/off.
 // Returns true (and lets the caller proceed) only when licensed; otherwise
 // explains why and blocks it.
 function requireLicense(actionLabel) {
   if (licenseValid) return true;
   showToast('🔒 Activate a license to ' + (actionLabel || 'do this') + ' — see Settings → License');
+  return false;
+}
+
+// Room/profile-count caps are separate from the base license-valid check
+// above — call THIS in addition to requireLicense() at the two creation
+// points (addRoom, saveAsNewProfile) only, never at deletion, since
+// shrinking below a cap is always fine.
+function requireCapacity(kind, currentCount, actionLabel) {
+  const max = kind === 'rooms' ? licenseEntitlements.maxRooms : licenseEntitlements.maxProfiles;
+  if (max === null || max === undefined || currentCount < max) return true;
+  showToast(`🔒 Your license allows up to ${max} ${kind} — upgrade to ${actionLabel}`);
   return false;
 }
 
@@ -3244,6 +3277,10 @@ function applyLicenseUIState() {
 async function refreshLicenseState() {
   const result = state.licenseKey ? await validateLicenseKey(state.licenseKey) : { valid: false };
   licenseValid = result.valid;
+  licenseEntitlements = {
+    maxRooms: result.valid ? result.maxRooms : null,
+    maxProfiles: result.valid ? result.maxProfiles : null
+  };
   applyLicenseUIState();
   renderLicenseStatus();
   return result;
@@ -3272,7 +3309,12 @@ function renderLicenseStatus() {
     return;
   }
   labelEl.textContent = `Licensed to ${obj.n || ''}`;
-  subEl.textContent = (obj.f && obj.t) ? `Valid ${obj.f} – ${obj.t}` : 'Perpetual license';
+  let sub = (obj.f && obj.t) ? `Valid ${obj.f} – ${obj.t}` : 'Perpetual license';
+  const caps = [];
+  if (licenseEntitlements.maxRooms !== null) caps.push(`${licenseEntitlements.maxRooms} rooms`);
+  if (licenseEntitlements.maxProfiles !== null) caps.push(`${licenseEntitlements.maxProfiles} profiles`);
+  if (caps.length) sub += ` · up to ${caps.join(', ')}`;
+  subEl.textContent = sub;
 }
 
 function openLicenseModal() {

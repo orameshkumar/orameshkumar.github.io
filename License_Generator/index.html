@@ -64,6 +64,16 @@
                 <input type="text" id="user-name" placeholder="Enter the licensee name" autocomplete="off">
             </div>
 
+            <div class="form-group">
+                <label for="max-rooms">Max Rooms (optional)</label>
+                <input type="number" id="max-rooms" min="1" placeholder="Leave blank for unlimited" autocomplete="off">
+            </div>
+
+            <div class="form-group">
+                <label for="max-profiles">Max Profiles (optional)</label>
+                <input type="number" id="max-profiles" min="1" placeholder="Leave blank for unlimited" autocomplete="off">
+            </div>
+
             <button id="generate-btn" class="btn-primary">Generate License</button>
 
             <div id="output-section" class="output-section" hidden>
