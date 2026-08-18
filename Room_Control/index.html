@@ -1640,20 +1640,18 @@ function printQR() {
   const productFooterHtml =
     '<div style="margin-top:24px;font-size:12px;color:#999;line-height:1.6">' +
     '<strong style="color:#666">' + PRODUCT_INFO.name + '</strong> — ' + PRODUCT_INFO.tagline + '<br>' +
-    PRODUCT_INFO.phone + ' &middot; ' + PRODUCT_INFO.email + ' &middot; ' + PRODUCT_INFO.website +
+    PRODUCT_INFO.phone + ' &middot; ' + PRODUCT_INFO.email +
     '</div>';
   win.document.write(
     '<!DOCTYPE html><html><head><title>Room Controller QR</title>' +
     '<style>body{font-family:-apple-system,sans-serif;text-align:center;padding:40px;}' +
     'h2{font-size:22px;margin-bottom:4px;}p{color:#666;font-size:14px;margin-bottom:20px;}' +
-    '.url{font-size:12px;color:#999;margin:12px auto 0;max-width:320px;line-height:1.6;word-break:break-all;}' +
     '@media print{button{display:none;}}</style>' +
     scriptTag +
     '</head><body>' +
     '<h2>Room Controller — ' + p.name + '</h2>' +
     '<p>Scan to activate your room slot</p>' +
     '<div id="qr" style="display:inline-block;background:white;padding:12px;border:1px solid #ddd;border-radius:8px"></div>' +
-    '<div class="url">' + activateUrl + '</div>' +
     productFooterHtml +
     '<br><button onclick="window.print()">Print</button>' +
     inlineScript +
