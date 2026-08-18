@@ -4,7 +4,7 @@
 // below with the real ones — everything that displays them reads from
 // here, so one edit updates all of them.
 const PRODUCT_INFO = {
-  name: 'Room Controller',
+  name: 'Facility Automation',
   tagline: 'Smart room & slot booking system',
   phone: 'prefer whatsapp',        // shown as text / tel: link
   whatsapp: '919677020044',      // digits only, no "+", used in wa.me links
@@ -14,7 +14,7 @@ const PRODUCT_INFO = {
 // Plain-text one-liner — for anywhere only text is possible (WhatsApp
 // message signature, plain banners, etc.)
 function productInfoLine() {
-  return `${PRODUCT_INFO.name} | ${PRODUCT_INFO.phone}`;
+  return `${PRODUCT_INFO.name} | for enquiry ${PRODUCT_INFO.email}`;
 }
 
 // Small HTML block — for anywhere markup can render (dashboard footer,
