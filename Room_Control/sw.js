@@ -1,4 +1,4 @@
-const CACHE = 'roomctrl-fb-v11';
+const CACHE = 'roomctrl-fb-v12';
 const STATIC_ASSETS = [
   './manifest.json',
   './icons/icon-192.png',
@@ -47,9 +47,15 @@ self.addEventListener('fetch', e => {
     return;
   }
 
-  // index.html — network first, cache fallback
+  // index.html / product-info.js — network first, cache fallback.
+  // product-info.js holds contact details meant to be edited over time
+  // (see the file itself) — lumping it into the generic "static assets,
+  // cache-first" bucket below meant that once any device cached it once,
+  // it would keep serving that same snapshot forever, never re-checking
+  // the network even after a real deploy changed the file.
   if (e.request.destination === 'document' ||
       e.request.url.endsWith('index.html') ||
+      e.request.url.endsWith('product-info.js') ||
       e.request.url.endsWith('/')) {
     e.respondWith(
       fetch(e.request, { cache: 'no-store' })
