@@ -406,6 +406,11 @@
           <span class="ov-icon">🔓</span>Normally Open<small>Fail-safe OFF</small>
         </button>
       </div>
+      <div class="settings-sub" style="padding:0 14px 8px">Emergency/standby light — ON whenever every room is OFF, OFF the moment any room turns on. Wired with the same NC/NO fail-safe convention selected above (Normally Closed here means it's ON by default, even if the ESP32 loses power).</div>
+      <div class="settings-row" style="flex-direction:column;align-items:stretch;gap:6px">
+        <div class="settings-label">Emergency light GPIO pin<div class="settings-sub">Leave blank if not wired</div></div>
+        <input class="settings-input" id="cfg-emergency-pin" type="number" min="0" max="39" placeholder="e.g. 33" style="font-family:monospace;max-width:120px">
+      </div>
     </div>
     <div class="admin-code-box">
       <div class="admin-code-lbl">Today's admin code</div>
@@ -2907,6 +2912,7 @@ function renderSettings() {
   const relayWiring = p.relayWiring || 'NC';
   document.getElementById('rw-nc').className = 'ov-btn' + (relayWiring === 'NC' ? ' active-auto' : '');
   document.getElementById('rw-no').className = 'ov-btn' + (relayWiring === 'NO' ? ' active-auto' : '');
+  document.getElementById('cfg-emergency-pin').value = (p.emergencyPin === null || p.emergencyPin === undefined) ? '' : p.emergencyPin;
   // QR generated only when user taps Show QR button
   document.getElementById('roomNameInputs').innerHTML = state.rooms.map(renderRoomSettingsRow).join('');
   renderLicenseStatus();
@@ -3073,6 +3079,8 @@ async function saveActiveProfile() {
   p.adminSeed = document.getElementById('cfg-seed').value.trim() || '1234';
   p.whatsappTemplate = document.getElementById('cfg-whatsapp-template').value.trim() || DEFAULT_WHATSAPP_TEMPLATE;
   p.whatsappCountryCode = document.getElementById('cfg-whatsapp-country-code').value.trim().replace(/[^\d]/g, '') || '91';
+  const emergencyPinVal = document.getElementById('cfg-emergency-pin').value.trim();
+  p.emergencyPin = emergencyPinVal === '' ? null : parseInt(emergencyPinVal, 10);
   applyRoomNameEdits();
   const pinConflict = checkPinConflicts();
   if (pinConflict) {
@@ -3123,18 +3131,22 @@ function applyRoomNameEdits() {
   });
 }
 
-// Non-blocking check — same GPIO assigned to more than one relay/LED is a wiring conflict
+// Non-blocking check — same GPIO assigned to more than one relay/LED (or
+// the global emergency-light pin) is a wiring conflict
 function checkPinConflicts() {
   const usedBy = {};
   let conflict = null;
+  const claim = (pin, label) => {
+    if (pin === undefined || pin === null || pin === '') return;
+    const prev = usedBy[pin];
+    if (prev && !conflict) conflict = `GPIO ${pin}: ${prev} and ${label}`;
+    else if (!prev) usedBy[pin] = label;
+  };
   state.rooms.forEach(r => {
-    [['Relay', r.relayPin], ['LED', r.ledPin]].forEach(([kind, pin]) => {
-      if (pin === undefined || pin === null || pin === '') return;
-      const prev = usedBy[pin];
-      if (prev && !conflict) conflict = `GPIO ${pin}: ${prev} and Room ${r.id} (${kind})`;
-      else if (!prev) usedBy[pin] = `Room ${r.id} (${kind})`;
-    });
+    claim(r.relayPin, `Room ${r.id} (Relay)`);
+    claim(r.ledPin, `Room ${r.id} (LED)`);
   });
+  claim(getActiveProfile().emergencyPin, 'Emergency light');
   return conflict;
 }
 
@@ -3149,6 +3161,7 @@ function finishSaveSettings(p, message) {
   // Push seed to Firebase so activate.html can compute admin code
   if (p.dbUrl) {
     fbSet('/config/adminSeed', p.adminSeed, p);
+    fbSet('/config/emergencyPin', p.emergencyPin === null || p.emergencyPin === undefined ? null : p.emergencyPin, p);
     pushAllRooms(p);
     startFbListener();
   }
