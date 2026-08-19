@@ -232,7 +232,7 @@ async function loadSlots() {
     document.getElementById('slotList').innerHTML =
       `<div class="no-slots">This activation link is missing its configuration.<br>
         <span style="font-size:12px;color:var(--muted);margin-top:8px;display:block">
-          Please re-scan the QR code from the Room Controller dashboard.
+          Please re-scan the QR code from the ${PRODUCT_INFO.name} dashboard.
         </span>
       </div>`;
     return;

@@ -1643,13 +1643,13 @@ function printQR() {
     PRODUCT_INFO.phone + ' &middot; ' + PRODUCT_INFO.email +
     '</div>';
   win.document.write(
-    '<!DOCTYPE html><html><head><title>Room Controller QR</title>' +
+    '<!DOCTYPE html><html><head><title>' + PRODUCT_INFO.name + ' QR</title>' +
     '<style>body{font-family:-apple-system,sans-serif;text-align:center;padding:40px;}' +
     'h2{font-size:22px;margin-bottom:4px;}p{color:#666;font-size:14px;margin-bottom:20px;}' +
     '@media print{button{display:none;}}</style>' +
     scriptTag +
     '</head><body>' +
-    '<h2>Room Controller — ' + p.name + '</h2>' +
+    '<h2>' + PRODUCT_INFO.name + ' — ' + p.name + '</h2>' +
     '<p>Scan to activate your room slot</p>' +
     '<div id="qr" style="display:inline-block;background:white;padding:12px;border:1px solid #ddd;border-radius:8px"></div>' +
     productFooterHtml +
@@ -3384,6 +3384,7 @@ function renderLicenseStatus() {
 function openLicenseModal() {
   document.getElementById('licenseModalInput').value = '';
   document.getElementById('licenseModalError').style.display = 'none';
+  document.getElementById('licenseModalIntro').textContent = `Paste a new ${PRODUCT_INFO.name} license key to activate or renew.`;
   document.getElementById('licenseModal').classList.add('show');
 }
 function closeLicenseModal() {
@@ -3414,6 +3415,7 @@ startLicenseWatch();
 function bootApp() {
   _appBooted = true;
   document.getElementById('appTitle').textContent = PRODUCT_INFO.name;
+  document.title = PRODUCT_INFO.name;
   document.getElementById('aboutProductInfo').innerHTML = productInfoHtml();
   document.getElementById('licenseBannerContact').innerHTML =
     `<a href="tel:${PRODUCT_INFO.phone}" style="color:inherit">${PRODUCT_INFO.phone}</a>`;
@@ -3568,7 +3570,7 @@ function applyUpdate() {
         <button class="modal-close" onclick="closeLicenseModal()">×</button>
       </div>
       <div class="modal-body">
-        <p style="font-size:12px;color:var(--muted);margin-bottom:12px">Paste a new Room Controller license key to activate or renew.</p>
+        <p style="font-size:12px;color:var(--muted);margin-bottom:12px" id="licenseModalIntro">Paste a new Room Controller license key to activate or renew.</p>
         <textarea class="settings-input" id="licenseModalInput" rows="3" placeholder="Paste license key here" autocomplete="off" style="margin-bottom:12px"></textarea>
         <div id="licenseModalError" class="status-msg err" style="display:none;margin-bottom:10px"></div>
         <button class="modal-save-btn" onclick="saveLicenseFromModal()">Save &amp; Activate</button>
