@@ -1673,7 +1673,7 @@ function openProductInfoModal() {
   document.getElementById('piTagline').textContent = PRODUCT_INFO.tagline;
   document.getElementById('piContact').innerHTML =
     `<a href="tel:${PRODUCT_INFO.phone}" style="color:var(--text);text-decoration:none">${PRODUCT_INFO.phone}</a><br>` +
-    `<a href="https://wa.me/${PRODUCT_INFO.whatsapp}" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none">WhatsApp</a><br>` +
+    `<a href="https://wa.me/${PRODUCT_INFO.whatsapp}" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none">WhatsApp - ${PRODUCT_INFO.whatsapp}</a><br>` +
     `<a href="mailto:${PRODUCT_INFO.email}" style="color:var(--text);text-decoration:none">${PRODUCT_INFO.email}</a>`;
   document.getElementById('productInfoModal').classList.add('show');
 
