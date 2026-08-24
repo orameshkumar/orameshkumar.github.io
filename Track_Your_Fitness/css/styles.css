@@ -93,9 +93,9 @@
 [data-theme="sunset"] .badge-expense { background: #1a0a18; color: #f48fb1; }
 
 /* ── Base ──────────────────────────────────────────── */
-html, body { height: 100%; font-family: system-ui, -apple-system, sans-serif; font-size: 17px; background: var(--bg); color: var(--text); }
+html, body { height: 100%; font-family: system-ui, -apple-system, sans-serif; font-size: 17px; background: var(--bg); color: var(--text); overflow-x: hidden; }
 
-body { display: flex; flex-direction: column; max-width: 480px; margin: 0 auto; box-shadow: 0 0 24px rgba(0,0,0,0.5); min-height: 100vh; }
+body { display: flex; flex-direction: column; max-width: 480px; margin: 0 auto; box-shadow: 0 0 24px rgba(0,0,0,0.5); min-height: 100vh; overflow-x: hidden; }
 
 /* ── App Header ─────────────────────────────────────── */
 .app-header { background: var(--primary-dark); color: #fff; padding: 12px 16px; display: flex; align-items: center; gap: 8px; position: sticky; top: 0; z-index: 100; }
@@ -116,7 +116,7 @@ body { display: flex; flex-direction: column; max-width: 480px; margin: 0 auto; 
 .app-header h1 { font-size: 1.15rem; font-weight: 600; flex: 1; }
 
 /* ── Screens ─────────────────────────────────────────── */
-.screen { flex: 1; overflow: hidden; padding: 12px; display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+.screen { flex: 1; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 8px; min-height: 0; -webkit-overflow-scrolling: touch; }
 .screen[hidden] { display: none !important; visibility: hidden !important; pointer-events: none !important; }
 
 /* ── Bottom Navigation ──────────────────────────────── */
@@ -276,7 +276,7 @@ body { display: flex; flex-direction: column; max-width: 480px; margin: 0 auto; 
 .report-tab-btn { flex-shrink: 0; padding: 7px 14px; background: var(--bg3); border: 1px solid var(--border); border-radius: 20px; color: var(--text2); font-size: 0.97rem; font-weight: 500; cursor: pointer; transition: all 0.2s; white-space: nowrap; }
 .report-tab-btn:hover { border-color: var(--primary); color: var(--text); }
 .report-tab-btn.active { background: var(--primary); border-color: var(--primary); color: #fff; }
-.report-tab-panel { display: flex; flex-direction: column; gap: 10px; }
+.report-tab-panel { display: flex; flex-direction: column; gap: 10px; overflow-x: hidden; }
 .report-tab-panel[hidden] { display: none; }
 .report-section-title { font-size: 0.86rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text2); padding: 8px 0 2px; }
 
@@ -338,7 +338,7 @@ body { display: flex; flex-direction: column; max-width: 480px; margin: 0 auto; 
 #contributions-screen .section-header { flex-shrink: 0; }
 #contributions-screen .search-input { flex-shrink: 0; }
 
-#reports-screen { display: flex; flex-direction: column; overflow: hidden; padding-bottom: 0; }
+#reports-screen { display: flex; flex-direction: column; overflow: hidden; padding-bottom: 0; -webkit-overflow-scrolling: touch; }
 #reports-screen .report-tabs { flex-shrink: 0; }
 #reports-screen .report-tab-panel { flex: 1; min-height: 0; overflow-y: auto; padding-bottom: 12px; }
 /* Ensure hidden reports screen is truly invisible and non-interactive */
@@ -354,14 +354,12 @@ body { display: flex; flex-direction: column; max-width: 480px; margin: 0 auto; 
 .report-tabs, .settings-section, .backup-info { flex-shrink: 0; }
 
 /* Dynamic list containers: fill remaining space, scroll internally */
-#monthly-list, #guest-list, #member-list, #contrib-list, #expense-list, #history-list, #att-member-list { flex: 1; min-height: 120px; overflow-y: auto; }
+#monthly-list, #guest-list, #member-list, #contrib-list, #expense-list, #history-list, #att-member-list { flex: 1; min-height: 0; overflow-y: auto; }
 
 /* Settings screen: all sections scroll together */
 #settings-screen { overflow-y: auto; }
-/* Members and Expenses: when form is open, the whole screen scrolls */
-#members-screen, #expenses-screen { overflow-y: auto !important; }
-#members-screen #member-list, #expenses-screen #expense-list { flex: none; min-height: auto; overflow-y: visible; }
-#attendance-screen { display: flex; flex-direction: column; overflow: hidden; }
+/* Members and Expenses screens scroll naturally with the page */
+#attendance-screen { display: flex; flex-direction: column; overflow: hidden; -webkit-overflow-scrolling: touch; }
 #attendance-screen .section-header, #attendance-screen .filter-bar, #attendance-screen .bulk-select-all-row, #att-qr-scanner-container, #att-scan-result { flex-shrink: 0; }
 #settings-screen .settings-section { flex-shrink: 0; }
 
@@ -464,3 +462,10 @@ body { display: flex; flex-direction: column; max-width: 480px; margin: 0 auto; 
 /* ── Report table responsive ─────────────────────────── */
 .report-tab-panel { overflow-x: hidden; }
 .report-tab-panel .filter-bar { flex-wrap: wrap; }
+/* ── Mobile viewport fix ─────────────────────────────── */
+@media (max-width: 480px) {
+  body { max-width: 100vw; }
+  .form-row { flex-direction: column; gap: 0; }
+  .balance-cards { grid-template-columns: 1fr; }
+  .section-header { flex-wrap: wrap; }
+}
