@@ -133,7 +133,7 @@ const Monthly = (function () {
       members = members.filter(function (m) {
         return m.status !== 'inactive' && contribMap[m.id];
       });
-      if (searchTerm) members = members.filter(function (m) { return m.name.toLowerCase().indexOf(searchTerm) !== -1; });
+      if (searchTerm) members = members.filter(function (m) { return m.name.toLowerCase().indexOf(searchTerm) !== -1 || (m.notes && m.notes.toLowerCase().indexOf(searchTerm) !== -1); });
       members.sort(function (a, b) { return a.name.localeCompare(b.name); });
 
       var items = [];
