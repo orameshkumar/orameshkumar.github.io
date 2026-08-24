@@ -353,12 +353,14 @@ body { display: flex; flex-direction: column; max-width: 480px; margin: 0 auto; 
 .report-tabs, .settings-section, .backup-info { flex-shrink: 0; }
 
 /* Dynamic list containers: fill remaining space, scroll internally */
-#monthly-list, #guest-list, #member-list, #contrib-list, #expense-list, #history-list, #att-member-list { flex: 1; min-height: 0; overflow-y: auto; }
+#monthly-list, #guest-list, #member-list, #contrib-list, #expense-list, #history-list, #att-member-list { flex: 1; min-height: 120px; overflow-y: auto; }
 
 /* Settings screen: all sections scroll together */
 #settings-screen { overflow-y: auto; }
+#members-screen .form-container { max-height: 50vh; overflow-y: auto; }
+#expenses-screen .form-container { max-height: 50vh; overflow-y: auto; }
 #attendance-screen { display: flex; flex-direction: column; overflow: hidden; }
-#attendance-screen .section-header, #attendance-screen .filter-bar, #attendance-screen .bulk-select-all-row { flex-shrink: 0; }
+#attendance-screen .section-header, #attendance-screen .filter-bar, #attendance-screen .bulk-select-all-row, #att-qr-scanner-container, #att-scan-result { flex-shrink: 0; }
 #settings-screen .settings-section { flex-shrink: 0; }
 
 /* ── More popup menu ─────────────────────────────────── */
