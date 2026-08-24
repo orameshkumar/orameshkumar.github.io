@@ -116,7 +116,7 @@ body { display: flex; flex-direction: column; max-width: 480px; margin: 0 auto; 
 .app-header h1 { font-size: 1.15rem; font-weight: 600; flex: 1; }
 
 /* ── Screens ─────────────────────────────────────────── */
-.screen { flex: 1; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 8px; min-height: 0; -webkit-overflow-scrolling: touch; }
+.screen { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 12px; display: flex; flex-direction: column; gap: 8px; min-height: 0; -webkit-overflow-scrolling: touch; scroll-behavior: smooth; }
 .screen[hidden] { display: none !important; visibility: hidden !important; pointer-events: none !important; }
 
 /* ── Bottom Navigation ──────────────────────────────── */
@@ -251,7 +251,7 @@ body { display: flex; flex-direction: column; max-width: 480px; margin: 0 auto; 
   .screen { padding: 0; overflow: visible !important; height: auto !important; flex: none !important; }
   #reports-screen { overflow: visible !important; height: auto !important; }
   #reports-screen .report-tab-panel { overflow: visible !important; height: auto !important; flex: none !important; }
-  #monthly-list, #guest-list, #member-list, #contrib-list, #expense-list, #history-list, #att-member-list { overflow: visible !important; height: auto !important; flex: none !important; }
+  #monthly-list, #guest-list, #member-list, #contrib-list, #expense-list, #history-list, #att-member-list { overflow: visible !important; height: auto !important; }
   .report-table { page-break-inside: auto; width: 100%; }
   .report-table tr { page-break-inside: avoid; }
   .client-card { page-break-inside: avoid; }
@@ -338,7 +338,7 @@ body { display: flex; flex-direction: column; max-width: 480px; margin: 0 auto; 
 #contributions-screen .section-header { flex-shrink: 0; }
 #contributions-screen .search-input { flex-shrink: 0; }
 
-#reports-screen { display: flex; flex-direction: column; overflow: hidden; padding-bottom: 0; -webkit-overflow-scrolling: touch; }
+#reports-screen { display: flex; flex-direction: column; overflow-y: auto; padding-bottom: 0; -webkit-overflow-scrolling: touch; }
 #reports-screen .report-tabs { flex-shrink: 0; }
 #reports-screen .report-tab-panel { flex: 1; min-height: 0; overflow-y: auto; padding-bottom: 12px; }
 /* Ensure hidden reports screen is truly invisible and non-interactive */
@@ -354,12 +354,12 @@ body { display: flex; flex-direction: column; max-width: 480px; margin: 0 auto; 
 .report-tabs, .settings-section, .backup-info { flex-shrink: 0; }
 
 /* Dynamic list containers: fill remaining space, scroll internally */
-#monthly-list, #guest-list, #member-list, #contrib-list, #expense-list, #history-list, #att-member-list { flex: 1; min-height: 0; overflow-y: auto; }
+#monthly-list, #guest-list, #member-list, #contrib-list, #expense-list, #history-list, #att-member-list { flex: none; }
 
 /* Settings screen: all sections scroll together */
 #settings-screen { overflow-y: auto; }
 /* Members and Expenses screens scroll naturally with the page */
-#attendance-screen { display: flex; flex-direction: column; overflow: hidden; -webkit-overflow-scrolling: touch; }
+#attendance-screen { display: flex; flex-direction: column; overflow-y: auto; -webkit-overflow-scrolling: touch; }
 #attendance-screen .section-header, #attendance-screen .filter-bar, #attendance-screen .bulk-select-all-row, #att-qr-scanner-container, #att-scan-result { flex-shrink: 0; }
 #settings-screen .settings-section { flex-shrink: 0; }
 
