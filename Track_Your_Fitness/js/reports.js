@@ -35,6 +35,11 @@ const Reports = (function () {
       var el = document.getElementById(id);
       if (el) el.addEventListener('change', renderActiveReport);
     });
+    // Attendance report filter inputs
+    var attOperator = document.getElementById('report-att-operator');
+    var attDays = document.getElementById('report-att-days');
+    if (attOperator) attOperator.addEventListener('change', renderActiveReport);
+    if (attDays) attDays.addEventListener('input', renderActiveReport);
     ['report-search','report-search-mw','report-search-os','report-search-att'].forEach(function (id) {
       var el = document.getElementById(id);
       if (el) el.addEventListener('input', renderActiveReport);
@@ -318,6 +323,10 @@ const Reports = (function () {
     if (!container) return;
     var { start, end } = getDateRange('report-start-att', 'report-end-att');
     var searchTerm = getSearch('report-search-att');
+    var operatorEl = document.getElementById('report-att-operator');
+    var daysEl = document.getElementById('report-att-days');
+    var operator = operatorEl ? operatorEl.value : 'all';
+    var daysFilter = daysEl ? parseInt(daysEl.value, 10) : NaN;
     container.innerHTML = '<p class="empty-message">Loading…</p>';
 
     try {
@@ -327,16 +336,6 @@ const Reports = (function () {
       var members = await DB.getAllMembers();
       var memberMap = {};
       members.forEach(function (m) { memberMap[m.id] = m; });
-
-      // Filter by search
-      if (searchTerm) {
-        records = records.filter(function (r) {
-          var m = memberMap[r.memberId];
-          if (!m) return false;
-          return m.name.toLowerCase().indexOf(searchTerm) !== -1 ||
-            (m.memberType && m.memberType.toLowerCase().indexOf(searchTerm) !== -1);
-        });
-      }
 
       // Only count 'present' records
       var presentRecords = records.filter(function (r) { return r.status === 'present'; });
@@ -350,17 +349,40 @@ const Reports = (function () {
         datesMap[r.memberId].push(r.date);
       });
 
-      // Build list sorted by count descending
+      // Build list of memberIds
       var memberIds = Object.keys(countMap);
-      if (memberIds.length === 0) { container.innerHTML = '<p class="empty-message">No attendance data for this period.</p>'; return; }
 
+      // Filter by search term (name or memberType)
+      if (searchTerm) {
+        memberIds = memberIds.filter(function (id) {
+          var m = memberMap[id];
+          if (!m) return false;
+          return m.name.toLowerCase().indexOf(searchTerm) !== -1 ||
+            (m.memberType && m.memberType.toLowerCase().indexOf(searchTerm) !== -1);
+        });
+      }
+
+      // Filter by days operator
+      if (operator !== 'all' && !isNaN(daysFilter)) {
+        memberIds = memberIds.filter(function (id) {
+          var count = countMap[id] || 0;
+          if (operator === 'gte') return count >= daysFilter;
+          if (operator === 'lte') return count <= daysFilter;
+          if (operator === 'eq') return count === daysFilter;
+          return true;
+        });
+      }
+
+      if (memberIds.length === 0) { container.innerHTML = '<p class="empty-message">No attendance data matching your filters.</p>'; return; }
+
+      // Sort by count descending
       memberIds.sort(function (a, b) { return countMap[b] - countMap[a]; });
 
       var totalDays = 0;
       memberIds.forEach(function (id) { totalDays += countMap[id]; });
 
       var html = '<div class="history-summary">Period: ' + fmtDate(start) + ' – ' + fmtDate(end) + ' · ' + memberIds.length + ' member(s) · ' + totalDays + ' total present-days</div>';
-      html += '<table class="report-table"><thead><tr><th>Member</th><th>Type</th><th>Days present</th></tr></thead><tbody>';
+      html += '<table class="report-table"><thead><tr><th>Member</th><th>Type</th><th>Days</th></tr></thead><tbody>';
       memberIds.forEach(function (id) {
         var m = memberMap[id];
         var name = m ? esc(m.name) : 'Unknown';

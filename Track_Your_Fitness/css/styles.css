@@ -357,8 +357,9 @@ body { display: flex; flex-direction: column; max-width: 480px; margin: 0 auto; 
 
 /* Settings screen: all sections scroll together */
 #settings-screen { overflow-y: auto; }
-#members-screen .form-container { max-height: 50vh; overflow-y: auto; }
-#expenses-screen .form-container { max-height: 50vh; overflow-y: auto; }
+/* Members and Expenses: when form is open, the whole screen scrolls */
+#members-screen, #expenses-screen { overflow-y: auto !important; }
+#members-screen #member-list, #expenses-screen #expense-list { flex: none; min-height: auto; overflow-y: visible; }
 #attendance-screen { display: flex; flex-direction: column; overflow: hidden; }
 #attendance-screen .section-header, #attendance-screen .filter-bar, #attendance-screen .bulk-select-all-row, #att-qr-scanner-container, #att-scan-result { flex-shrink: 0; }
 #settings-screen .settings-section { flex-shrink: 0; }
