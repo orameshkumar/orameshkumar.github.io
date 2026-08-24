@@ -416,7 +416,7 @@ function renderSlots() {
       return `<div class="${cardClass}" ${onclick} id="slot-${room.id}-${si}">
         <div class="${dotClass}"></div>
         <div class="slot-info">
-          <div class="slot-time">${sl.s} – ${sl.e}</div>
+          <div class="slot-time">${sl.s} – ${sl.e}${sl.bookedBy ? ` · ${sl.bookedBy}` : ''}</div>
           <div class="slot-badge">${sl.recurring ? 'Recurring' : 'One-time'}${isCurrent ? ' · Active now' : ''}</div>
         </div>
         ${badge}
