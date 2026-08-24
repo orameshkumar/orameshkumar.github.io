@@ -419,10 +419,10 @@ body { display: flex; flex-direction: column; max-width: 480px; margin: 0 auto; 
 /* ── ID Card ──────────────────────────────────────── */
 .id-card-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.8); z-index:300; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:20px; }
 .id-card-overlay[hidden] { display:none; }
-.id-card { background:#fff; color:#000; border-radius:12px; padding:24px; width:320px; max-width:90vw; text-align:center; box-shadow:0 8px 32px rgba(0,0,0,0.3); }
-.id-card-header { font-size:0.8rem; font-weight:700; text-transform:uppercase; letter-spacing:0.1em; color:#666; margin-bottom:12px; border-bottom:2px solid #1976d2; padding-bottom:8px; }
-.id-card-name { font-size:1.3rem; font-weight:700; margin-bottom:8px; }
-.id-card-detail { font-size:0.9rem; color:#333; margin-bottom:4px; }
+.id-card { background:#fff; color:#000; border-radius:8px; padding:16px; width:85mm; max-width:90vw; text-align:center; box-shadow:0 8px 32px rgba(0,0,0,0.3); }
+.id-card-header { font-size:0.65rem; font-weight:700; text-transform:uppercase; letter-spacing:0.1em; color:#666; margin-bottom:8px; border-bottom:2px solid #1976d2; padding-bottom:4px; }
+.id-card-name { font-size:1rem; font-weight:700; margin-bottom:4px; }
+.id-card-detail { font-size:0.75rem; color:#333; margin-bottom:2px; }
 .id-card-id { font-size:0.7rem; color:#999; margin-top:8px; font-family:monospace; word-break:break-all; }
 .id-card-qr { margin:16px auto; display:flex; justify-content:center; }
 .id-card-footer { font-size:0.8rem; color:#666; margin-top:12px; border-top:1px solid #ddd; padding-top:8px; }
@@ -443,3 +443,15 @@ body { display: flex; flex-direction: column; max-width: 480px; margin: 0 auto; 
 .att-scan-success { background:var(--success-bg); border:1px solid var(--success); border-radius:8px; padding:12px; margin:8px 0; text-align:center; }
 .att-scan-error { background:rgba(211,47,47,0.1); border:1px solid var(--danger); border-radius:8px; padding:12px; margin:8px 0; text-align:center; color:var(--danger); }
 .att-report-detail td { background:var(--bg2); }
+
+/* ── Attendance screen ──────────────────────────────── */
+.att-member-row { display:flex; align-items:center; justify-content:space-between; padding:10px 12px; border-bottom:1px solid var(--border); }
+.att-member-row.att-present { background:var(--success-bg); }
+.att-member-label { display:flex; align-items:center; gap:10px; flex:1; cursor:pointer; }
+.att-member-label input[type="checkbox"] { width:18px; height:18px; accent-color:var(--primary); cursor:pointer; }
+.att-member-name { font-size:0.95rem; font-weight:500; }
+.att-status-label { font-size:0.8rem; font-weight:600; flex-shrink:0; }
+.att-status-present { color:var(--success); }
+.att-status-absent { color:var(--text3); }
+.att-scan-success { background:var(--success-bg); border:1px solid var(--success); border-radius:var(--radius); padding:14px; text-align:center; margin:8px 0; }
+.att-scan-error { background:var(--danger-bg); border:1px solid var(--danger); border-radius:var(--radius); padding:14px; text-align:center; margin:8px 0; color:var(--danger); }

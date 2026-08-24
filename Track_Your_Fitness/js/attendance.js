@@ -65,10 +65,10 @@ const Attendance = (function () {
       var presentCount = 0;
       var html = '';
       members.forEach(function (m) {
-        var isPresent = attMap[m.memberId || m.id] === 'present';
+        var isPresent = attMap[m.id] === 'present';
         if (isPresent) presentCount++;
 
-        html += '<div class="att-member-row">';
+        html += '<div class="att-member-row' + (isPresent ? ' att-present' : '') + '">';
         html += '<label class="att-member-label">';
         html += '<input type="checkbox" class="att-checkbox" data-member-id="' + m.id + '"' + (isPresent ? ' checked' : '') + '>';
         html += '<span class="att-member-name">' + esc(m.name) + '</span>';
@@ -76,21 +76,22 @@ const Attendance = (function () {
           html += ' <span class="loan-type-badge badge-monthly" style="font-size:0.7rem;">' + esc(m.memberType) + '</span>';
         }
         html += '</label>';
+        html += '<span class="att-status-label' + (isPresent ? ' att-status-present' : ' att-status-absent') + '">' + (isPresent ? '✅ Present' : '—') + '</span>';
         html += '</div>';
       });
 
       container.innerHTML = html;
       updatePresentCount(presentCount);
 
-      // Bind checkbox change events
+      // Bind checkbox change events — save immediately on change
       container.querySelectorAll('.att-checkbox').forEach(function (cb) {
         cb.addEventListener('change', function () {
-          handleCheckboxChange(cb.dataset.memberId, cb.checked);
+          saveAndRefresh(cb.dataset.memberId, cb.checked);
         });
       });
     } catch (e) {
       container.innerHTML = '<p class="empty-message">Could not load members.</p>';
-      console.error(e);
+      console.error('Attendance render error:', e);
     }
   }
 
@@ -99,21 +100,18 @@ const Attendance = (function () {
     if (el) el.textContent = count + ' present';
   }
 
-  async function handleCheckboxChange(memberId, checked) {
+  async function saveAndRefresh(memberId, checked) {
     var dateInput = document.getElementById('att-date');
     var date = dateInput ? dateInput.value : getTodayISO();
     var status = checked ? 'present' : 'absent';
 
     try {
       await DB.saveAttendance(memberId, date, status);
-      // Update present count
-      var checkboxes = document.querySelectorAll('.att-checkbox:checked');
-      updatePresentCount(checkboxes.length);
+      // Re-render to update status labels and count
+      renderAttendance();
     } catch (e) {
       alert('Could not save attendance: ' + e.message);
-      // Revert checkbox state on error
-      var cb = document.querySelector('.att-checkbox[data-member-id="' + memberId + '"]');
-      if (cb) cb.checked = !checked;
+      console.error('Attendance save error:', e);
     }
   }
 
@@ -125,14 +123,13 @@ const Attendance = (function () {
     var checkboxes = document.querySelectorAll('.att-checkbox');
     for (var i = 0; i < checkboxes.length; i++) {
       var cb = checkboxes[i];
-      cb.checked = checked;
       try {
         await DB.saveAttendance(cb.dataset.memberId, date, status);
       } catch (e) {
         console.error('Failed to save attendance for', cb.dataset.memberId, e);
       }
     }
-    updatePresentCount(checked ? checkboxes.length : 0);
+    renderAttendance();
   }
 
   async function handleCopyFromYesterday() {
@@ -149,7 +146,7 @@ const Attendance = (function () {
       var presentMembers = yesterdayRecords.filter(function (r) { return r.status === 'present'; });
 
       if (presentMembers.length === 0) {
-        alert('No attendance records found for the previous day (' + yesterday + ').');
+        alert('No attendance records found for ' + yesterday + '.');
         return;
       }
 
@@ -165,7 +162,7 @@ const Attendance = (function () {
     }
   }
 
-  // ─── QR Scanner ───────────────────────────────────
+  // --- QR Scanner ---
 
   function toggleQRScanner() {
     var container = document.getElementById('att-qr-scanner-container');
@@ -202,7 +199,7 @@ const Attendance = (function () {
         { facingMode: 'environment' },
         { fps: 10, qrbox: { width: 250, height: 250 } },
         handleQRScanSuccess,
-        function () {} // ignore scan failures (no QR in view)
+        function () {} // ignore no-QR frames
       );
     } catch (e) {
       var msg = 'Could not start QR scanner.';
@@ -212,13 +209,12 @@ const Attendance = (function () {
         msg = 'QR scanner could not be loaded. Check your internet connection.';
       }
       container.innerHTML = '<p class="empty-message">' + msg + '</p>' +
-        '<button class="btn btn-secondary btn-sm" onclick="Attendance.renderAttendance(); document.getElementById(\'att-qr-scanner-container\').setAttribute(\'hidden\',\'\');" style="margin-top:8px;">Close</button>';
+        '<button class="btn btn-secondary btn-sm" onclick="document.getElementById(\'att-qr-scanner-container\').setAttribute(\'hidden\',\'\');" style="margin-top:8px;">Close</button>';
       _scannerInstance = null;
     }
   }
 
   async function handleQRScanSuccess(decodedText) {
-    // Pause scanner while processing
     if (_scannerInstance) {
       try { await _scannerInstance.pause(true); } catch (e) {}
     }
@@ -227,7 +223,6 @@ const Attendance = (function () {
     if (!resultDiv) return;
 
     try {
-      // Look up member by ID
       var member = await DB.getMember(decodedText);
       if (!member) {
         resultDiv.innerHTML = '<div class="att-scan-error">❌ Member not found for ID: ' + esc(decodedText) + '</div>';
@@ -240,15 +235,15 @@ const Attendance = (function () {
       var today = getTodayISO();
       await DB.saveAttendance(member.id, today, 'present');
 
-      // Calculate balance
+      // Calculate outstanding balance
       var balanceText = '';
       if (typeof Monthly !== 'undefined' && typeof Monthly.calcMemberBalance === 'function') {
         var contrib = await DB.getContributionByMember(member.id);
         if (contrib) {
           var bal = await Monthly.calcMemberBalance(member, contrib, today);
           balanceText = bal.balance > 0
-            ? '<div class="amount-due">Outstanding: ₹' + bal.balance.toFixed(2) + '</div>'
-            : '<div class="amount-paid">Balance clear</div>';
+            ? '<div class="amount-due" style="font-size:1rem;margin-top:6px;">Outstanding: ₹' + bal.balance.toFixed(2) + '</div>'
+            : '<div class="amount-paid" style="font-size:1rem;margin-top:6px;">✓ Balance clear</div>';
         }
       }
 
@@ -260,11 +255,10 @@ const Attendance = (function () {
         '</div>';
       resultDiv.removeAttribute('hidden');
 
-      // Refresh attendance list
       renderAttendance();
       resumeScannerAfterDelay();
     } catch (e) {
-      resultDiv.innerHTML = '<div class="att-scan-error">Error processing scan: ' + esc(e.message) + '</div>';
+      resultDiv.innerHTML = '<div class="att-scan-error">Error: ' + esc(e.message) + '</div>';
       resultDiv.removeAttribute('hidden');
       resumeScannerAfterDelay();
     }
