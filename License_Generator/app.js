@@ -49,11 +49,11 @@
     { name: "Build Calc", secret: [66,117,105,108,100,67,97,108,99] },
     { name: "Pay Your Shuttle", secret: [80,97,121,89,111,117,114,83,104,117,116,116,108,101] },
     { name: "Patient Queue Management", secret: [80,97,116,105,101,110,116,81,117,101,117,101,77,97,110,97,103,101,109,101,110,116] },
-    { name: "Room Controller", secret: [82,79,79,77,67,84,82,76,95,76,73,67,95,50,48,50,53,95,36,101,99,114,51,116,95,75,51,121,33] }
+    { name: "Track Your Fitness", secret: [84,114,97,99,107,89,111,117,114,70,105,116,110,101,115,115,50,48,50,53], restricted: true }
   ];
 
   // Protected app names that cannot be modified or deleted (case-insensitive)
-  var PROTECTED_APPS = ["pay up partners", "abc store", "build calc", "pay your shuttle", "patient queue management", "room controller"];
+  var PROTECTED_APPS = ["pay up partners", "abc store", "build calc", "pay your shuttle", "patient queue management", "track your fitness"];
 
   // Backup metadata localStorage key
   var BACKUP_META_KEY = 'license_gen_backup_meta';
@@ -232,27 +232,10 @@
 
   // --- Generate License Key ---
 
-  // maxRooms/maxProfiles are optional capacity caps (currently meaningful
-  // to Room Controller only — other apps simply never set them). Leave
-  // either as null/undefined for "unlimited". Appended to the signed
-  // message ONLY when present, and always in this fixed mr-then-mp order,
-  // so a key generated without them produces the exact same message (and
-  // hash) as before these existed — this is what keeps every
-  // already-issued key valid. The validator (index.html's
-  // validateLicenseKey()) must build this identically.
-  async function generateLicense(name, secretCodes, maxRooms, maxProfiles) {
-    var message = name;
-    var payload = { n: name };
-    if (maxRooms !== undefined && maxRooms !== null && maxRooms !== '') {
-      message += '|mr' + maxRooms;
-      payload.mr = Number(maxRooms);
-    }
-    if (maxProfiles !== undefined && maxProfiles !== null && maxProfiles !== '') {
-      message += '|mp' + maxProfiles;
-      payload.mp = Number(maxProfiles);
-    }
-    payload.h = await hmacHex(message, secretCodes);
-    return btoa(JSON.stringify(payload));
+  async function generateLicense(name, secretCodes) {
+    var hash = await hmacHex(name, secretCodes);
+    var payload = JSON.stringify({ n: name, h: hash });
+    return btoa(payload);
   }
 
   // --- Validation Engine ---
@@ -319,19 +302,11 @@
 
   // --- Generate Date-Restricted License Key ---
 
-  async function generateDateRestrictedLicense(name, secretCodes, fromDate, toDate, maxRooms, maxProfiles) {
+  async function generateDateRestrictedLicense(name, secretCodes, fromDate, toDate) {
     var message = name + fromDate + toDate;
-    var payload = { n: name, f: fromDate, t: toDate };
-    if (maxRooms !== undefined && maxRooms !== null && maxRooms !== '') {
-      message += '|mr' + maxRooms;
-      payload.mr = Number(maxRooms);
-    }
-    if (maxProfiles !== undefined && maxProfiles !== null && maxProfiles !== '') {
-      message += '|mp' + maxProfiles;
-      payload.mp = Number(maxProfiles);
-    }
-    payload.h = await hmacHex(message, secretCodes);
-    return btoa(JSON.stringify(payload));
+    var hash = await hmacHex(message, secretCodes);
+    var payload = JSON.stringify({ n: name, f: fromDate, t: toDate, h: hash });
+    return btoa(payload);
   }
 
   // --- History Manager ---
@@ -374,7 +349,7 @@
     }
   }
 
-  function _addHistoryEntry(appName, userName, licenseKey, licenseType, validFrom, validTo, maxRooms, maxProfiles) {
+  function _addHistoryEntry(appName, userName, licenseKey, licenseType, validFrom, validTo) {
     // Default licenseType to "perpetual" if not provided (backward compat with old 3-arg calls)
     if (!licenseType) {
       licenseType = 'perpetual';
@@ -392,8 +367,6 @@
       licenseKey: licenseKey,
       timestamp: new Date().toISOString(),
       licenseType: licenseType,
-      maxRooms: (maxRooms === undefined || maxRooms === null || maxRooms === '') ? null : Number(maxRooms),
-      maxProfiles: (maxProfiles === undefined || maxProfiles === null || maxProfiles === '') ? null : Number(maxProfiles),
       validFrom: validFrom,
       validTo: validTo
     };
@@ -727,17 +700,6 @@
       summary.appendChild(validitySpan);
     }
 
-    // Capacity caps, if this key was issued with any
-    if (entry.maxRooms || entry.maxProfiles) {
-      var capsParts = [];
-      if (entry.maxRooms) capsParts.push(entry.maxRooms + ' rooms');
-      if (entry.maxProfiles) capsParts.push(entry.maxProfiles + ' profiles');
-      var capsSpan = document.createElement('span');
-      capsSpan.className = 'entry-validity';
-      capsSpan.textContent = 'Up to ' + capsParts.join(', ');
-      summary.appendChild(capsSpan);
-    }
-
     entryDiv.appendChild(summary);
 
     entryDiv.addEventListener('click', function(e) {
@@ -925,10 +887,6 @@
     }
 
     var selectedApp = registry[selectedIndex];
-    var maxRoomsInput = document.getElementById('max-rooms');
-    var maxProfilesInput = document.getElementById('max-profiles');
-    var maxRooms = maxRoomsInput ? maxRoomsInput.value.trim() : '';
-    var maxProfiles = maxProfilesInput ? maxProfilesInput.value.trim() : '';
 
     try {
       var licenseType = licenseTypeSelect ? licenseTypeSelect.value : 'perpetual';
@@ -943,14 +901,14 @@
           alert(validation.error);
           return;
         }
-        key = await generateDateRestrictedLicense(name, selectedApp.secret, fromDate, toDate, maxRooms, maxProfiles);
-        var saved = _addHistoryEntry(selectedApp.name, name, key, 'date-restricted', fromDate, toDate, maxRooms, maxProfiles);
+        key = await generateDateRestrictedLicense(name, selectedApp.secret, fromDate, toDate);
+        var saved = _addHistoryEntry(selectedApp.name, name, key, 'date-restricted', fromDate, toDate);
         if (!saved) {
           _showToast('\u26a0\ufe0f History entry could not be saved.', 'error');
         }
       } else {
-        key = await generateLicense(name, selectedApp.secret, maxRooms, maxProfiles);
-        var saved = _addHistoryEntry(selectedApp.name, name, key, 'perpetual', null, null, maxRooms, maxProfiles);
+        key = await generateLicense(name, selectedApp.secret);
+        var saved = _addHistoryEntry(selectedApp.name, name, key, 'perpetual', null, null);
         if (!saved) {
           _showToast('\u26a0\ufe0f History entry could not be saved.', 'error');
         }
