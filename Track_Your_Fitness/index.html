@@ -337,6 +337,8 @@
     <span id="att-present-count" class="bulk-count">0 present</span>
   </div>
   <div id="att-member-list"></div>
+  <button class="btn btn-primary" id="att-save-btn" style="width:100%;margin-top:8px;flex-shrink:0;">💾 Save Attendance</button>
+  <div class="success-msg" id="att-save-msg" hidden style="text-align:center;">Attendance saved!</div>
   <div id="att-qr-scanner-container" hidden></div>
   <div id="att-scan-result" hidden></div>
 </main>
@@ -372,8 +374,8 @@
 
   <!-- Report type tabs -->
   <div class="report-tabs">
-    <button class="report-tab-btn active" data-tab="daywise">Day-wise</button>
-    <button class="report-tab-btn" data-tab="memberwise">Member-wise</button>
+    <button class="report-tab-btn active" data-tab="daywise">Daily Collection</button>
+    <button class="report-tab-btn" data-tab="memberwise">Fee Collection</button>
     <button class="report-tab-btn" data-tab="outstanding">Outstanding</button>
     <button class="report-tab-btn" data-tab="balance">Balance</button>
     <button class="report-tab-btn" data-tab="attendance">Attendance</button>

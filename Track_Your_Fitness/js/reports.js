@@ -236,22 +236,29 @@ const Reports = (function () {
       var netBalance    = totalCollection - totalExpenses;
       var balClass      = netBalance >= 0 ? 'amount-paid' : 'amount-due';
 
-      // ── Cumulative outstanding as of END date (all time up to refDate) ──
-      // Monthly: all fee records <= refDate minus all monthly payments <= refDate
-      var allFeeRecs      = await DB.getAllMonthlyFeeRecords();
-      var allPayments     = await DB.getAllPayments();
+      // ── Cumulative outstanding as of END date — uses same logic as Outstanding report ──
+      var allMembers = await DB.getAllMembers();
+      var allContribs = await DB.getAllContributions();
+      var contribMap2 = {};
+      allContribs.forEach(function (c) { contribMap2[c.memberId] = c; });
+
+      var cumMonthlyOutstanding = 0;
+      var enrolledMembers = allMembers.filter(function (m) { return m.status !== 'inactive' && contribMap2[m.id]; });
+      for (var bi = 0; bi < enrolledMembers.length; bi++) {
+        var bm = enrolledMembers[bi];
+        var bc = contribMap2[bm.id];
+        if (typeof Monthly !== 'undefined' && Monthly.calcMemberBalance) {
+          var bBal = await Monthly.calcMemberBalance(bm, bc, refDate);
+          if (bBal.balance > 0) cumMonthlyOutstanding += bBal.balance;
+        }
+      }
+
+      // Guest outstanding
       var allSessions     = await DB.getAllGuestSessions();
-
-      var cumMonthlyFees  = allFeeRecs.filter(function (r) { return r.date <= refDate; })
-                                      .reduce(function (s, r) { return s + (r.fee || 0); }, 0);
-      var cumMonthlyPaid  = allPayments.filter(function (p) { return p.type === 'monthly' && p.date <= refDate; })
-                                       .reduce(function (s, p) { return s + (p.amount || 0); }, 0);
-      var cumMonthlyOutstanding = Math.max(0, cumMonthlyFees - cumMonthlyPaid);
-
-      // Guest: all session fees <= refDate minus all guest payments <= refDate
+      var allPayments2    = await DB.getAllPayments();
       var cumGuestFees    = allSessions.filter(function (s) { return s.date <= refDate; })
                                        .reduce(function (sum, s) { return sum + (s.fee || 0); }, 0);
-      var cumGuestPaid    = allPayments.filter(function (p) { return p.type === 'guest_play' && p.date <= refDate; })
+      var cumGuestPaid    = allPayments2.filter(function (p) { return p.type === 'guest_play' && p.date <= refDate; })
                                        .reduce(function (sum, p) { return sum + (p.amount || 0); }, 0);
       var cumGuestOutstanding = Math.max(0, cumGuestFees - cumGuestPaid);
 

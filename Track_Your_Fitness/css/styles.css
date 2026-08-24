@@ -218,7 +218,8 @@ body { display: flex; flex-direction: column; max-width: 480px; margin: 0 auto; 
 .history-summary { background: var(--bg3); border-radius: 8px; padding: 10px 14px; font-size: 0.95rem; color: var(--text2); }
 
 /* ── Reports table ───────────────────────────────────── */
-.report-table { width: 100%; border-collapse: collapse; font-size: 0.93rem; }
+.report-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; table-layout: fixed; word-wrap: break-word; }
+.report-table th, .report-table td { overflow: hidden; text-overflow: ellipsis; }
 .report-table th { background: var(--bg3); text-align: left; padding: 8px 10px; color: var(--text2); font-weight: 600; font-size: 0.86rem; text-transform: uppercase; }
 .report-table td { padding: 8px 10px; border-bottom: 1px solid var(--border); }
 .report-table tr:last-child td { border-bottom: none; }
@@ -460,3 +461,6 @@ body { display: flex; flex-direction: column; max-width: 480px; margin: 0 auto; 
 .att-status-absent { color:var(--text3); }
 .att-scan-success { background:var(--success-bg); border:1px solid var(--success); border-radius:var(--radius); padding:14px; text-align:center; margin:8px 0; }
 .att-scan-error { background:var(--danger-bg); border:1px solid var(--danger); border-radius:var(--radius); padding:14px; text-align:center; margin:8px 0; color:var(--danger); }
+/* ── Report table responsive ─────────────────────────── */
+.report-tab-panel { overflow-x: hidden; }
+.report-tab-panel .filter-bar { flex-wrap: wrap; }
