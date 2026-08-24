@@ -1,7 +1,7 @@
 const DB = (function () {
   'use strict';
   const DB_NAME = 'TrackYourFitness';
-  const DB_VERSION = 6;
+  const DB_VERSION = 7;
   let db = null;
 
   function generateId() {
@@ -68,6 +68,14 @@ const DB = (function () {
             mfStore.deleteIndex('memberDate');
           }
           mfStore.createIndex('memberDate', ['memberId','date'], { unique: true });
+        }
+
+        // v7: attendance store
+        if (!database.objectStoreNames.contains('attendance')) {
+          const as = database.createObjectStore('attendance', { keyPath: 'id' });
+          as.createIndex('memberId', 'memberId', { unique: false });
+          as.createIndex('date', 'date', { unique: false });
+          as.createIndex('memberDate', ['memberId', 'date'], { unique: true });
         }
       };
     });
@@ -212,11 +220,55 @@ const DB = (function () {
     });
   }
 
+  // ─── Attendance ───
+  function addAttendance(record)    { return reqToPromise(getStore('attendance','readwrite').add(record)).then(function(r) { notifySyncIfAvailable('attendance', record, 'put'); return r; }); }
+  function getAttendance(id)        { return reqToPromise(getStore('attendance','readonly').get(id)); }
+  function getAllAttendance()        { return reqToPromise(getStore('attendance','readonly').getAll()); }
+  function updateAttendance(record)  { return reqToPromise(getStore('attendance','readwrite').put(record)).then(function(r) { notifySyncIfAvailable('attendance', record, 'put'); return r; }); }
+  function deleteAttendance(id)      { return reqToPromise(getStore('attendance','readwrite').delete(id)).then(function(r) { notifySyncIfAvailable('attendance', {id:id}, 'delete'); return r; }); }
+  function getAttendanceByMember(memberId) {
+    return cursorCollect(getStore('attendance','readonly'), 'memberId', IDBKeyRange.only(memberId));
+  }
+  function getAttendanceByDate(date) {
+    return cursorCollect(getStore('attendance','readonly'), 'date', IDBKeyRange.only(date));
+  }
+  function getAttendanceByMemberDate(memberId, date) {
+    return new Promise((resolve, reject) => {
+      const req = getStore('attendance','readonly').index('memberDate').get([memberId, date]);
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = (e) => reject(new Error(e.target.error?.message || 'DB error'));
+    });
+  }
+  function getAttendanceByDateRange(startDate, endDate) {
+    return cursorCollect(getStore('attendance','readonly'), 'date', IDBKeyRange.bound(startDate, endDate));
+  }
+  async function saveAttendance(memberId, date, status) {
+    var existing = await getAttendanceByMemberDate(memberId, date);
+    if (existing) {
+      existing.status = status;
+      return updateAttendance(existing);
+    } else {
+      var record = { id: generateId(), memberId: memberId, date: date, status: status };
+      return addAttendance(record);
+    }
+  }
+  function deleteAttendanceByMember(memberId) {
+    return new Promise((resolve, reject) => {
+      const req = getStore('attendance','readwrite').index('memberId').openCursor(IDBKeyRange.only(memberId));
+      req.onsuccess = (e) => {
+        const cursor = e.target.result;
+        if (cursor) { cursor.delete(); cursor.continue(); } else resolve();
+      };
+      req.onerror = (e) => reject(new Error(e.target.error?.message || 'Delete failed'));
+    });
+  }
+
   // ─── Cascade delete ───
   async function deleteMemberCascade(memberId) {
     await deletePaymentsByMember(memberId);
     await deleteGuestSessionsByMember(memberId);
     await deleteMonthlyFeeRecordsByMember(memberId);
+    await deleteAttendanceByMember(memberId);
     const contrib = await getContributionByMember(memberId);
     if (contrib) await deleteContribution(contrib.id);
     await deleteMember(memberId);
@@ -266,6 +318,9 @@ const DB = (function () {
     addMonthlyFeeRecord, getMonthlyFeeRecord, getAllMonthlyFeeRecords, updateMonthlyFeeRecord,
     deleteMonthlyFeeRecord, getMonthlyFeeRecordsByMember, getMonthlyFeeRecordsByDateRange,
     getMonthlyFeeRecordByMemberDate, deleteMonthlyFeeRecordsByMember,
+    addAttendance, getAttendance, getAllAttendance, updateAttendance, deleteAttendance,
+    getAttendanceByMember, getAttendanceByDate, getAttendanceByMemberDate,
+    getAttendanceByDateRange, saveAttendance, deleteAttendanceByMember,
     deduplicateFeeRecords,
     deleteMemberCascade
   };

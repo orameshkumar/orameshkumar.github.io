@@ -1,7 +1,7 @@
 var App = (function () {
   'use strict';
   var currentScreen = 'members-screen';
-  var moreScreens   = ['history-screen','contributions-screen','expenses-screen','reports-screen','settings-screen'];
+  var moreScreens   = ['history-screen','contributions-screen','expenses-screen','reports-screen','settings-screen','attendance-screen'];
 
   async function initApp() {
     try {
@@ -34,6 +34,7 @@ var App = (function () {
       Reports.init();
       WhatsApp.init();
       Backup.init();
+      if (typeof Attendance !== 'undefined') Attendance.init();
       setupTabNavigation();
       Settings.updateAppNameDisplay();
       initDatePickers();
@@ -74,6 +75,7 @@ var App = (function () {
       case 'expenses-screen':      if (typeof Expenses      !== 'undefined') Expenses.renderExpenseList();      break;
       case 'history-screen':       if (typeof PaymentHistory!== 'undefined') PaymentHistory.renderHistory();    break;
       case 'reports-screen':       if (typeof Reports       !== 'undefined') Reports.renderActiveReport();      break;
+      case 'attendance-screen':    if (typeof Attendance    !== 'undefined') Attendance.renderAttendance();     break;
     }
   }
 

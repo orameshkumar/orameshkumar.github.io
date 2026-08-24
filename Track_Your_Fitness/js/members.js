@@ -42,7 +42,11 @@ const Members = (function () {
       }
       if (searchTerm) {
         var lower = searchTerm.toLowerCase();
-        members = members.filter(function (m) { return m.name.toLowerCase().indexOf(lower) !== -1; });
+        members = members.filter(function (m) {
+          return m.name.toLowerCase().indexOf(lower) !== -1 ||
+            (m.memberType && m.memberType.toLowerCase().indexOf(lower) !== -1) ||
+            (m.notes && m.notes.toLowerCase().indexOf(lower) !== -1);
+        });
       }
       if (members.length === 0) { container.innerHTML = '<p class="empty-message">No members match your search.</p>'; return; }
 
@@ -59,6 +63,9 @@ const Members = (function () {
         html += '<div class="client-name">' + esc(m.name) + '</div>';
         html += '<div class="client-mobile">' + esc(m.mobile) + '</div>';
         html += '<div class="member-meta">';
+        if (m.memberType && m.memberType !== 'Regular') {
+          html += '<span class="loan-type-badge badge-guest">' + esc(m.memberType) + '</span> ';
+        }
         if (contrib) {
           html += '<span class="loan-type-badge badge-monthly">₹' + (contrib.monthlyFee||0).toFixed(0) + '/mo</span>';
           if (contrib.activationDate) html += ' <span class="member-fee">from ' + fmtDate(contrib.activationDate) + '</span>';
@@ -68,6 +75,7 @@ const Members = (function () {
         if (m.notes) html += ' <span class="loan-notes">' + esc(m.notes) + '</span>';
         html += '</div></div>';
         html += '<div class="client-actions">';
+        html += '<button class="btn-icon btn-print-id" data-id="' + m.id + '" title="Print ID">🪪</button>';
         html += '<button class="btn-icon btn-edit-member" data-id="' + m.id + '" title="Edit">✏️</button>';
         html += '<button class="btn-icon btn-toggle-member" data-id="' + m.id + '" data-status="' + (m.status||'active') + '" title="' + (m.status==='inactive'?'Activate':'Deactivate') + '">' + (m.status==='inactive'?'▶️':'⏸️') + '</button>';
         html += '<button class="btn-icon btn-delete-member" data-id="' + m.id + '" title="Delete">🗑️</button>';
@@ -84,6 +92,12 @@ const Members = (function () {
       container.querySelectorAll('.btn-toggle-member').forEach(function (btn) {
         btn.addEventListener('click', function () { toggleStatus(btn.dataset.id, btn.dataset.status); });
       });
+      container.querySelectorAll('.btn-print-id').forEach(function (btn) {
+        btn.addEventListener('click', async function () {
+          var member = await DB.getMember(btn.dataset.id);
+          if (member && typeof IdCard !== 'undefined') IdCard.generate(member);
+        });
+      });
     } catch (e) {
       container.innerHTML = '<p class="empty-message">Could not load members.</p>';
       console.error(e);
@@ -96,6 +110,8 @@ const Members = (function () {
     var title = document.getElementById('member-form-title');
     var container = document.getElementById('member-form-container');
     if (form) form.reset();
+    var typeInput = document.getElementById('member-type');
+    if (typeInput) typeInput.value = 'Regular';
     if (title) title.textContent = 'Add member';
     if (container) container.removeAttribute('hidden');
     clearErrors();
@@ -108,6 +124,8 @@ const Members = (function () {
     document.getElementById('member-name').value   = m.name;
     document.getElementById('member-mobile').value = m.mobile;
     document.getElementById('member-notes').value  = m.notes || '';
+    var typeInput = document.getElementById('member-type');
+    if (typeInput) typeInput.value = m.memberType || 'Regular';
     document.getElementById('member-form-title').textContent = 'Edit member';
     document.getElementById('member-form-container').removeAttribute('hidden');
     clearErrors();
@@ -118,6 +136,7 @@ const Members = (function () {
     var name   = (document.getElementById('member-name').value   || '').trim();
     var mobile = (document.getElementById('member-mobile').value || '').trim();
     var notes  = (document.getElementById('member-notes').value  || '').trim();
+    var memberType = (document.getElementById('member-type') ? document.getElementById('member-type').value : '').trim() || 'Regular';
 
     var errors = [];
     if (!name)                               errors.push({ field: 'member-name',   msg: 'Name is required.' });
@@ -127,6 +146,7 @@ const Members = (function () {
     var member = {
       id: editingMemberId || DB.generateId(),
       name: name, mobile: mobile, notes: notes,
+      memberType: memberType,
       status: 'active',
       createdAt: editingMemberId ? undefined : new Date().toISOString()
     };
@@ -193,7 +213,7 @@ const Members = (function () {
       var contribMap = {};
       contribs.forEach(function (c) { contribMap[c.memberId] = c; });
 
-      var header = ['name','mobile','notes','status',
+      var header = ['name','mobile','notes','status','memberType',
                     'monthlyFee','guestFee','activationDate','dueDay'];
       var rows   = [header];
 
@@ -204,6 +224,7 @@ const Members = (function () {
           m.mobile,
           m.notes    || '',
           m.status   || 'active',
+          m.memberType || 'Regular',
           c.monthlyFee     != null ? c.monthlyFee     : '',
           c.guestFee       != null ? c.guestFee       : '',
           c.activationDate || '',
@@ -280,6 +301,7 @@ const Members = (function () {
             name:      name,
             mobile:    mobile,
             notes:     (cols[idx('notes')]  || '').trim(),
+            memberType: (cols[idx('membertype')] || 'Regular').trim(),
             status:    (cols[idx('status')] || 'active').trim(),
             createdAt: new Date().toISOString()
           };

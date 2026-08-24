@@ -1,7 +1,7 @@
 const SyncEngine = (function () {
   'use strict';
 
-  const SYNCED_STORES = ['members', 'contributions', 'payments', 'expenses', 'guest_sessions', 'monthly_fee_records'];
+  const SYNCED_STORES = ['members', 'contributions', 'payments', 'expenses', 'guest_sessions', 'monthly_fee_records', 'attendance'];
   const QUEUE_KEY = 'tyf_sync_queue';
   const DEVICE_ID_KEY = 'tyf_device_id';
   const RETRY_INITIAL_MS = 1000;
@@ -21,7 +21,8 @@ const SyncEngine = (function () {
     payments: { getAll: 'getAllPayments', update: 'updatePayment', delete: 'deletePayment' },
     expenses: { getAll: 'getAllExpenses', update: 'updateExpense', delete: 'deleteExpense' },
     guest_sessions: { getAll: 'getAllGuestSessions', update: 'updateGuestSession', delete: 'deleteGuestSession' },
-    monthly_fee_records: { getAll: 'getAllMonthlyFeeRecords', update: 'updateMonthlyFeeRecord', delete: 'deleteMonthlyFeeRecord' }
+    monthly_fee_records: { getAll: 'getAllMonthlyFeeRecords', update: 'updateMonthlyFeeRecord', delete: 'deleteMonthlyFeeRecord' },
+    attendance: { getAll: 'getAllAttendance', update: 'updateAttendance', delete: 'deleteAttendance' }
   };
 
   function generateUUID() {

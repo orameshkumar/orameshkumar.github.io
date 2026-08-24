@@ -143,6 +143,15 @@
         </div>
       </div>
       <div class="form-group">
+        <label for="member-type">Member type</label>
+        <input type="text" id="member-type" list="member-type-options" value="Regular">
+        <datalist id="member-type-options">
+          <option value="Regular">
+          <option value="Coaching">
+          <option value="Other">
+        </datalist>
+      </div>
+      <div class="form-group">
         <label for="member-notes">Notes</label>
         <textarea id="member-notes" rows="2"></textarea>
       </div>
@@ -310,6 +319,28 @@
   <div id="expense-list"></div>
 </main>
 
+<!-- ══ Attendance ═════════════════════════════════════ -->
+<main id="attendance-screen" class="screen" hidden>
+  <div class="section-header">
+    <span class="screen-title">Attendance</span>
+    <div style="display:flex;gap:6px;">
+      <button class="btn btn-sm btn-secondary" id="att-copy-yesterday-btn">📋 Copy yesterday</button>
+      <button class="btn btn-sm btn-primary" id="att-scan-qr-btn">📷 Scan QR</button>
+    </div>
+  </div>
+  <div class="filter-bar">
+    <div class="date-picker-wrap"><input type="date" id="att-date" class="date-picker-hidden"><div class="date-picker-display" data-for="att-date">Select date</div></div>
+    <input type="text" id="att-search" placeholder="Search member…">
+  </div>
+  <div class="bulk-select-all-row">
+    <label><input type="checkbox" id="att-select-all"> Select all visible</label>
+    <span id="att-present-count" class="bulk-count">0 present</span>
+  </div>
+  <div id="att-member-list"></div>
+  <div id="att-qr-scanner-container" hidden></div>
+  <div id="att-scan-result" hidden></div>
+</main>
+
 <!-- ══ History ════════════════════════════════════════ -->
 <main id="history-screen" class="screen" hidden>
   <div class="section-header">
@@ -345,6 +376,7 @@
     <button class="report-tab-btn" data-tab="memberwise">Member-wise</button>
     <button class="report-tab-btn" data-tab="outstanding">Outstanding</button>
     <button class="report-tab-btn" data-tab="balance">Balance</button>
+    <button class="report-tab-btn" data-tab="attendance">Attendance</button>
   </div>
 
   <!-- Tab panels — filters live INSIDE each panel so they never overlap the tab bar -->
@@ -381,6 +413,15 @@
       <div class="date-picker-wrap"><input type="date" id="report-end-balance" class="date-picker-hidden"><div class="date-picker-display" data-for="report-end-balance">Select date</div></div>
     </div>
     <div id="report-output-balance"></div>
+  </div>
+
+  <div class="report-tab-panel" data-tab="attendance" hidden>
+    <div class="filter-bar">
+      <div class="date-picker-wrap"><input type="date" id="report-start-att" class="date-picker-hidden"><div class="date-picker-display" data-for="report-start-att">Select date</div></div>
+      <div class="date-picker-wrap"><input type="date" id="report-end-att" class="date-picker-hidden"><div class="date-picker-display" data-for="report-end-att">Select date</div></div>
+    </div>
+    <input type="text" id="report-search-att" placeholder="Filter by member…" class="search-input">
+    <div id="report-output-attendance"></div>
   </div>
 </main>
 
@@ -542,6 +583,9 @@
 <!-- ══ Bottom Navigation ══════════════════════════════ -->
 <!-- ══ More popup menu ════════════════════════════════ -->
 <div id="more-menu" class="more-menu" hidden>
+  <button class="more-menu-item" data-screen="attendance-screen">
+    <span class="more-menu-icon">✅</span><span>Attendance</span>
+  </button>
   <button class="more-menu-item" data-screen="history-screen">
     <span class="more-menu-icon">📋</span><span>History</span>
   </button>
@@ -705,6 +749,9 @@
   </div>
 </div>
 
+<!-- ══ ID Card Print Overlay ═══════════════════════════ -->
+<div id="id-card-overlay" class="id-card-overlay" hidden></div>
+
 <!-- ══ Scripts ════════════════════════════════════════ -->
 <script src="js/utils.js"></script>
 <script src="js/qrcode-lib.js"></script>
@@ -724,6 +771,8 @@
 <script src="js/expenses.js"></script>
 <script src="js/history.js"></script>
 <script src="js/reports.js"></script>
+<script src="js/id-card.js"></script>
+<script src="js/attendance.js"></script>
 <script src="js/backup.js"></script>
 <script src="js/app.js"></script>
 </body>
