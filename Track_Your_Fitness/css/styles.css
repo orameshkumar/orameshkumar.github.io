@@ -271,9 +271,8 @@ body { display: flex; flex-direction: column; max-width: 480px; margin: 0 auto; 
 [data-theme="light"] .badge-expense { background: #f3e5f5; color: #6a1b9a; }
 
 /* ── Report tabs ─────────────────────────────────────── */
-.report-tabs { display: flex; gap: 4px; overflow-x: auto; padding-bottom: 4px; scrollbar-width: none; }
-.report-tabs::-webkit-scrollbar { display: none; }
-.report-tab-btn { flex-shrink: 0; padding: 7px 14px; background: var(--bg3); border: 1px solid var(--border); border-radius: 20px; color: var(--text2); font-size: 0.97rem; font-weight: 500; cursor: pointer; transition: all 0.2s; white-space: nowrap; }
+.report-tabs { display: flex; gap: 4px; flex-wrap: wrap; padding-bottom: 4px; }
+.report-tab-btn { padding: 6px 10px; background: var(--bg3); border: 1px solid var(--border); border-radius: 20px; color: var(--text2); font-size: 0.82rem; font-weight: 500; cursor: pointer; transition: all 0.2s; white-space: nowrap; }
 .report-tab-btn:hover { border-color: var(--primary); color: var(--text); }
 .report-tab-btn.active { background: var(--primary); border-color: var(--primary); color: #fff; }
 .report-tab-panel { display: flex; flex-direction: column; gap: 10px; overflow-x: hidden; }
