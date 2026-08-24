@@ -1,7 +1,7 @@
 const DB = (function () {
   'use strict';
   const DB_NAME = 'TrackYourFitness';
-  const DB_VERSION = 5;
+  const DB_VERSION = 6;
   let db = null;
 
   function generateId() {
@@ -59,6 +59,15 @@ const DB = (function () {
           mf.createIndex('status', 'status', { unique: false });
           // composite: memberId+date for overwrite lookup
           mf.createIndex('memberDate', ['memberId','date'], { unique: false });
+        }
+
+        // v6: Make memberDate index unique to prevent duplicate fee records per member+date
+        if (e.oldVersion < 6 && database.objectStoreNames.contains('monthly_fee_records')) {
+          var mfStore = e.target.transaction.objectStore('monthly_fee_records');
+          if (mfStore.indexNames.contains('memberDate')) {
+            mfStore.deleteIndex('memberDate');
+          }
+          mfStore.createIndex('memberDate', ['memberId','date'], { unique: true });
         }
       };
     });
@@ -213,6 +222,36 @@ const DB = (function () {
     await deleteMember(memberId);
   }
 
+  // ─── Deduplicate monthly fee records (cleanup for existing data) ───
+  // Keeps only the latest record (by createdAt) per member+date.
+  async function deduplicateFeeRecords() {
+    try {
+      var allRecords = await getAllMonthlyFeeRecords();
+      // Group by memberId+date
+      var groups = {};
+      allRecords.forEach(function (r) {
+        var key = (r.memberId || '') + '_' + (r.date || '');
+        if (!groups[key]) groups[key] = [];
+        groups[key].push(r);
+      });
+      // For each group with >1 record, keep the latest, delete the rest
+      var deleted = 0;
+      for (var key in groups) {
+        var recs = groups[key];
+        if (recs.length <= 1) continue;
+        // Sort by createdAt desc — keep first (latest)
+        recs.sort(function (a, b) { return (b.createdAt || '').localeCompare(a.createdAt || ''); });
+        for (var i = 1; i < recs.length; i++) {
+          await deleteMonthlyFeeRecord(recs[i].id);
+          deleted++;
+        }
+      }
+      if (deleted > 0) console.log('DB: Deduplicated ' + deleted + ' duplicate fee record(s).');
+    } catch (e) {
+      console.error('DB: deduplicateFeeRecords error', e);
+    }
+  }
+
   return {
     init, generateId,
     addMember, getMember, getAllMembers, updateMember, deleteMember,
@@ -227,6 +266,7 @@ const DB = (function () {
     addMonthlyFeeRecord, getMonthlyFeeRecord, getAllMonthlyFeeRecords, updateMonthlyFeeRecord,
     deleteMonthlyFeeRecord, getMonthlyFeeRecordsByMember, getMonthlyFeeRecordsByDateRange,
     getMonthlyFeeRecordByMemberDate, deleteMonthlyFeeRecordsByMember,
+    deduplicateFeeRecords,
     deleteMemberCascade
   };
 })();

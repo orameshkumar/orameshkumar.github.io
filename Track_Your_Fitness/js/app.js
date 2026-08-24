@@ -19,6 +19,7 @@ var App = (function () {
         }
       } catch(e) {}
       await DB.init();
+      await DB.deduplicateFeeRecords();
       if (typeof SetupWizard !== 'undefined') SetupWizard.init();
       if (typeof SyncEngine !== 'undefined') SyncEngine.init();
       if (typeof LicenseRegistry !== 'undefined') LicenseRegistry.report();
