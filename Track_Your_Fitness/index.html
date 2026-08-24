@@ -144,12 +144,12 @@
       </div>
       <div class="form-group">
         <label for="member-type">Member type</label>
-        <input type="text" id="member-type" list="member-type-options" placeholder="Regular">
-        <datalist id="member-type-options">
-          <option value="Regular">
-          <option value="Coaching">
-          <option value="Other">
-        </datalist>
+        <select id="member-type">
+          <option value="Regular">Regular</option>
+          <option value="Coaching">Coaching</option>
+          <option value="Other">Other (type below)</option>
+        </select>
+        <input type="text" id="member-type-custom" placeholder="Enter custom type…" hidden style="margin-top:4px;">
       </div>
       <div class="form-group">
         <label for="member-notes">Notes</label>

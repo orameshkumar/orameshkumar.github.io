@@ -17,6 +17,13 @@ const Members = (function () {
     var importFile = document.getElementById('members-import-file');
 
     if (addBtn)     addBtn.addEventListener('click', showAddForm);
+    var typeSelect = document.getElementById('member-type');
+    var typeCustom = document.getElementById('member-type-custom');
+    if (typeSelect) {
+      typeSelect.addEventListener('change', function () {
+        if (typeCustom) typeCustom.hidden = (typeSelect.value !== 'Other');
+      });
+    }
     if (form)       form.addEventListener('submit', function (e) { e.preventDefault(); handleFormSubmit(); });
     if (cancelBtn)  cancelBtn.addEventListener('click', hideForm);
     if (searchInput)searchInput.addEventListener('input', function () { renderMemberList(searchInput.value.trim()); });
@@ -110,8 +117,10 @@ const Members = (function () {
     var title = document.getElementById('member-form-title');
     var container = document.getElementById('member-form-container');
     if (form) form.reset();
-    var typeInput = document.getElementById('member-type');
-    if (typeInput) typeInput.value = 'Regular';
+    var typeSelect2 = document.getElementById('member-type');
+    var typeCustom2 = document.getElementById('member-type-custom');
+    if (typeSelect2) typeSelect2.value = 'Regular';
+    if (typeCustom2) { typeCustom2.value = ''; typeCustom2.hidden = true; }
     if (title) title.textContent = 'Add member';
     if (container) container.removeAttribute('hidden');
     clearErrors();
@@ -124,8 +133,15 @@ const Members = (function () {
     document.getElementById('member-name').value   = m.name;
     document.getElementById('member-mobile').value = m.mobile;
     document.getElementById('member-notes').value  = m.notes || '';
-    var typeInput = document.getElementById('member-type');
-    if (typeInput) typeInput.value = m.memberType || 'Regular';
+    var typeSelect3 = document.getElementById('member-type');
+    var typeCustom3 = document.getElementById('member-type-custom');
+    var storedType = m.memberType || 'Regular';
+    if (typeSelect3) {
+      // Check if storedType is one of the select options
+      var isStandard = (storedType === 'Regular' || storedType === 'Coaching' || storedType === 'Other');
+      if (isStandard) { typeSelect3.value = storedType; if (typeCustom3) { typeCustom3.value = ''; typeCustom3.hidden = true; } }
+      else { typeSelect3.value = 'Other'; if (typeCustom3) { typeCustom3.value = storedType; typeCustom3.hidden = false; } }
+    }
     document.getElementById('member-form-title').textContent = 'Edit member';
     document.getElementById('member-form-container').removeAttribute('hidden');
     clearErrors();
@@ -136,7 +152,9 @@ const Members = (function () {
     var name   = (document.getElementById('member-name').value   || '').trim();
     var mobile = (document.getElementById('member-mobile').value || '').trim();
     var notes  = (document.getElementById('member-notes').value  || '').trim();
-    var memberType = (document.getElementById('member-type') ? document.getElementById('member-type').value : '').trim() || 'Regular';
+    var typeSelectVal = document.getElementById('member-type') ? document.getElementById('member-type').value : 'Regular';
+    var typeCustomVal = document.getElementById('member-type-custom') ? document.getElementById('member-type-custom').value.trim() : '';
+    var memberType = (typeSelectVal === 'Other' && typeCustomVal) ? typeCustomVal : typeSelectVal;
 
     var errors = [];
     if (!name)                               errors.push({ field: 'member-name',   msg: 'Name is required.' });
