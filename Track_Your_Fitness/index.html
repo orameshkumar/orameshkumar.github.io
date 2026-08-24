@@ -12,11 +12,10 @@
         var raw = (localStorage.getItem('tyf_license_key') || '').replace(/[\s\r\n]+/g, '');
         var d   = JSON.parse(atob(raw));
         if (!(d && d.n && d.h && typeof d.h === 'string' && d.h.length === 64)) return false;
-        // Check date-restricted license expiry
-        if (d.f && d.t) {
-          var today = new Date().toISOString().split('T')[0];
-          if (today < d.f || today > d.t) return false;
-        }
+        // Only date-restricted licenses accepted (perpetual rejected)
+        if (!d.f || !d.t) return false;
+        var today = new Date().toISOString().split('T')[0];
+        if (today < d.f || today > d.t) return false;
         return true;
       } catch (e) { return false; }
     }());

@@ -47,27 +47,25 @@ const License = (function () {
   function isLicensed() {
     var data = _getLicenseData();
     if (!data) return false;
-    // If date-restricted, check expiry
-    if (data.f && data.t) {
-      var today = new Date().toISOString().split('T')[0];
-      if (today < data.f || today > data.t) return false;
-    }
+    // REQUIRE date-restricted license (perpetual not accepted)
+    if (!data.f || !data.t) return false;
+    var today = new Date().toISOString().split('T')[0];
+    if (today < data.f || today > data.t) return false;
     return true;
   }
 
   function isExpired() {
     var data = _getLicenseData();
     if (!data) return false; // no license = not expired (just unlicensed)
-    if (data.f && data.t) {
-      var today = new Date().toISOString().split('T')[0];
-      return today > data.t;
-    }
-    return false; // perpetual license never expires
+    // Perpetual keys are treated as invalid/expired
+    if (!data.f || !data.t) return true;
+    var today = new Date().toISOString().split('T')[0];
+    return today > data.t;
   }
 
   function getDaysUntilExpiry() {
     var data = _getLicenseData();
-    if (!data || !data.t) return Infinity; // perpetual
+    if (!data || !data.t) return 0; // no valid date = expired
     var today = new Date();
     today.setHours(0, 0, 0, 0);
     var expiry = new Date(data.t + 'T00:00:00');
@@ -83,12 +81,9 @@ const License = (function () {
   // --- Verify HMAC (async) ---
   async function verifyLicense(data) {
     if (!data || !data.n || !data.h) return false;
-    var message;
-    if (data.f && data.t) {
-      message = data.n + data.f + data.t;
-    } else {
-      message = data.n;
-    }
+    // Reject perpetual keys — must have from and to dates
+    if (!data.f || !data.t) return false;
+    var message = data.n + data.f + data.t;
     var expected = await _hmacHex(message);
     return expected === data.h;
   }
@@ -142,12 +137,11 @@ const License = (function () {
         var hmacValid = await verifyLicense(decoded);
         if (!hmacValid) { if (errEl) errEl.textContent = 'License key verification failed. Invalid key.'; return; }
 
-        // Check dates if date-restricted
-        if (decoded.f && decoded.t) {
-          var today = new Date().toISOString().split('T')[0];
-          if (today < decoded.f) { if (errEl) errEl.textContent = 'This license is not yet active (starts ' + decoded.f + ').'; return; }
-          if (today > decoded.t) { if (errEl) errEl.textContent = 'This license is already expired (' + decoded.t + ').'; return; }
-        }
+        // Must have date fields (perpetual not accepted)
+        if (!decoded.f || !decoded.t) { if (errEl) errEl.textContent = 'Only date-restricted licenses are accepted.'; return; }
+        var today = new Date().toISOString().split('T')[0];
+        if (today < decoded.f) { if (errEl) errEl.textContent = 'This license is not yet active (starts ' + decoded.f + ').'; return; }
+        if (today > decoded.t) { if (errEl) errEl.textContent = 'This license is already expired (' + decoded.t + ').'; return; }
 
         // Store and reload
         try { localStorage.setItem('tyf_license_key', raw); } catch (e) { if (errEl) errEl.textContent = 'Could not save: ' + e.message; return; }
@@ -258,12 +252,11 @@ const License = (function () {
         var hmacValid = await verifyLicense(decoded);
         if (!hmacValid) { if (errorEl) errorEl.textContent = 'License key verification failed. Invalid key.'; return; }
 
-        // Check dates
-        if (decoded.f && decoded.t) {
-          var today = new Date().toISOString().split('T')[0];
-          if (today > decoded.t) { if (errorEl) errorEl.textContent = 'This license has expired (' + decoded.t + ').'; return; }
-          if (today < decoded.f) { if (errorEl) errorEl.textContent = 'This license is not yet active (starts ' + decoded.f + ').'; return; }
-        }
+        // Must have date fields (perpetual not accepted)
+        if (!decoded.f || !decoded.t) { if (errorEl) errorEl.textContent = 'Only date-restricted licenses are accepted.'; return; }
+        var today = new Date().toISOString().split('T')[0];
+        if (today > decoded.t) { if (errorEl) errorEl.textContent = 'This license has expired (' + decoded.t + ').'; return; }
+        if (today < decoded.f) { if (errorEl) errorEl.textContent = 'This license is not yet active (starts ' + decoded.f + ').'; return; }
 
         try { localStorage.setItem('tyf_license_key', raw); } catch (e) { if (errorEl) errorEl.textContent = 'Could not save: ' + e.message; return; }
 
@@ -302,8 +295,6 @@ const License = (function () {
         statusMsg += ' (Valid: ' + data.f + ' to ' + data.t + ')';
         var days = getDaysUntilExpiry();
         if (days <= WARNING_DAYS) statusMsg += ' — ⚠️ Expires in ' + days + ' day(s)';
-      } else {
-        statusMsg += ' (Perpetual)';
       }
       if (statusText) { statusText.textContent = statusMsg; statusText.style.color = 'var(--success, #4caf50)'; }
       if (activateBtn) activateBtn.setAttribute('hidden', '');
