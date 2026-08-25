@@ -2,6 +2,7 @@ const Members = (function () {
   'use strict';
 
   var editingMemberId = null;
+  var currentMemberPhoto = null; // holds base64 data URL of captured/selected photo
 
   function esc(s) {
     return s ? String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;') : '';
@@ -15,6 +16,8 @@ const Members = (function () {
     var exportBtn  = document.getElementById('members-export-btn');
     var importBtn  = document.getElementById('members-import-btn');
     var importFile = document.getElementById('members-import-file');
+    var photoBtn   = document.getElementById('member-photo-btn');
+    var photoInput = document.getElementById('member-photo-input');
 
     if (addBtn)     addBtn.addEventListener('click', showAddForm);
     var typeSelect = document.getElementById('member-type');
@@ -31,7 +34,57 @@ const Members = (function () {
     if (importBtn)  importBtn.addEventListener('click', function () { if (importFile) importFile.click(); });
     if (importFile) importFile.addEventListener('change', handleImportFile);
 
+    // Photo capture
+    if (photoBtn)   photoBtn.addEventListener('click', function () { if (photoInput) photoInput.click(); });
+    if (photoInput) photoInput.addEventListener('change', function () {
+      var file = photoInput.files[0];
+      if (!file) return;
+      compressPhoto(file, function (dataUrl) {
+        currentMemberPhoto = dataUrl;
+        showPhotoPreview(dataUrl);
+      });
+      photoInput.value = '';
+    });
+
     renderMemberList();
+  }
+
+  function compressPhoto(file, callback) {
+    var reader = new FileReader();
+    reader.onload = function (e) {
+      var img = new Image();
+      img.onload = function () {
+        var canvas = document.createElement('canvas');
+        var size = 200;
+        canvas.width = size;
+        canvas.height = size;
+        var ctx = canvas.getContext('2d');
+        // Crop to square from center
+        var sx = 0, sy = 0, sw = img.width, sh = img.height;
+        if (sw > sh) { sx = (sw - sh) / 2; sw = sh; }
+        else { sy = (sh - sw) / 2; sh = sw; }
+        ctx.drawImage(img, sx, sy, sw, sh, 0, 0, size, size);
+        var dataUrl = canvas.toDataURL('image/jpeg', 0.5);
+        callback(dataUrl);
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function showPhotoPreview(dataUrl) {
+    var preview = document.getElementById('member-photo-preview');
+    if (preview) {
+      preview.innerHTML = '<img src="' + dataUrl + '" style="width:100%;height:100%;object-fit:cover;">';
+    }
+  }
+
+  function clearPhotoPreview() {
+    currentMemberPhoto = null;
+    var preview = document.getElementById('member-photo-preview');
+    if (preview) {
+      preview.innerHTML = '<span style="font-size:2rem;color:var(--text3);">👤</span>';
+    }
   }
 
   async function renderMemberList(searchTerm) {
@@ -64,9 +117,15 @@ const Members = (function () {
         var contrib = contribMap[m.id];
         var statusClass = m.status === 'inactive' ? ' member-inactive' : '';
 
+        var avatar = m.photo
+          ? '<img src="' + esc(m.photo) + '" style="width:32px;height:32px;border-radius:50%;object-fit:cover;flex-shrink:0;">'
+          : '<span style="width:32px;height:32px;border-radius:50%;background:var(--bg3);display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;font-size:0.9rem;">👤</span>';
+
         html += '<div class="member-card' + statusClass + '">';
         html += '<div class="client-header">';
-        html += '<div class="client-info">';
+        html += '<div class="client-info" style="display:flex;gap:8px;align-items:center;">';
+        html += avatar;
+        html += '<div>';
         html += '<div class="client-name">' + esc(m.name) + '</div>';
         html += '<div class="client-mobile">' + esc(m.mobile) + '</div>';
         html += '<div class="member-meta">';
@@ -80,7 +139,7 @@ const Members = (function () {
           html += '<span class="loan-type-badge badge-guest">No contribution set</span>';
         }
         if (m.notes) html += ' <span class="loan-notes">' + esc(m.notes) + '</span>';
-        html += '</div></div>';
+        html += '</div></div></div>';
         html += '<div class="client-actions">';
         html += '<button class="btn-icon btn-print-id" data-id="' + m.id + '" title="Print ID">🪪</button>';
         html += '<button class="btn-icon btn-edit-member" data-id="' + m.id + '" title="Edit">✏️</button>';
@@ -123,6 +182,7 @@ const Members = (function () {
     if (typeCustom2) { typeCustom2.value = ''; typeCustom2.hidden = true; }
     if (title) title.textContent = 'Add member';
     if (container) container.removeAttribute('hidden');
+    clearPhotoPreview();
     clearErrors();
   }
 
@@ -141,6 +201,13 @@ const Members = (function () {
       var isStandard = (storedType === 'Regular' || storedType === 'Coaching' || storedType === 'Other');
       if (isStandard) { typeSelect3.value = storedType; if (typeCustom3) { typeCustom3.value = ''; typeCustom3.hidden = true; } }
       else { typeSelect3.value = 'Other'; if (typeCustom3) { typeCustom3.value = storedType; typeCustom3.hidden = false; } }
+    }
+    // Show existing photo or clear
+    if (m.photo) {
+      currentMemberPhoto = m.photo;
+      showPhotoPreview(m.photo);
+    } else {
+      clearPhotoPreview();
     }
     document.getElementById('member-form-title').textContent = 'Edit member';
     document.getElementById('member-form-container').removeAttribute('hidden');
@@ -165,6 +232,7 @@ const Members = (function () {
       id: editingMemberId || DB.generateId(),
       name: name, mobile: mobile, notes: notes,
       memberType: memberType,
+      photo: currentMemberPhoto || null,
       status: 'active',
       createdAt: editingMemberId ? undefined : new Date().toISOString()
     };
@@ -172,7 +240,12 @@ const Members = (function () {
     try {
       if (editingMemberId) {
         var existing = await DB.getMember(editingMemberId);
-        if (existing) { member.createdAt = existing.createdAt; member.status = existing.status; }
+        if (existing) {
+          member.createdAt = existing.createdAt;
+          member.status = existing.status;
+          // Preserve existing photo if no new one was captured
+          if (!member.photo && existing.photo) member.photo = existing.photo;
+        }
         await DB.updateMember(member);
       } else {
         // License member limit — uses inline global from index.html
@@ -212,6 +285,7 @@ const Members = (function () {
     var container = document.getElementById('member-form-container');
     if (container) container.setAttribute('hidden', '');
     editingMemberId = null;
+    clearPhotoPreview();
   }
 
   function clearErrors() {

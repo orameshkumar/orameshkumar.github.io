@@ -13,6 +13,9 @@ const IdCard = (function () {
 
     var html = '<div class="id-card">';
     html += '<div class="id-card-header">' + esc(appName) + ' — MEMBER ID CARD</div>';
+    if (member.photo) {
+      html += '<div style="margin:8px auto;text-align:center;"><img src="' + member.photo + '" style="width:60px;height:60px;border-radius:50%;object-fit:cover;"></div>';
+    }
     html += '<div class="id-card-name">' + esc(member.name) + '</div>';
     html += '<div class="id-card-detail">Mobile: ' + esc(member.mobile) + '</div>';
     html += '<div class="id-card-detail">Type: ' + esc(member.memberType || 'Regular') + '</div>';

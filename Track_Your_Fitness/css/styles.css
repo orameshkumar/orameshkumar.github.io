@@ -473,3 +473,6 @@ body { display: flex; flex-direction: column; max-width: 480px; margin: 0 auto; 
 .att-filter-group { flex-shrink: 0; }
 .att-filter-btn { background: var(--bg3); color: var(--text2); border: 1px solid var(--border); }
 .att-filter-btn.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+
+/* ── Member Photo ──────────────────────────────────── */
+.member-photo-section { flex-shrink: 0; }
