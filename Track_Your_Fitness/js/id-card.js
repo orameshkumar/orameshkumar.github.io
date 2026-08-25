@@ -5,7 +5,6 @@ const IdCard = (function () {
     return s ? String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;') : '';
   }
 
-  // Render QR table into a container
   function renderQRIntoElement(container, text, size) {
     if (!container || typeof QRCode === 'undefined') return;
     container.innerHTML = '';
@@ -14,6 +13,25 @@ const IdCard = (function () {
     } catch (e) {
       container.innerHTML = '<p style="color:#999;font-size:0.8rem;">QR generation failed</p>';
     }
+  }
+
+  // Read QR table cells and return the dark/light matrix
+  function getQRMatrix(qrContainer) {
+    var table = qrContainer ? qrContainer.querySelector('table') : null;
+    if (!table) return null;
+    var rows = table.querySelectorAll('tr');
+    var matrix = [];
+    for (var r = 0; r < rows.length; r++) {
+      var cells = rows[r].querySelectorAll('td');
+      var row = [];
+      for (var c = 0; c < cells.length; c++) {
+        var bg = window.getComputedStyle(cells[c]).backgroundColor;
+        var isDark = (bg && bg !== 'rgb(255, 255, 255)' && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent');
+        row.push(isDark);
+      }
+      matrix.push(row);
+    }
+    return matrix;
   }
 
   function generate(member) {
@@ -61,64 +79,59 @@ const IdCard = (function () {
     });
   }
 
-  // Convert QR table to a canvas-drawn image to avoid html2canvas table clipping
-  function convertQRTableToImage(qrContainer) {
-    if (!qrContainer) return;
-    var table = qrContainer.querySelector('table');
-    if (!table) return;
-
-    // Read the table cells to get the QR matrix
-    var rows = table.querySelectorAll('tr');
-    var moduleCount = rows.length;
-    if (moduleCount === 0) return;
-
-    var size = 120;
-    var cellSize = size / moduleCount;
-
-    var canvas = document.createElement('canvas');
-    canvas.width = size;
-    canvas.height = size;
-    var ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, size, size);
-
-    for (var r = 0; r < rows.length; r++) {
-      var cells = rows[r].querySelectorAll('td');
-      for (var c = 0; c < cells.length; c++) {
-        var bg = window.getComputedStyle(cells[c]).backgroundColor;
-        // Dark modules have dark background
-        var isDark = (bg && bg !== 'rgb(255, 255, 255)' && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent' && bg !== '');
-        if (isDark) {
-          ctx.fillStyle = '#000000';
-          ctx.fillRect(Math.floor(c * cellSize), Math.floor(r * cellSize), Math.ceil(cellSize), Math.ceil(cellSize));
-        }
-      }
-    }
-
-    // Replace table with img
-    var img = document.createElement('img');
-    img.src = canvas.toDataURL('image/png');
-    img.style.width = size + 'px';
-    img.style.height = size + 'px';
-    img.style.display = 'block';
-    img.style.margin = '0 auto';
-    qrContainer.innerHTML = '';
-    qrContainer.appendChild(img);
-  }
-
   async function shareWhatsApp() {
     var cardEl = document.querySelector('.id-card');
     if (!cardEl) { alert('No ID card to share.'); return; }
 
     try {
-      // Convert QR table to an img BEFORE html2canvas captures
+      // Step 1: Read QR matrix from the table BEFORE we modify anything
       var qrContainer = cardEl.querySelector('.id-card-qr');
-      convertQRTableToImage(qrContainer);
+      var qrMatrix = getQRMatrix(qrContainer);
 
+      // Step 2: Hide the QR container so html2canvas doesn't try to render it
+      if (qrContainer) qrContainer.style.visibility = 'hidden';
+
+      // Step 3: Capture the card with html2canvas (without QR)
       await loadHtml2Canvas();
       await new Promise(function (r) { setTimeout(r, 100); });
-
       var canvas = await html2canvas(cardEl, { useCORS: true, backgroundColor: '#ffffff', allowTaint: true, logging: false });
+
+      // Step 4: Restore QR visibility
+      if (qrContainer) qrContainer.style.visibility = '';
+
+      // Step 5: Draw QR manually onto the captured canvas
+      if (qrMatrix && qrMatrix.length > 0) {
+        var ctx = canvas.getContext('2d');
+        // Find where QR container is positioned relative to the card
+        var cardRect = cardEl.getBoundingClientRect();
+        var qrRect = qrContainer.getBoundingClientRect();
+        var qrX = qrRect.left - cardRect.left;
+        var qrY = qrRect.top - cardRect.top;
+        var qrSize = 120;
+        var moduleCount = qrMatrix.length;
+        var cellSize = qrSize / moduleCount;
+
+        // Draw white background for QR area
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(qrX, qrY, qrSize, qrSize);
+
+        // Draw QR modules
+        ctx.fillStyle = '#000000';
+        for (var r = 0; r < moduleCount; r++) {
+          for (var c = 0; c < qrMatrix[r].length; c++) {
+            if (qrMatrix[r][c]) {
+              ctx.fillRect(
+                qrX + Math.floor(c * cellSize),
+                qrY + Math.floor(r * cellSize),
+                Math.ceil(cellSize),
+                Math.ceil(cellSize)
+              );
+            }
+          }
+        }
+      }
+
+      // Step 6: Export and share
       var blob = await new Promise(function (resolve) { canvas.toBlob(resolve, 'image/png'); });
       if (!blob) { alert('Could not generate image.'); return; }
 
@@ -135,9 +148,6 @@ const IdCard = (function () {
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
       }
-
-      // Restore QR table after sharing (re-render)
-      renderQRIntoElement(qrContainer, document.querySelector('.id-card-id').textContent.replace('ID: ', ''), 120);
     } catch (e) {
       if (e.name !== 'AbortError') {
         console.error('Share failed:', e);
