@@ -52,42 +52,72 @@ const IdCard = (function () {
     if (overlay) { overlay.setAttribute('hidden', ''); overlay.innerHTML = ''; }
   }
 
-  function loadHtml2Canvas() {
-    return new Promise(function (resolve, reject) {
-      if (typeof html2canvas !== 'undefined') { resolve(); return; }
-      var script = document.createElement('script');
-      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
-      script.onload = resolve;
-      script.onerror = function () { reject(new Error('Failed to load html2canvas')); };
-      document.head.appendChild(script);
-    });
-  }
+
 
   async function shareWhatsApp() {
     var cardEl = document.querySelector('.id-card');
     if (!cardEl) { alert('No ID card to share.'); return; }
 
     try {
-      await loadHtml2Canvas();
-      await new Promise(function (r) { setTimeout(r, 200); });
-      var canvas = await html2canvas(cardEl, { useCORS: true, backgroundColor: '#ffffff', allowTaint: true, logging: false });
-      var blob = await new Promise(function (resolve) { canvas.toBlob(resolve, 'image/png'); });
-      if (!blob) { alert('Could not generate image.'); return; }
+      // Get card dimensions
+      var rect = cardEl.getBoundingClientRect();
+      var width = rect.width;
+      var height = rect.height;
 
-      var file = new File([blob], 'id-card.png', { type: 'image/png' });
+      // Clone the card and inline all styles
+      var clone = cardEl.cloneNode(true);
+      clone.style.width = width + 'px';
+      clone.style.height = height + 'px';
+      clone.style.position = 'absolute';
+      clone.style.left = '-9999px';
+      document.body.appendChild(clone);
 
-      if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
-        await navigator.share({ files: [file], title: 'Member ID Card' });
-      } else {
-        var url = URL.createObjectURL(blob);
-        var a = document.createElement('a');
-        a.href = url;
-        a.download = 'id-card.png';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-      }
+      // Get computed styles and serialize to inline
+      var cardHtml = clone.outerHTML;
+      document.body.removeChild(clone);
+
+      // Build SVG with foreignObject
+      var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + width + '" height="' + height + '">';
+      svg += '<foreignObject width="100%" height="100%">';
+      svg += '<div xmlns="http://www.w3.org/1999/xhtml" style="background:#fff;padding:0;margin:0;">';
+      svg += cardHtml;
+      svg += '</div></foreignObject></svg>';
+
+      // Convert SVG to image via canvas
+      var svgBlob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' });
+      var svgUrl = URL.createObjectURL(svgBlob);
+
+      var img = new Image();
+      img.onload = async function () {
+        var canvas = document.createElement('canvas');
+        canvas.width = width * 2;
+        canvas.height = height * 2;
+        var ctx = canvas.getContext('2d');
+        ctx.scale(2, 2);
+        ctx.drawImage(img, 0, 0);
+        URL.revokeObjectURL(svgUrl);
+
+        var blob = await new Promise(function (resolve) { canvas.toBlob(resolve, 'image/png'); });
+        if (!blob) { alert('Could not generate image.'); return; }
+
+        var file = new File([blob], 'id-card.png', { type: 'image/png' });
+        if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+          await navigator.share({ files: [file], title: 'Member ID Card' });
+        } else {
+          var dlUrl = URL.createObjectURL(blob);
+          var a = document.createElement('a');
+          a.href = dlUrl;
+          a.download = 'id-card.png';
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(dlUrl);
+        }
+      };
+      img.onerror = function () {
+        alert('Could not generate image.');
+      };
+      img.src = svgUrl;
     } catch (e) {
       if (e.name !== 'AbortError') {
         console.error('Share failed:', e);
