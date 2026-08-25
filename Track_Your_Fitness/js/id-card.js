@@ -15,89 +15,40 @@ const IdCard = (function () {
     }
   }
 
-  // Generate QR matrix directly using the QRCode library internals (async)
-  function getQRMatrixFromText(text) {
+  // Convert the SVG QR from the card into a canvas, then read the pixel matrix
+  function getQRImageFromCard() {
     return new Promise(function (resolve) {
-    try {
-      var container = document.createElement('div');
-      container.style.cssText = 'position:absolute;left:-9999px;top:-9999px;';
-      document.body.appendChild(container);
-      new QRCode(container, { text: text, width: 120, height: 120, correctLevel: QRCode.CorrectLevel.M });
+      var qrContainer = document.querySelector('#id-card-qr-container');
+      if (!qrContainer) { resolve(null); return; }
       
-      // Wait 500ms for any async rendering
-      setTimeout(function () {
-        var matrix = null;
+      var svg = qrContainer.querySelector('svg');
+      if (!svg) { resolve(null); return; }
+      
+      // Serialize SVG to string
+      var serializer = new XMLSerializer();
+      var svgStr = serializer.serializeToString(svg);
+      var svgDataUrl = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgStr);
+      
+      // Load SVG as image and draw onto canvas
+      var img = new Image();
+      img.onload = function () {
+        var canvas = document.createElement('canvas');
+        canvas.width = 120;
+        canvas.height = 120;
+        var ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, 120, 120);
+        ctx.drawImage(img, 0, 0, 120, 120);
         
-        var table = container.querySelector('table');
-        var canvas = container.querySelector('canvas');
-        var img = container.querySelector('img');
-        
-        if (table) {
-          var rows = table.querySelectorAll('tr');
-          matrix = [];
-          for (var r = 0; r < rows.length; r++) {
-            var cells = rows[r].querySelectorAll('td');
-            var row = [];
-            for (var c = 0; c < cells.length; c++) {
-              var style = cells[c].getAttribute('style') || '';
-              var bg = window.getComputedStyle(cells[c]).backgroundColor || '';
-              var isDark = style.indexOf('rgb(0, 0, 0)') !== -1 || style.indexOf('#000') !== -1 || bg.indexOf('rgb(0, 0, 0)') !== -1;
-              row.push(isDark);
-            }
-            matrix.push(row);
-          }
-        } else if (canvas) {
-          var ctx = canvas.getContext('2d');
-          var size = canvas.width;
-          var moduleCount = 29;
-          for (var mc = 21; mc <= 45; mc += 4) {
-            if (size % mc === 0) { moduleCount = mc; break; }
-          }
-          var cellPx = size / moduleCount;
-          matrix = [];
-          for (var ry = 0; ry < moduleCount; ry++) {
-            var rowArr = [];
-            for (var cx = 0; cx < moduleCount; cx++) {
-              var px = ctx.getImageData(Math.floor(cx * cellPx + cellPx / 2), Math.floor(ry * cellPx + cellPx / 2), 1, 1).data;
-              rowArr.push(px[0] < 128);
-            }
-            matrix.push(rowArr);
-          }
-        } else if (img && img.src) {
-          // If img, load it to canvas and read pixels
-          var tempCanvas = document.createElement('canvas');
-          tempCanvas.width = 120;
-          tempCanvas.height = 120;
-          var tCtx = tempCanvas.getContext('2d');
-          var tempImg = new Image();
-          tempImg.onload = function () {
-            tCtx.drawImage(tempImg, 0, 0, 120, 120);
-            var mCount = 29;
-            var cPx = 120 / mCount;
-            var mat = [];
-            for (var ry2 = 0; ry2 < mCount; ry2++) {
-              var r2 = [];
-              for (var cx2 = 0; cx2 < mCount; cx2++) {
-                var p = tCtx.getImageData(Math.floor(cx2 * cPx + cPx / 2), Math.floor(ry2 * cPx + cPx / 2), 1, 1).data;
-                r2.push(p[0] < 128);
-              }
-              mat.push(r2);
-            }
-            document.body.removeChild(container);
-            resolve(mat);
-          };
-          tempImg.onerror = function () { document.body.removeChild(container); resolve(null); };
-          tempImg.src = img.src;
-          return; // early return - resolve happens in onload
+        // Return the canvas as a data URL
+        try {
+          resolve(canvas.toDataURL('image/png'));
+        } catch (e) {
+          resolve(null);
         }
-        
-        document.body.removeChild(container);
-        resolve(matrix);
-      }, 500);
-    } catch (e) {
-      console.error('[QR] Matrix generation failed:', e);
-      resolve(null);
-    }
+      };
+      img.onerror = function () { resolve(null); };
+      img.src = svgDataUrl;
     });
   }
 
@@ -150,7 +101,7 @@ const IdCard = (function () {
   }
 
   // Draw entire ID card on a canvas manually — no html2canvas needed
-  function drawCardOnCanvas(member, qrMatrix) {
+  async function drawCardOnCanvas(member, qrImageDataUrl) {
     var W = 340, padding = 20;
     var contentW = W - padding * 2;
     var appName = typeof Settings !== 'undefined' ? Settings.getAppName() : 'Track Your Fitness';
@@ -254,25 +205,16 @@ const IdCard = (function () {
     cy += 14;
     cy += 10;
 
-    // QR Code - draw from matrix
-    if (qrMatrix && qrMatrix.length > 0) {
+    // QR Code - draw from pre-rendered image
+    if (qrImageDataUrl) {
       var qrSize = 120;
-      var moduleCount = qrMatrix.length;
-      var cellSize = qrSize / moduleCount;
       var qrX = (W - qrSize) / 2;
       var qrY = cy;
-
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(qrX - 5, qrY - 5, qrSize + 10, qrSize + 10);
-
-      ctx.fillStyle = '#000000';
-      for (var r = 0; r < moduleCount; r++) {
-        for (var c = 0; c < qrMatrix[r].length; c++) {
-          if (qrMatrix[r][c]) {
-            ctx.fillRect(qrX + c * cellSize, qrY + r * cellSize, Math.ceil(cellSize), Math.ceil(cellSize));
-          }
-        }
-      }
+      
+      var qrImg = new Image();
+      qrImg.src = qrImageDataUrl;
+      await new Promise(function (res) { qrImg.onload = res; qrImg.onerror = res; });
+      ctx.drawImage(qrImg, qrX, qrY, qrSize, qrSize);
       cy += qrSize + 10;
     }
 
@@ -310,12 +252,11 @@ const IdCard = (function () {
       // Get QR matrix
       var qrContainer = cardEl.querySelector('.id-card-qr');
 
-      // Generate QR matrix from member ID text directly (not from DOM)
-      var memberId = member.id || '';
-      var qrMatrix = (typeof QRCode !== 'undefined' && memberId) ? await getQRMatrixFromText(memberId) : null;
+      // Get QR as a rendered image from the card SVG
+      var qrImageDataUrl = await getQRImageFromCard();
 
-      // Draw card on canvas (pure canvas drawing - no html2canvas)
-      var canvas = drawCardOnCanvas(member, qrMatrix);
+      // Draw card on canvas (pure canvas drawing)
+      var canvas = await drawCardOnCanvas(member, qrImageDataUrl);
 
       // Export
       var blob = await new Promise(function (resolve) { canvas.toBlob(resolve, 'image/png'); });
