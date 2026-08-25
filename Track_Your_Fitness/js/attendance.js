@@ -192,6 +192,14 @@ const Attendance = (function () {
             if (row) row.classList.remove('att-present');
             if (label) { label.textContent = ''; label.className = 'att-status-label att-status-absent'; }
           }
+          // Re-apply filter: hide/show row based on current filter
+          if (row) {
+            if (_attendanceFilter === 'absent') {
+              row.style.display = cb.checked ? 'none' : '';
+            } else if (_attendanceFilter === 'present') {
+              row.style.display = cb.checked ? '' : 'none';
+            }
+          }
           // Update count
           var checked = document.querySelectorAll('.att-checkbox:checked');
           updatePresentCount(checked.length);
