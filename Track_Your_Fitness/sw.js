@@ -1,4 +1,4 @@
-const CACHE_NAME = 'track-your-fitness-v26';
+const CACHE_NAME = 'track-your-fitness-v27';
 const FILES_TO_CACHE = [
   './', './index.html', './css/styles.css',
   './js/utils.js', './js/qrcode-lib.js', './js/license.js', './js/db.js', './js/settings.js',
@@ -8,7 +8,7 @@ const FILES_TO_CACHE = [
   './js/expenses.js', './js/history.js', './js/reports.js',
   './js/id-card.js', './js/attendance.js',
   './js/whatsapp.js', './js/backup.js', './js/app.js',
-  './icons/icon-192.png', './icons/icon-512.png', './manifest.json'
+  './icons/icon-192.png', './icons/icon-512.png', './icons/icon-192.svg', './icons/icon-512.svg', './manifest.json'
 ];
 
 self.addEventListener('install', e => {
