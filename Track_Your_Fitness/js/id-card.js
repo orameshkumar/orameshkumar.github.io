@@ -61,6 +61,9 @@ const IdCard = (function () {
 
     var qrContainer = document.getElementById('id-card-qr-container');
     renderQRIntoElement(qrContainer, member.id, 120);
+
+    // Pre-load html2canvas so share button has less async delay
+    loadHtml2Canvas().catch(function () {});
   }
 
   function hide() {
@@ -146,17 +149,21 @@ const IdCard = (function () {
       var blob = await new Promise(function (resolve) { canvas.toBlob(resolve, 'image/png'); });
       if (!blob) { alert('Could not generate image.'); return; }
 
-      // Try native share first, fallback to download
-      try {
-        var file = new File([blob], 'id-card.png', { type: 'image/png' });
-        if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
-          navigator.share({ files: [file], title: 'Member ID Card' }).catch(function () {});
-        } else {
-          downloadBlob(blob);
+      // Share or download
+      var file = new File([blob], 'id-card.png', { type: 'image/png' });
+      var shared = false;
+      if (navigator.share && navigator.canShare) {
+        try {
+          if (navigator.canShare({ files: [file] })) {
+            await navigator.share({ files: [file], title: 'Member ID Card' });
+            shared = true;
+          }
+        } catch (shareErr) {
+          if (shareErr.name !== 'AbortError') shared = false;
+          else shared = true; // user cancelled is fine
         }
-      } catch (e) {
-        downloadBlob(blob);
       }
+      if (!shared) downloadBlob(blob);
     } catch (e) {
       if (e.name !== 'AbortError') {
         console.error('Share failed:', e);
