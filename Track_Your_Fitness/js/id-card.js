@@ -15,67 +15,94 @@ const IdCard = (function () {
     }
   }
 
-  // Generate QR matrix directly using the QRCode library internals
+  // Generate QR matrix directly using the QRCode library internals (async)
   function getQRMatrixFromText(text) {
+    return new Promise(function (resolve) {
     try {
-      // QRCode library exposes QRCode.CorrectLevel - use internal qrcode model
-      // Create a temporary QR to get the model
       var container = document.createElement('div');
-      container.style.cssText = 'position:absolute;left:-9999px;top:-9999px;visibility:hidden;';
+      container.style.cssText = 'position:absolute;left:-9999px;top:-9999px;';
       document.body.appendChild(container);
-      var qr = new QRCode(container, { text: text, width: 1, height: 1, correctLevel: QRCode.CorrectLevel.M });
+      new QRCode(container, { text: text, width: 120, height: 120, correctLevel: QRCode.CorrectLevel.M });
       
-      // Wait a tick and read the generated table/canvas
-      // Actually, let us just read the DOM that was generated
-      var table = container.querySelector('table');
-      var canvas = container.querySelector('canvas');
-      var img = container.querySelector('img');
-      var matrix = null;
-      
-      if (table) {
-        var rows = table.querySelectorAll('tr');
-        matrix = [];
-        for (var r = 0; r < rows.length; r++) {
-          var cells = rows[r].querySelectorAll('td');
-          var row = [];
-          for (var c = 0; c < cells.length; c++) {
-            var style = cells[c].getAttribute('style') || '';
-            var isDark = style.indexOf('rgb(0, 0, 0)') !== -1 || style.indexOf('#000') !== -1 || style.indexOf('black') !== -1;
-            row.push(isDark);
+      // Wait 500ms for any async rendering
+      setTimeout(function () {
+        var matrix = null;
+        console.log('[QR] Hidden container children:', container.innerHTML.substring(0, 200));
+        
+        var table = container.querySelector('table');
+        var canvas = container.querySelector('canvas');
+        var img = container.querySelector('img');
+        
+        console.log('[QR] Found: table=', !!table, 'canvas=', !!canvas, 'img=', !!img);
+        
+        if (table) {
+          var rows = table.querySelectorAll('tr');
+          matrix = [];
+          for (var r = 0; r < rows.length; r++) {
+            var cells = rows[r].querySelectorAll('td');
+            var row = [];
+            for (var c = 0; c < cells.length; c++) {
+              var style = cells[c].getAttribute('style') || '';
+              var bg = window.getComputedStyle(cells[c]).backgroundColor || '';
+              var isDark = style.indexOf('rgb(0, 0, 0)') !== -1 || style.indexOf('#000') !== -1 || bg.indexOf('rgb(0, 0, 0)') !== -1;
+              row.push(isDark);
+            }
+            matrix.push(row);
           }
-          matrix.push(row);
-        }
-      } else if (canvas) {
-        // Read pixels from canvas
-        var ctx = canvas.getContext('2d');
-        var size = canvas.width;
-        // Estimate module count (common sizes: 21, 25, 29, 33)
-        var moduleCount = 0;
-        for (var mc = 21; mc <= 45; mc += 4) {
-          if (size % mc === 0 || Math.abs(size - mc * Math.round(size / mc)) < 2) {
-            moduleCount = mc;
-            break;
+        } else if (canvas) {
+          var ctx = canvas.getContext('2d');
+          var size = canvas.width;
+          var moduleCount = 29;
+          for (var mc = 21; mc <= 45; mc += 4) {
+            if (size % mc === 0) { moduleCount = mc; break; }
           }
-        }
-        if (moduleCount === 0) moduleCount = Math.round(size / (size / 29));
-        var cellPx = size / moduleCount;
-        matrix = [];
-        for (var ry = 0; ry < moduleCount; ry++) {
-          var rowArr = [];
-          for (var cx = 0; cx < moduleCount; cx++) {
-            var px = ctx.getImageData(Math.floor(cx * cellPx + cellPx / 2), Math.floor(ry * cellPx + cellPx / 2), 1, 1).data;
-            rowArr.push(px[0] < 128); // dark if R < 128
+          var cellPx = size / moduleCount;
+          matrix = [];
+          for (var ry = 0; ry < moduleCount; ry++) {
+            var rowArr = [];
+            for (var cx = 0; cx < moduleCount; cx++) {
+              var px = ctx.getImageData(Math.floor(cx * cellPx + cellPx / 2), Math.floor(ry * cellPx + cellPx / 2), 1, 1).data;
+              rowArr.push(px[0] < 128);
+            }
+            matrix.push(rowArr);
           }
-          matrix.push(rowArr);
+        } else if (img && img.src) {
+          // If img, load it to canvas and read pixels
+          var tempCanvas = document.createElement('canvas');
+          tempCanvas.width = 120;
+          tempCanvas.height = 120;
+          var tCtx = tempCanvas.getContext('2d');
+          var tempImg = new Image();
+          tempImg.onload = function () {
+            tCtx.drawImage(tempImg, 0, 0, 120, 120);
+            var mCount = 29;
+            var cPx = 120 / mCount;
+            var mat = [];
+            for (var ry2 = 0; ry2 < mCount; ry2++) {
+              var r2 = [];
+              for (var cx2 = 0; cx2 < mCount; cx2++) {
+                var p = tCtx.getImageData(Math.floor(cx2 * cPx + cPx / 2), Math.floor(ry2 * cPx + cPx / 2), 1, 1).data;
+                r2.push(p[0] < 128);
+              }
+              mat.push(r2);
+            }
+            document.body.removeChild(container);
+            resolve(mat);
+          };
+          tempImg.onerror = function () { document.body.removeChild(container); resolve(null); };
+          tempImg.src = img.src;
+          return; // early return - resolve happens in onload
         }
-      }
-      
-      document.body.removeChild(container);
-      return matrix;
+        
+        document.body.removeChild(container);
+        console.log('[QR] Matrix result:', matrix ? (matrix.length + 'x') : 'null');
+        resolve(matrix);
+      }, 500);
     } catch (e) {
       console.error('[QR] Matrix generation failed:', e);
-      return null;
+      resolve(null);
     }
+    });
   }
 
   function generate(member) {
@@ -291,7 +318,7 @@ const IdCard = (function () {
 
       // Generate QR matrix from member ID text directly (not from DOM)
       var memberId = member.id || '';
-      var qrMatrix = (typeof QRCode !== 'undefined' && memberId) ? getQRMatrixFromText(memberId) : null;
+      var qrMatrix = (typeof QRCode !== 'undefined' && memberId) ? await getQRMatrixFromText(memberId) : null;
       console.log('[SHARE] QR matrix:', qrMatrix ? (qrMatrix.length + 'x' + (qrMatrix[0] ? qrMatrix[0].length : 0)) : 'NULL');
       console.log('[SHARE] Member data:', JSON.stringify(member));
 
