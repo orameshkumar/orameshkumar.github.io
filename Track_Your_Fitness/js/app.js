@@ -1,6 +1,6 @@
 var App = (function () {
   'use strict';
-  var currentScreen = 'members-screen';
+  var currentScreen = sessionStorage.getItem('tyf_current_screen') || 'members-screen';
   var moreScreens   = ['history-screen','contributions-screen','expenses-screen','reports-screen','settings-screen','attendance-screen'];
 
   async function initApp() {
@@ -63,6 +63,7 @@ var App = (function () {
       tab.classList.toggle('active', tab.getAttribute('data-screen') === screenId);
     });
     currentScreen = screenId;
+    try { sessionStorage.setItem('tyf_current_screen', screenId); } catch(e) {}
     refreshScreenData(screenId);
     initDatePickers();
   }
