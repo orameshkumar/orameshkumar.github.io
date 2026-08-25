@@ -155,20 +155,10 @@ var App = (function () {
       })
       .catch(function (err) { console.log('SW failed:', err); });
 
-    // Listen for SW_UPDATED message — reload to get new files
+    // SW updates are handled silently — new version loads on next visit
     navigator.serviceWorker.addEventListener('message', function (event) {
       if (event.data && event.data.type === 'SW_UPDATED') {
-        console.log('New version available — reloading...');
-        window.location.reload();
-      }
-    });
-
-    // Also handle controller change (SW took control)
-    var refreshing = false;
-    navigator.serviceWorker.addEventListener('controllerchange', function () {
-      if (!refreshing) {
-        refreshing = true;
-        window.location.reload();
+        console.log('App updated to latest version.');
       }
     });
   }

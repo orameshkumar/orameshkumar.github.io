@@ -1,4 +1,4 @@
-const CACHE_NAME = 'track-your-fitness-v30';
+const CACHE_NAME = 'track-your-fitness-v31';
 const FILES_TO_CACHE = [
   './', './index.html', './css/styles.css',
   './js/utils.js', './js/qrcode-lib.js', './js/license.js', './js/db.js', './js/settings.js',
@@ -26,12 +26,6 @@ self.addEventListener('activate', e => {
         names.filter(n => n !== CACHE_NAME).map(n => caches.delete(n))
       ))
       .then(() => self.clients.claim())
-      .then(() => {
-        // Notify all open tabs to reload with new version
-        self.clients.matchAll({ type: 'window' }).then(clients => {
-          clients.forEach(client => client.postMessage({ type: 'SW_UPDATED' }));
-        });
-      })
   );
 });
 
