@@ -5,8 +5,7 @@ const IdCard = (function () {
     return s ? String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;') : '';
   }
 
-  // Generate QR code - this library renders as a TABLE, not canvas.
-  // We just render it directly in the card (no data URL conversion needed).
+  // Render QR table into a container
   function renderQRIntoElement(container, text, size) {
     if (!container || typeof QRCode === 'undefined') return;
     container.innerHTML = '';
@@ -42,7 +41,6 @@ const IdCard = (function () {
     overlay.innerHTML = html;
     overlay.removeAttribute('hidden');
 
-    // Render QR into the container (table-based rendering)
     var qrContainer = document.getElementById('id-card-qr-container');
     renderQRIntoElement(qrContainer, member.id, 120);
   }
@@ -52,18 +50,60 @@ const IdCard = (function () {
     if (overlay) { overlay.setAttribute('hidden', ''); overlay.innerHTML = ''; }
   }
 
+  function loadHtml2Canvas() {
+    return new Promise(function (resolve, reject) {
+      if (typeof html2canvas !== 'undefined') { resolve(); return; }
+      var script = document.createElement('script');
+      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+      script.onload = resolve;
+      script.onerror = function () { reject(new Error('Failed to load html2canvas')); };
+      document.head.appendChild(script);
+    });
+  }
 
+  // Convert QR table to a canvas-drawn image to avoid html2canvas table clipping
+  function convertQRTableToImage(qrContainer) {
+    if (!qrContainer) return;
+    var table = qrContainer.querySelector('table');
+    if (!table) return;
 
-  function inlineStyles(source, target) {
-    var sourceChildren = source.children;
-    var targetChildren = target.children;
-    var computed = window.getComputedStyle(source);
-    target.style.cssText = computed.cssText;
-    for (var i = 0; i < sourceChildren.length; i++) {
-      if (targetChildren[i]) {
-        inlineStyles(sourceChildren[i], targetChildren[i]);
+    // Read the table cells to get the QR matrix
+    var rows = table.querySelectorAll('tr');
+    var moduleCount = rows.length;
+    if (moduleCount === 0) return;
+
+    var size = 120;
+    var cellSize = size / moduleCount;
+
+    var canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    var ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, size, size);
+
+    for (var r = 0; r < rows.length; r++) {
+      var cells = rows[r].querySelectorAll('td');
+      for (var c = 0; c < cells.length; c++) {
+        var bg = window.getComputedStyle(cells[c]).backgroundColor;
+        // Dark modules have dark background
+        var isDark = (bg && bg !== 'rgb(255, 255, 255)' && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent' && bg !== '');
+        if (isDark) {
+          ctx.fillStyle = '#000000';
+          ctx.fillRect(Math.floor(c * cellSize), Math.floor(r * cellSize), Math.ceil(cellSize), Math.ceil(cellSize));
+        }
       }
     }
+
+    // Replace table with img
+    var img = document.createElement('img');
+    img.src = canvas.toDataURL('image/png');
+    img.style.width = size + 'px';
+    img.style.height = size + 'px';
+    img.style.display = 'block';
+    img.style.margin = '0 auto';
+    qrContainer.innerHTML = '';
+    qrContainer.appendChild(img);
   }
 
   async function shareWhatsApp() {
@@ -71,62 +111,33 @@ const IdCard = (function () {
     if (!cardEl) { alert('No ID card to share.'); return; }
 
     try {
-      // Get card dimensions
-      var rect = cardEl.getBoundingClientRect();
-      var width = Math.ceil(rect.width);
-      var height = Math.ceil(rect.height);
+      // Convert QR table to an img BEFORE html2canvas captures
+      var qrContainer = cardEl.querySelector('.id-card-qr');
+      convertQRTableToImage(qrContainer);
 
-      // Clone and inline ALL computed styles so SVG foreignObject renders correctly
-      var clone = cardEl.cloneNode(true);
-      inlineStyles(cardEl, clone);
+      await loadHtml2Canvas();
+      await new Promise(function (r) { setTimeout(r, 100); });
 
-      // Serialize to XHTML string
-      var serializer = new XMLSerializer();
-      var xhtml = serializer.serializeToString(clone);
+      var canvas = await html2canvas(cardEl, { useCORS: true, backgroundColor: '#ffffff', allowTaint: true, logging: false });
+      var blob = await new Promise(function (resolve) { canvas.toBlob(resolve, 'image/png'); });
+      if (!blob) { alert('Could not generate image.'); return; }
 
-      // Build SVG data URL (not blob URL — avoids tainted canvas)
-      var svgStr = '<svg xmlns="http://www.w3.org/2000/svg" width="' + width + '" height="' + height + '">'+
-        '<foreignObject width="100%" height="100%">'+
-        '<div xmlns="http://www.w3.org/1999/xhtml" style="background:#fff;">'+
-        xhtml +
-        '</div></foreignObject></svg>';
+      var file = new File([blob], 'id-card.png', { type: 'image/png' });
+      if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title: 'Member ID Card' });
+      } else {
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = 'id-card.png';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }
 
-      // Encode as data URL to avoid cross-origin/tainted canvas
-      var svgDataUrl = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgStr);
-
-      var img = new Image();
-      img.crossOrigin = 'anonymous';
-      img.onload = async function () {
-        var canvas = document.createElement('canvas');
-        canvas.width = width * 2;
-        canvas.height = height * 2;
-        var ctx = canvas.getContext('2d');
-        ctx.scale(2, 2);
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, 0, width, height);
-        ctx.drawImage(img, 0, 0, width, height);
-
-        var blob = await new Promise(function (resolve) { canvas.toBlob(resolve, 'image/png'); });
-        if (!blob) { alert('Could not generate image.'); return; }
-
-        var file = new File([blob], 'id-card.png', { type: 'image/png' });
-        if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
-          await navigator.share({ files: [file], title: 'Member ID Card' });
-        } else {
-          var dlUrl = URL.createObjectURL(blob);
-          var a = document.createElement('a');
-          a.href = dlUrl;
-          a.download = 'id-card.png';
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          URL.revokeObjectURL(dlUrl);
-        }
-      };
-      img.onerror = function () {
-        alert('Could not generate image. Try screenshot instead.');
-      };
-      img.src = svgDataUrl;
+      // Restore QR table after sharing (re-render)
+      renderQRIntoElement(qrContainer, document.querySelector('.id-card-id').textContent.replace('ID: ', ''), 120);
     } catch (e) {
       if (e.name !== 'AbortError') {
         console.error('Share failed:', e);
