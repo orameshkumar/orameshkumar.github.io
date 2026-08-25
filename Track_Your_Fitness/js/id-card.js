@@ -5,42 +5,55 @@ const IdCard = (function () {
     return s ? String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;') : '';
   }
 
-  // Generate QR code as a base64 PNG data URL (not canvas)
+  // Generate QR code as a base64 PNG data URL (async - waits for render)
   function generateQRDataUrl(text, size) {
-    var container = document.createElement('div');
-    container.style.cssText = 'position:absolute;left:-9999px;';
-    document.body.appendChild(container);
-    try {
-      new QRCode(container, { text: text, width: size, height: size, correctLevel: QRCode.CorrectLevel.M });
-      // QRCode lib creates a canvas inside the container
-      var cvs = container.querySelector('canvas');
-      if (cvs) {
-        var dataUrl = cvs.toDataURL('image/png');
+    return new Promise(function (resolve) {
+      var container = document.createElement('div');
+      container.style.cssText = 'position:absolute;left:-9999px;top:-9999px;';
+      document.body.appendChild(container);
+      try {
+        new QRCode(container, {
+          text: text, width: size, height: size, correctLevel: QRCode.CorrectLevel.M,
+          drawer: 'canvas'
+        });
+        // Wait for QR library to finish drawing
+        setTimeout(function () {
+          var cvs = container.querySelector('canvas');
+          if (cvs) {
+            try {
+              var dataUrl = cvs.toDataURL('image/png');
+              document.body.removeChild(container);
+              resolve(dataUrl);
+              return;
+            } catch (e) {}
+          }
+          // Fallback: check for img tag
+          var img = container.querySelector('img');
+          if (img && img.src) {
+            document.body.removeChild(container);
+            resolve(img.src);
+            return;
+          }
+          document.body.removeChild(container);
+          resolve(null);
+        }, 300);
+      } catch (e) {
         document.body.removeChild(container);
-        return dataUrl;
+        resolve(null);
       }
-      // Fallback: check for img
-      var img = container.querySelector('img');
-      if (img && img.src) {
-        var src = img.src;
-        document.body.removeChild(container);
-        return src;
-      }
-    } catch (e) {}
-    document.body.removeChild(container);
-    return null;
+    });
   }
 
-  function generate(member) {
+  async function generate(member) {
     var overlay = document.getElementById('id-card-overlay');
     if (!overlay) return;
 
     var appName = typeof Settings !== 'undefined' ? Settings.getAppName() : 'Track Your Fitness';
 
-    // Pre-generate QR as data URL
+    // Pre-generate QR as data URL (async)
     var qrDataUrl = null;
     if (typeof QRCode !== 'undefined') {
-      qrDataUrl = generateQRDataUrl(member.id, 120);
+      qrDataUrl = await generateQRDataUrl(member.id, 120);
     }
 
     var html = '<div class="id-card">';
