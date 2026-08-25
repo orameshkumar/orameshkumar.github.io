@@ -15,23 +15,67 @@ const IdCard = (function () {
     }
   }
 
-  // Read QR table cells and return the dark/light matrix
-  function getQRMatrix(qrContainer) {
-    var table = qrContainer ? qrContainer.querySelector('table') : null;
-    if (!table) return null;
-    var rows = table.querySelectorAll('tr');
-    var matrix = [];
-    for (var r = 0; r < rows.length; r++) {
-      var cells = rows[r].querySelectorAll('td');
-      var row = [];
-      for (var c = 0; c < cells.length; c++) {
-        var bg = window.getComputedStyle(cells[c]).backgroundColor;
-        var isDark = (bg && bg !== 'rgb(255, 255, 255)' && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent');
-        row.push(isDark);
+  // Generate QR matrix directly using the QRCode library internals
+  function getQRMatrixFromText(text) {
+    try {
+      // QRCode library exposes QRCode.CorrectLevel - use internal qrcode model
+      // Create a temporary QR to get the model
+      var container = document.createElement('div');
+      container.style.cssText = 'position:absolute;left:-9999px;top:-9999px;visibility:hidden;';
+      document.body.appendChild(container);
+      var qr = new QRCode(container, { text: text, width: 1, height: 1, correctLevel: QRCode.CorrectLevel.M });
+      
+      // Wait a tick and read the generated table/canvas
+      // Actually, let us just read the DOM that was generated
+      var table = container.querySelector('table');
+      var canvas = container.querySelector('canvas');
+      var img = container.querySelector('img');
+      var matrix = null;
+      
+      if (table) {
+        var rows = table.querySelectorAll('tr');
+        matrix = [];
+        for (var r = 0; r < rows.length; r++) {
+          var cells = rows[r].querySelectorAll('td');
+          var row = [];
+          for (var c = 0; c < cells.length; c++) {
+            var style = cells[c].getAttribute('style') || '';
+            var isDark = style.indexOf('rgb(0, 0, 0)') !== -1 || style.indexOf('#000') !== -1 || style.indexOf('black') !== -1;
+            row.push(isDark);
+          }
+          matrix.push(row);
+        }
+      } else if (canvas) {
+        // Read pixels from canvas
+        var ctx = canvas.getContext('2d');
+        var size = canvas.width;
+        // Estimate module count (common sizes: 21, 25, 29, 33)
+        var moduleCount = 0;
+        for (var mc = 21; mc <= 45; mc += 4) {
+          if (size % mc === 0 || Math.abs(size - mc * Math.round(size / mc)) < 2) {
+            moduleCount = mc;
+            break;
+          }
+        }
+        if (moduleCount === 0) moduleCount = Math.round(size / (size / 29));
+        var cellPx = size / moduleCount;
+        matrix = [];
+        for (var ry = 0; ry < moduleCount; ry++) {
+          var rowArr = [];
+          for (var cx = 0; cx < moduleCount; cx++) {
+            var px = ctx.getImageData(Math.floor(cx * cellPx + cellPx / 2), Math.floor(ry * cellPx + cellPx / 2), 1, 1).data;
+            rowArr.push(px[0] < 128); // dark if R < 128
+          }
+          matrix.push(rowArr);
+        }
       }
-      matrix.push(row);
+      
+      document.body.removeChild(container);
+      return matrix;
+    } catch (e) {
+      console.error('[QR] Matrix generation failed:', e);
+      return null;
     }
-    return matrix;
   }
 
   function generate(member) {
@@ -244,14 +288,10 @@ const IdCard = (function () {
 
       // Get QR matrix
       var qrContainer = cardEl.querySelector('.id-card-qr');
-      console.log('[SHARE] QR container innerHTML:', qrContainer ? qrContainer.innerHTML.substring(0, 300) : 'NOT FOUND');
-      console.log('[SHARE] QR container children:', qrContainer ? qrContainer.children.length : 0);
-      if (qrContainer) {
-        for (var ci = 0; ci < qrContainer.children.length; ci++) {
-          console.log('[SHARE] QR child ' + ci + '=', qrContainer.children[ci].tagName, qrContainer.children[ci].className);
-        }
-      }
-      var qrMatrix = getQRMatrix(qrContainer);
+
+      // Generate QR matrix from member ID text directly (not from DOM)
+      var memberId = member.id || '';
+      var qrMatrix = (typeof QRCode !== 'undefined' && memberId) ? getQRMatrixFromText(memberId) : null;
       console.log('[SHARE] QR matrix:', qrMatrix ? (qrMatrix.length + 'x' + (qrMatrix[0] ? qrMatrix[0].length : 0)) : 'NULL');
       console.log('[SHARE] Member data:', JSON.stringify(member));
 
