@@ -13,8 +13,7 @@ const IdCard = (function () {
       document.body.appendChild(container);
       try {
         new QRCode(container, {
-          text: text, width: size, height: size, correctLevel: QRCode.CorrectLevel.M,
-          drawer: 'canvas'
+          text: text, width: size, height: size, correctLevel: QRCode.CorrectLevel.M
         });
         // Wait for QR library to finish drawing
         setTimeout(function () {
