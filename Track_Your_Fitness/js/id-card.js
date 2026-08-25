@@ -79,6 +79,17 @@ const IdCard = (function () {
     });
   }
 
+  function downloadBlob(blob) {
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'id-card.png';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+  }
+
   async function shareWhatsApp() {
     var cardEl = document.querySelector('.id-card');
     if (!cardEl) { alert('No ID card to share.'); return; }
@@ -135,18 +146,16 @@ const IdCard = (function () {
       var blob = await new Promise(function (resolve) { canvas.toBlob(resolve, 'image/png'); });
       if (!blob) { alert('Could not generate image.'); return; }
 
-      var file = new File([blob], 'id-card.png', { type: 'image/png' });
-      if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
-        await navigator.share({ files: [file], title: 'Member ID Card' });
-      } else {
-        var url = URL.createObjectURL(blob);
-        var a = document.createElement('a');
-        a.href = url;
-        a.download = 'id-card.png';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
+      // Try native share first, fallback to download
+      try {
+        var file = new File([blob], 'id-card.png', { type: 'image/png' });
+        if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+          navigator.share({ files: [file], title: 'Member ID Card' }).catch(function () {});
+        } else {
+          downloadBlob(blob);
+        }
+      } catch (e) {
+        downloadBlob(blob);
       }
     } catch (e) {
       if (e.name !== 'AbortError') {
