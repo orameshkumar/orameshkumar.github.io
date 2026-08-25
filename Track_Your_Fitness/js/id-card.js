@@ -61,41 +61,37 @@ const IdCard = (function () {
     try {
       // Get card dimensions
       var rect = cardEl.getBoundingClientRect();
-      var width = rect.width;
-      var height = rect.height;
+      var width = Math.ceil(rect.width);
+      var height = Math.ceil(rect.height);
 
-      // Clone the card and inline all styles
+      // Clone and inline styles
       var clone = cardEl.cloneNode(true);
-      clone.style.width = width + 'px';
-      clone.style.height = height + 'px';
-      clone.style.position = 'absolute';
-      clone.style.left = '-9999px';
-      document.body.appendChild(clone);
 
-      // Get computed styles and serialize to inline
-      var cardHtml = clone.outerHTML;
-      document.body.removeChild(clone);
+      // Serialize to XHTML string
+      var serializer = new XMLSerializer();
+      var xhtml = serializer.serializeToString(clone);
 
-      // Build SVG with foreignObject
-      var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + width + '" height="' + height + '">';
-      svg += '<foreignObject width="100%" height="100%">';
-      svg += '<div xmlns="http://www.w3.org/1999/xhtml" style="background:#fff;padding:0;margin:0;">';
-      svg += cardHtml;
-      svg += '</div></foreignObject></svg>';
+      // Build SVG data URL (not blob URL — avoids tainted canvas)
+      var svgStr = '<svg xmlns="http://www.w3.org/2000/svg" width="' + width + '" height="' + height + '">'+
+        '<foreignObject width="100%" height="100%">'+
+        '<div xmlns="http://www.w3.org/1999/xhtml" style="background:#fff;">'+
+        xhtml +
+        '</div></foreignObject></svg>';
 
-      // Convert SVG to image via canvas
-      var svgBlob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' });
-      var svgUrl = URL.createObjectURL(svgBlob);
+      // Encode as data URL to avoid cross-origin/tainted canvas
+      var svgDataUrl = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgStr);
 
       var img = new Image();
+      img.crossOrigin = 'anonymous';
       img.onload = async function () {
         var canvas = document.createElement('canvas');
         canvas.width = width * 2;
         canvas.height = height * 2;
         var ctx = canvas.getContext('2d');
         ctx.scale(2, 2);
-        ctx.drawImage(img, 0, 0);
-        URL.revokeObjectURL(svgUrl);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, width, height);
+        ctx.drawImage(img, 0, 0, width, height);
 
         var blob = await new Promise(function (resolve) { canvas.toBlob(resolve, 'image/png'); });
         if (!blob) { alert('Could not generate image.'); return; }
@@ -115,9 +111,9 @@ const IdCard = (function () {
         }
       };
       img.onerror = function () {
-        alert('Could not generate image.');
+        alert('Could not generate image. Try screenshot instead.');
       };
-      img.src = svgUrl;
+      img.src = svgDataUrl;
     } catch (e) {
       if (e.name !== 'AbortError') {
         console.error('Share failed:', e);
