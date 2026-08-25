@@ -105,6 +105,7 @@ const Attendance = (function () {
 
   var _renderTimer = null;
   async function renderAttendance() {
+    console.log('[ATT] renderAttendance called', new Error().stack.split('\n')[2]);
     // Debounce: if called multiple times rapidly, only execute the last call
     if (_renderTimer) { clearTimeout(_renderTimer); _renderTimer = null; }
 

@@ -112,6 +112,7 @@ const Monthly = (function () {
   }
 
   async function renderMonthlyList() {
+    console.log('[MONTHLY] renderMonthlyList called', new Error().stack.split('\n')[2]);
     var container    = document.getElementById('monthly-list');
     if (!container) return;
     var dateInput    = document.getElementById('monthly-ref-date');

@@ -36,6 +36,7 @@ const PaymentHistory = (function () {
   }
 
   async function renderHistory() {
+    console.log('[HISTORY] renderHistory called', new Error().stack.split('\n')[2]);
     var container  = document.getElementById('history-list');
     if (!container) return;
 

@@ -26,6 +26,7 @@ const GuestPlay = (function () {
   }
 
   async function renderGuestList() {
+    console.log('[GUEST] renderGuestList called', new Error().stack.split('\n')[2]);
     var container   = document.getElementById('guest-list');
     if (!container) return;
 
