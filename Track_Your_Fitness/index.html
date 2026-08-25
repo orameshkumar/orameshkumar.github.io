@@ -85,6 +85,7 @@
 <header class="app-header">
   <span class="header-icon">🏋️</span>
   <h1 id="app-name-header">Track Your Fitness</h1>
+  <button class="btn-icon" id="app-share-qr-btn" title="Share app" style="font-size:1.2rem;color:#fff;opacity:0.8;">📱</button>
   <button class="btn-icon" id="sync-btn" title="Sync now" style="font-size:1.3rem;color:#fff;opacity:0.8;" hidden>🔄</button>
 </header>
 
@@ -784,6 +785,20 @@
     <div class="form-actions">
       <button class="btn btn-primary" id="att-copy-confirm-btn">Copy</button>
       <button class="btn btn-secondary" id="att-copy-cancel-btn">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ App Share QR Modal ═════════════════════════════ -->
+<div class="modal-overlay" id="app-share-qr-modal" hidden>
+  <div class="modal" style="max-width:320px;text-align:center;">
+    <div class="modal-title">Share this App</div>
+    <div class="modal-subtitle">Scan to open on another device</div>
+    <div id="app-share-qr-container" style="display:flex;justify-content:center;margin:16px 0;"></div>
+    <p style="font-size:0.8rem;color:var(--text2);word-break:break-all;" id="app-share-url"></p>
+    <div class="form-actions">
+      <button class="btn btn-primary" id="app-share-copy-btn">📋 Copy link</button>
+      <button class="btn btn-secondary" id="app-share-close-btn">Close</button>
     </div>
   </div>
 </div>

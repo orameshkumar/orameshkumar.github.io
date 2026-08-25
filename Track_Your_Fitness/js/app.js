@@ -48,6 +48,7 @@ var App = (function () {
 
       // Sync button in header
       initSyncButton();
+      initAppShareQR();
     } catch (e) {
       console.error('App init failed:', e);
       alert('Could not initialize app: ' + e.message);
@@ -208,6 +209,41 @@ var App = (function () {
         syncBtn.removeAttribute('hidden');
       }
     });
+  }
+
+  // --- App Share QR Code ---
+  function initAppShareQR() {
+    var btn = document.getElementById('app-share-qr-btn');
+    var modal = document.getElementById('app-share-qr-modal');
+    var closeBtn = document.getElementById('app-share-close-btn');
+    var copyBtn = document.getElementById('app-share-copy-btn');
+    var qrContainer = document.getElementById('app-share-qr-container');
+    var urlEl = document.getElementById('app-share-url');
+
+    if (!btn || !modal) return;
+
+    var appUrl = window.location.href.split('?')[0];
+
+    btn.addEventListener('click', function () {
+      modal.removeAttribute('hidden');
+      if (urlEl) urlEl.textContent = appUrl;
+      // Render QR if not already done
+      if (qrContainer && !qrContainer.hasChildNodes() && typeof QRCode !== 'undefined') {
+        try { new QRCode(qrContainer, { text: appUrl, width: 180, height: 180, correctLevel: QRCode.CorrectLevel.M }); }
+        catch (e) { qrContainer.innerHTML = '<p style="color:var(--text3);">QR generation failed.</p>'; }
+      }
+    });
+
+    if (closeBtn) closeBtn.addEventListener('click', function () { modal.setAttribute('hidden', ''); });
+    if (copyBtn) copyBtn.addEventListener('click', function () {
+      navigator.clipboard.writeText(appUrl).then(function () {
+        copyBtn.textContent = '✅ Copied!';
+        setTimeout(function () { copyBtn.textContent = '📋 Copy link'; }, 2000);
+      }).catch(function () { alert('Copy failed. URL: ' + appUrl); });
+    });
+
+    // Close on backdrop click
+    modal.addEventListener('click', function (e) { if (e.target === modal) modal.setAttribute('hidden', ''); });
   }
 
   document.addEventListener('DOMContentLoaded', initApp);
