@@ -244,6 +244,13 @@ const IdCard = (function () {
 
       // Get QR matrix
       var qrContainer = cardEl.querySelector('.id-card-qr');
+      console.log('[SHARE] QR container innerHTML:', qrContainer ? qrContainer.innerHTML.substring(0, 300) : 'NOT FOUND');
+      console.log('[SHARE] QR container children:', qrContainer ? qrContainer.children.length : 0);
+      if (qrContainer) {
+        for (var ci = 0; ci < qrContainer.children.length; ci++) {
+          console.log('[SHARE] QR child ' + ci + '=', qrContainer.children[ci].tagName, qrContainer.children[ci].className);
+        }
+      }
       var qrMatrix = getQRMatrix(qrContainer);
       console.log('[SHARE] QR matrix:', qrMatrix ? (qrMatrix.length + 'x' + (qrMatrix[0] ? qrMatrix[0].length : 0)) : 'NULL');
       console.log('[SHARE] Member data:', JSON.stringify(member));
