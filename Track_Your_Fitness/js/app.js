@@ -58,7 +58,7 @@ var App = (function () {
   function navigateToScreen(screenId) {
     document.querySelectorAll('.screen').forEach(function (s) { s.setAttribute('hidden', ''); });
     var target = document.getElementById(screenId);
-    if (target) { target.removeAttribute('hidden'); target.focus({ preventScroll: true }); }
+    if (target) target.removeAttribute('hidden');
     document.querySelectorAll('.nav-tab').forEach(function (tab) {
       tab.classList.toggle('active', tab.getAttribute('data-screen') === screenId);
     });
