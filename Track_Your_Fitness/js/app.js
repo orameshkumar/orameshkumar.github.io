@@ -43,7 +43,6 @@ var App = (function () {
 
       // Listen for sync complete — refresh current screen once
       document.addEventListener('tyf-sync-update', function () {
-        console.log('[SYNC] Sync complete, refreshing screen:', currentScreen);
         refreshScreenData(currentScreen);
       });
 
@@ -57,7 +56,6 @@ var App = (function () {
   }
 
   function navigateToScreen(screenId) {
-    console.log('[NAV] navigateToScreen:', screenId, 'from:', currentScreen, 'stack:', new Error().stack.split('\n')[2]);
     document.querySelectorAll('.screen').forEach(function (s) { s.setAttribute('hidden', ''); });
     var target = document.getElementById(screenId);
     if (target) target.removeAttribute('hidden');
@@ -70,7 +68,6 @@ var App = (function () {
   }
 
   function refreshScreenData(screenId) {
-    console.log('[REFRESH] refreshScreenData:', screenId);
     switch (screenId) {
       case 'monthly-screen':       if (typeof Monthly       !== 'undefined') Monthly.renderMonthlyList();       break;
       case 'guest-screen':         if (typeof GuestPlay     !== 'undefined') GuestPlay.renderGuestList();       break;
