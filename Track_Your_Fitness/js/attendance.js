@@ -44,8 +44,11 @@ const Attendance = (function () {
       });
     });
 
-    // Note: renderAttendance() is NOT called here.
-    // It will be triggered by navigateToScreen → refreshScreenData when the screen becomes visible.
+    // Render only if attendance screen is currently visible
+    var attScreen = document.getElementById('attendance-screen');
+    if (attScreen && !attScreen.hasAttribute('hidden')) {
+      renderAttendance();
+    }
   }
 
   // --- Copy from date modal ---

@@ -125,7 +125,13 @@ var App = (function () {
     var backdrop = document.getElementById('more-menu-backdrop');
     if (backdrop) backdrop.addEventListener('click', closeMoreMenu);
 
-    navigateToScreen(currentScreen);
+    // Show the initial screen WITHOUT re-rendering (modules already rendered in their init)
+    document.querySelectorAll('.screen').forEach(function (s) { s.setAttribute('hidden', ''); });
+    var initTarget = document.getElementById(currentScreen);
+    if (initTarget) initTarget.removeAttribute('hidden');
+    document.querySelectorAll('.nav-tab').forEach(function (tab) {
+      tab.classList.toggle('active', tab.getAttribute('data-screen') === currentScreen);
+    });
   }
 
   function registerServiceWorker() {
