@@ -329,7 +329,7 @@
   <div class="section-header">
     <span class="screen-title">Attendance</span>
     <div style="display:flex;gap:6px;">
-      <button class="btn btn-sm btn-secondary" id="att-copy-yesterday-btn">📋 Copy yesterday</button>
+      <button class="btn btn-sm btn-secondary" id="att-copy-yesterday-btn">📋 Copy from date</button>
       <button class="btn btn-sm btn-primary" id="att-scan-qr-btn">📷 Scan QR</button>
     </div>
   </div>
@@ -340,6 +340,11 @@
   <div class="bulk-select-all-row">
     <label><input type="checkbox" id="att-select-all"> Select all visible</label>
     <span id="att-present-count" class="bulk-count">0 present</span>
+  </div>
+  <div class="att-filter-group" style="display:flex;gap:4px;margin-bottom:4px;">
+    <button class="btn btn-sm att-filter-btn active" data-filter="absent">Absent</button>
+    <button class="btn btn-sm att-filter-btn" data-filter="present">Present</button>
+    <button class="btn btn-sm att-filter-btn" data-filter="all">All</button>
   </div>
   <div id="att-member-list"></div>
   <button class="btn btn-primary" id="att-save-btn" style="width:100%;margin-top:8px;flex-shrink:0;">💾 Save Attendance</button>
@@ -767,6 +772,21 @@
 
 <!-- ══ ID Card Print Overlay ═══════════════════════════ -->
 <div id="id-card-overlay" class="id-card-overlay" hidden></div>
+
+<!-- ══ Copy Attendance Date Modal ═════════════════════ -->
+<div class="modal-overlay" id="att-copy-date-modal" hidden>
+  <div class="modal" style="max-width:320px;">
+    <div class="modal-title">Copy attendance from</div>
+    <div class="form-group">
+      <label for="att-copy-source-date">Select date</label>
+      <div class="date-picker-wrap"><input type="date" id="att-copy-source-date" class="date-picker-hidden"><div class="date-picker-display" data-for="att-copy-source-date">Select date</div></div>
+    </div>
+    <div class="form-actions">
+      <button class="btn btn-primary" id="att-copy-confirm-btn">Copy</button>
+      <button class="btn btn-secondary" id="att-copy-cancel-btn">Cancel</button>
+    </div>
+  </div>
+</div>
 
 <!-- ══ Scripts ════════════════════════════════════════ -->
 <script src="js/utils.js"></script>

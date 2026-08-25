@@ -3,6 +3,7 @@ const Attendance = (function () {
 
   var _scannerInstance = null;
   var _html5QrcodeLoaded = false;
+  var _attendanceFilter = 'absent';
 
   function esc(s) {
     return s ? String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;') : '';
@@ -23,11 +24,79 @@ const Attendance = (function () {
     }
     if (searchInput) searchInput.addEventListener('input', renderAttendance);
     if (selectAllCb) selectAllCb.addEventListener('change', function () { toggleSelectAll(selectAllCb.checked); });
-    if (copyYesterday) copyYesterday.addEventListener('click', handleCopyFromYesterday);
+    if (copyYesterday) copyYesterday.addEventListener('click', showCopyDateModal);
     if (scanQrBtn) scanQrBtn.addEventListener('click', toggleQRScanner);
     if (saveBtn) saveBtn.addEventListener('click', handleSaveAttendance);
 
+    // Copy date modal buttons
+    var copyConfirmBtn = document.getElementById('att-copy-confirm-btn');
+    var copyCancelBtn  = document.getElementById('att-copy-cancel-btn');
+    if (copyConfirmBtn) copyConfirmBtn.addEventListener('click', handleCopyFromDate);
+    if (copyCancelBtn)  copyCancelBtn.addEventListener('click', hideCopyDateModal);
+
+    // Attendance filter buttons
+    document.querySelectorAll('.att-filter-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        _attendanceFilter = btn.dataset.filter;
+        document.querySelectorAll('.att-filter-btn').forEach(function (b) { b.classList.remove('active'); });
+        btn.classList.add('active');
+        renderAttendance();
+      });
+    });
+
     renderAttendance();
+  }
+
+  // --- Copy from date modal ---
+  function showCopyDateModal() {
+    var modal = document.getElementById('att-copy-date-modal');
+    if (!modal) return;
+
+    // Default source date = yesterday relative to currently selected attendance date
+    var dateInput = document.getElementById('att-date');
+    var date = dateInput ? dateInput.value : getTodayISO();
+    var d = new Date(date + 'T00:00:00');
+    d.setDate(d.getDate() - 1);
+    var yesterday = d.toISOString().split('T')[0];
+
+    var sourceInput = document.getElementById('att-copy-source-date');
+    if (sourceInput) { sourceInput.value = yesterday; syncDatePicker('att-copy-source-date'); }
+
+    modal.removeAttribute('hidden');
+  }
+
+  function hideCopyDateModal() {
+    var modal = document.getElementById('att-copy-date-modal');
+    if (modal) modal.setAttribute('hidden', '');
+  }
+
+  async function handleCopyFromDate() {
+    var sourceInput = document.getElementById('att-copy-source-date');
+    var sourceDate = sourceInput ? sourceInput.value : '';
+    if (!sourceDate) { alert('Please select a source date.'); return; }
+
+    var dateInput = document.getElementById('att-date');
+    var targetDate = dateInput ? dateInput.value : getTodayISO();
+
+    try {
+      var records = await DB.getAttendanceByDate(sourceDate);
+      var presentMembers = records.filter(function (r) { return r.status === 'present'; });
+
+      if (presentMembers.length === 0) {
+        alert('No attendance records found for ' + sourceDate + '. Save attendance for that day first.');
+        return;
+      }
+
+      for (var i = 0; i < presentMembers.length; i++) {
+        await DB.saveAttendance(presentMembers[i].memberId, targetDate, 'present');
+      }
+
+      hideCopyDateModal();
+      alert('Copied ' + presentMembers.length + ' member(s) from ' + sourceDate + '.');
+      renderAttendance();
+    } catch (e) {
+      alert('Could not copy attendance: ' + e.message);
+    }
   }
 
   async function renderAttendance() {
@@ -84,6 +153,20 @@ const Attendance = (function () {
 
       container.innerHTML = html;
       updatePresentCount(presentCount);
+
+      // Apply attendance filter (absent/present/all)
+      var rows = container.querySelectorAll('.att-member-row');
+      rows.forEach(function (row) {
+        var cb = row.querySelector('.att-checkbox');
+        var isChecked = cb && cb.checked;
+        if (_attendanceFilter === 'absent') {
+          row.style.display = isChecked ? 'none' : '';
+        } else if (_attendanceFilter === 'present') {
+          row.style.display = isChecked ? '' : 'none';
+        } else {
+          row.style.display = '';
+        }
+      });
 
       // Bind checkbox change to update UI (not DB yet — save button does that)
       container.querySelectorAll('.att-checkbox').forEach(function (cb) {
@@ -165,35 +248,6 @@ const Attendance = (function () {
 
     // Re-render to confirm saved state
     renderAttendance();
-  }
-
-  async function handleCopyFromYesterday() {
-    var dateInput = document.getElementById('att-date');
-    var date = dateInput ? dateInput.value : getTodayISO();
-
-    var d = new Date(date + 'T00:00:00');
-    d.setDate(d.getDate() - 1);
-    var yesterday = d.toISOString().split('T')[0];
-
-    try {
-      var yesterdayRecords = await DB.getAttendanceByDate(yesterday);
-      var presentMembers = yesterdayRecords.filter(function (r) { return r.status === 'present'; });
-
-      if (presentMembers.length === 0) {
-        alert('No attendance records found for ' + yesterday + '. Save attendance for that day first.');
-        return;
-      }
-
-      // Mark those members present for selected date
-      for (var i = 0; i < presentMembers.length; i++) {
-        await DB.saveAttendance(presentMembers[i].memberId, date, 'present');
-      }
-
-      alert('Copied ' + presentMembers.length + ' member(s) from ' + yesterday + '.');
-      renderAttendance();
-    } catch (e) {
-      alert('Could not copy attendance: ' + e.message);
-    }
   }
 
   // --- QR Scanner ---
