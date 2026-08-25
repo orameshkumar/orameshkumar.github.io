@@ -188,6 +188,7 @@ const IdCard = (function () {
     cy += 10;
 
     // QR Code - draw from matrix
+    console.log('[DRAW] Drawing QR, matrix size:', qrMatrix ? qrMatrix.length : 'null');
     if (qrMatrix && qrMatrix.length > 0) {
       var qrSize = 120;
       var moduleCount = qrMatrix.length;
@@ -221,6 +222,7 @@ const IdCard = (function () {
   async function shareWhatsApp() {
     var cardEl = document.querySelector('.id-card');
     if (!cardEl) { alert('No ID card to share.'); return; }
+    console.log('[SHARE] Starting share...');
 
     try {
       // Get member data from the card DOM
@@ -243,12 +245,17 @@ const IdCard = (function () {
       // Get QR matrix
       var qrContainer = cardEl.querySelector('.id-card-qr');
       var qrMatrix = getQRMatrix(qrContainer);
+      console.log('[SHARE] QR matrix:', qrMatrix ? (qrMatrix.length + 'x' + (qrMatrix[0] ? qrMatrix[0].length : 0)) : 'NULL');
+      console.log('[SHARE] Member data:', JSON.stringify(member));
 
       // Draw card on canvas (pure canvas drawing - no html2canvas)
       var canvas = drawCardOnCanvas(member, qrMatrix);
 
       // Export
+      console.log('[SHARE] Canvas size:', canvas.width, 'x', canvas.height);
+      console.log('[SHARE] Canvas has content:', canvas.getContext('2d').getImageData(0, 0, 1, 1).data[3] > 0);
       var blob = await new Promise(function (resolve) { canvas.toBlob(resolve, 'image/png'); });
+      console.log('[SHARE] Blob size:', blob ? blob.size : 'NULL');
       if (!blob) { alert('Could not generate image.'); return; }
 
       var file = new File([blob], 'id-card.png', { type: 'image/png' });

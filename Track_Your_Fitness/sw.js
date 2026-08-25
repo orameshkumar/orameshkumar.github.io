@@ -1,4 +1,4 @@
-const CACHE_NAME = 'track-your-fitness-v49';
+const CACHE_NAME = 'track-your-fitness-v50';
 const FILES_TO_CACHE = [
   './', './index.html', './css/styles.css',
   './js/utils.js', './js/qrcode-lib.js', './js/license.js', './js/db.js', './js/settings.js',
