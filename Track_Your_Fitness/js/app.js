@@ -41,14 +41,10 @@ var App = (function () {
       registerServiceWorker();
       Backup.checkBackupReminder();
 
-      // Listen for remote sync updates (debounced to prevent rapid-fire refreshes)
-      var _syncDebounce = null;
+      // Listen for sync complete — refresh current screen once
       document.addEventListener('tyf-sync-update', function () {
-        if (_syncDebounce) clearTimeout(_syncDebounce);
-        _syncDebounce = setTimeout(function () {
-          _syncDebounce = null;
-          refreshScreenData(currentScreen);
-        }, 500);
+        console.log('[SYNC] Sync complete, refreshing screen:', currentScreen);
+        refreshScreenData(currentScreen);
       });
 
       // Sync button in header
