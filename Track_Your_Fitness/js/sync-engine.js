@@ -15,6 +15,8 @@ const SyncEngine = (function () {
   let flushInProgress = false;
   let pullPaused = true; // pause pull until first flush completes
 
+  var _suppressNotify = false;
+
   var STORE_METHOD_MAP = {
     members: { getAll: 'getAllMembers', update: 'updateMember', delete: 'deleteMember' },
     contributions: { getAll: 'getAllContributions', update: 'updateContribution', delete: 'deleteContribution' },
@@ -90,6 +92,7 @@ const SyncEngine = (function () {
   function getQueueSize() { return getQueue().length; }
 
   function notifyChange(storeName, record, opType) {
+    if (_suppressNotify) return;
     if (SYNCED_STORES.indexOf(storeName) === -1) return;
     if (!record || !record.id) return;
 
@@ -232,6 +235,7 @@ const SyncEngine = (function () {
     if (!methods) return;
 
     try {
+      _suppressNotify = true;
       // Build map of all remote docs
       var remoteDocs = {};
       snapshot.forEach(function (doc) {
@@ -259,9 +263,11 @@ const SyncEngine = (function () {
         }
       }
 
+      _suppressNotify = false;
       // Notify UI to refresh
       document.dispatchEvent(new CustomEvent('tyf-sync-update', { detail: { store: storeName } }));
     } catch (e) {
+      _suppressNotify = false;
       console.error('SyncEngine: replaceLocalStore error for ' + storeName, e);
     }
   }

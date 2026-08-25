@@ -41,9 +41,14 @@ var App = (function () {
       registerServiceWorker();
       Backup.checkBackupReminder();
 
-      // Listen for remote sync updates
+      // Listen for remote sync updates (debounced to prevent rapid-fire refreshes)
+      var _syncDebounce = null;
       document.addEventListener('tyf-sync-update', function () {
-        refreshScreenData(currentScreen);
+        if (_syncDebounce) clearTimeout(_syncDebounce);
+        _syncDebounce = setTimeout(function () {
+          _syncDebounce = null;
+          refreshScreenData(currentScreen);
+        }, 500);
       });
 
       // Sync button in header
