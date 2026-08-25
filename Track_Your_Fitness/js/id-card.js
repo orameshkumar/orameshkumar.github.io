@@ -19,6 +19,7 @@ const IdCard = (function () {
     html += '<div class="id-card-name">' + esc(member.name) + '</div>';
     html += '<div class="id-card-detail">Mobile: ' + esc(member.mobile) + '</div>';
     html += '<div class="id-card-detail">Type: ' + esc(member.memberType || 'Regular') + '</div>';
+    if (member.validTill) html += '<div class="id-card-detail" style="color:' + (member.validTill < new Date().toISOString().split('T')[0] ? '#e53935' : '#43a047') + ';font-weight:600;">Valid till: ' + esc(member.validTill) + '</div>';
     if (member.notes) html += '<div class="id-card-detail">Notes: ' + esc(member.notes) + '</div>';
     html += '<div class="id-card-detail id-card-id">ID: ' + esc(member.id) + '</div>';
     html += '<div class="id-card-qr" id="id-card-qr-container"></div>';

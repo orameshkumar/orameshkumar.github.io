@@ -139,6 +139,10 @@ const Members = (function () {
           html += '<span class="loan-type-badge badge-guest">No contribution set</span>';
         }
         if (m.notes) html += ' <span class="loan-notes">' + esc(m.notes) + '</span>';
+        if (m.validTill) {
+          var isExpired = m.validTill < new Date().toISOString().split('T')[0];
+          html += ' <span class="loan-notes" style="color:' + (isExpired ? 'var(--danger)' : 'var(--success)') + ';">Valid: ' + fmtDate(m.validTill) + '</span>';
+        }
         html += '</div></div></div>';
         html += '<div class="client-actions">';
         html += '<button class="btn-icon btn-print-id" data-id="' + m.id + '" title="Print ID">🪪</button>';
@@ -180,6 +184,7 @@ const Members = (function () {
     var typeCustom2 = document.getElementById('member-type-custom');
     if (typeSelect2) typeSelect2.value = 'Regular';
     if (typeCustom2) { typeCustom2.value = ''; typeCustom2.hidden = true; }
+    document.getElementById('member-valid-till').value = '';
     if (title) title.textContent = 'Add member';
     if (container) container.removeAttribute('hidden');
     clearPhotoPreview();
@@ -202,6 +207,7 @@ const Members = (function () {
       if (isStandard) { typeSelect3.value = storedType; if (typeCustom3) { typeCustom3.value = ''; typeCustom3.hidden = true; } }
       else { typeSelect3.value = 'Other'; if (typeCustom3) { typeCustom3.value = storedType; typeCustom3.hidden = false; } }
     }
+    document.getElementById('member-valid-till').value = m.validTill || '';
     // Show existing photo or clear
     if (m.photo) {
       currentMemberPhoto = m.photo;
@@ -228,10 +234,13 @@ const Members = (function () {
     if (!mobile || !/^\d{10}$/.test(mobile)) errors.push({ field: 'member-mobile', msg: 'Mobile must be 10 digits.' });
     if (errors.length > 0) { showErrors(errors); return; }
 
+    var validTill = (document.getElementById('member-valid-till').value || '').trim();
+
     var member = {
       id: editingMemberId || DB.generateId(),
       name: name, mobile: mobile, notes: notes,
       memberType: memberType,
+      validTill: validTill || '',
       photo: currentMemberPhoto || null,
       status: 'active',
       createdAt: editingMemberId ? undefined : new Date().toISOString()
@@ -245,6 +254,8 @@ const Members = (function () {
           member.status = existing.status;
           // Preserve existing photo if no new one was captured
           if (!member.photo && existing.photo) member.photo = existing.photo;
+          // Preserve validTill if not explicitly set in form
+          if (!member.validTill && existing.validTill) member.validTill = existing.validTill;
         }
         await DB.updateMember(member);
       } else {

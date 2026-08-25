@@ -249,6 +249,16 @@ const Monthly = (function () {
       // sum(fee records ≤ date) - sum(payments ≤ date), same as Sessions logic.
       var member  = await DB.getMember(_pendingMemberId);
       var contrib = await DB.getContributionByMember(_pendingMemberId);
+
+      // Update member's validTill to end of the paid billing period
+      if (member && contrib) {
+        var period = getPeriodForDate(refDate, contrib);
+        if (period && period.end) {
+          member.validTill = period.end;
+          await DB.updateMember(member);
+        }
+      }
+
       hidePaymentModal();
       renderMonthlyList();
 
