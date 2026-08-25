@@ -69,7 +69,7 @@ const IdCard = (function () {
     html += '<div class="id-card-detail id-card-id">ID: ' + esc(member.id) + '</div>';
     // Use pre-generated QR image (not canvas)
     if (qrDataUrl) {
-      html += '<div class="id-card-qr"><img src="' + qrDataUrl + '" width="120" height="120" style="image-rendering:pixelated;"></div>';
+      html += '<div class="id-card-qr"><img src="' + qrDataUrl + '" style="width:120px;height:120px;display:block;"></div>';
     } else {
       html += '<div class="id-card-qr" style="color:#999;font-size:0.8rem;">QR not available</div>';
     }
@@ -105,7 +105,7 @@ const IdCard = (function () {
       await loadHtml2Canvas();
       // No canvas-to-img conversion needed — QR is already an <img> tag
       await new Promise(function (r) { setTimeout(r, 100); });
-      var canvas = await html2canvas(cardEl, { scale: 2, useCORS: true, backgroundColor: '#ffffff', allowTaint: true });
+      var canvas = await html2canvas(cardEl, { scale: 1, useCORS: true, backgroundColor: '#ffffff', allowTaint: true, logging: false });
       var blob = await new Promise(function (resolve) { canvas.toBlob(resolve, 'image/png'); });
       if (!blob) { alert('Could not generate image.'); return; }
 
