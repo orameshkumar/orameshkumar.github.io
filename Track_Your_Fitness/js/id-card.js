@@ -54,6 +54,18 @@ const IdCard = (function () {
 
 
 
+  function inlineStyles(source, target) {
+    var sourceChildren = source.children;
+    var targetChildren = target.children;
+    var computed = window.getComputedStyle(source);
+    target.style.cssText = computed.cssText;
+    for (var i = 0; i < sourceChildren.length; i++) {
+      if (targetChildren[i]) {
+        inlineStyles(sourceChildren[i], targetChildren[i]);
+      }
+    }
+  }
+
   async function shareWhatsApp() {
     var cardEl = document.querySelector('.id-card');
     if (!cardEl) { alert('No ID card to share.'); return; }
@@ -64,8 +76,9 @@ const IdCard = (function () {
       var width = Math.ceil(rect.width);
       var height = Math.ceil(rect.height);
 
-      // Clone and inline styles
+      // Clone and inline ALL computed styles so SVG foreignObject renders correctly
       var clone = cardEl.cloneNode(true);
+      inlineStyles(cardEl, clone);
 
       // Serialize to XHTML string
       var serializer = new XMLSerializer();
