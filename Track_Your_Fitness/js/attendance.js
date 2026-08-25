@@ -44,7 +44,8 @@ const Attendance = (function () {
       });
     });
 
-    renderAttendance();
+    // Note: renderAttendance() is NOT called here.
+    // It will be triggered by navigateToScreen → refreshScreenData when the screen becomes visible.
   }
 
   // --- Copy from date modal ---
@@ -99,13 +100,13 @@ const Attendance = (function () {
     }
   }
 
-  var _rendering = false;
+  var _renderTimer = null;
   async function renderAttendance() {
-    if (_rendering) return; // prevent concurrent/looping renders
-    _rendering = true;
+    // Debounce: if called multiple times rapidly, only execute the last call
+    if (_renderTimer) { clearTimeout(_renderTimer); _renderTimer = null; }
 
     var container = document.getElementById('att-member-list');
-    if (!container) { _rendering = false; return; }
+    if (!container) return;
 
     var dateInput   = document.getElementById('att-date');
     var searchInput = document.getElementById('att-search');
@@ -179,8 +180,6 @@ const Attendance = (function () {
         }
       });
 
-      _rendering = false;
-
       // Bind checkbox change to update UI (not DB yet — save button does that)
       container.querySelectorAll('.att-checkbox').forEach(function (cb) {
         cb.addEventListener('change', function () {
@@ -202,7 +201,6 @@ const Attendance = (function () {
       container.innerHTML = '<p class="empty-message">Could not load members.</p>';
       console.error('Attendance render error:', e);
     }
-    _rendering = false;
   }
 
   function updatePresentCount(count) {

@@ -65,7 +65,6 @@ var App = (function () {
     currentScreen = screenId;
     try { sessionStorage.setItem('tyf_current_screen', screenId); } catch(e) {}
     refreshScreenData(screenId);
-    initDatePickers();
   }
 
   function refreshScreenData(screenId) {
