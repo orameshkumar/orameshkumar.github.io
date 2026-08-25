@@ -62,8 +62,6 @@ const IdCard = (function () {
     var qrContainer = document.getElementById('id-card-qr-container');
     renderQRIntoElement(qrContainer, member.id, 120);
 
-    // Pre-load html2canvas so share button has less async delay
-    loadHtml2Canvas().catch(function () {});
   }
 
   function hide() {
@@ -71,16 +69,7 @@ const IdCard = (function () {
     if (overlay) { overlay.setAttribute('hidden', ''); overlay.innerHTML = ''; }
   }
 
-  function loadHtml2Canvas() {
-    return new Promise(function (resolve, reject) {
-      if (typeof html2canvas !== 'undefined') { resolve(); return; }
-      var script = document.createElement('script');
-      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
-      script.onload = resolve;
-      script.onerror = function () { reject(new Error('Failed to load html2canvas')); };
-      document.head.appendChild(script);
-    });
-  }
+
 
   function downloadBlob(blob) {
     var url = URL.createObjectURL(blob);
@@ -93,63 +82,175 @@ const IdCard = (function () {
     setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
   }
 
+  // Draw entire ID card on a canvas manually — no html2canvas needed
+  function drawCardOnCanvas(member, qrMatrix) {
+    var W = 340, padding = 20;
+    var contentW = W - padding * 2;
+    var appName = typeof Settings !== 'undefined' ? Settings.getAppName() : 'Track Your Fitness';
+
+    // Pre-calculate height
+    var y = padding;
+    y += 20; // header
+    y += 10; // gap
+    if (member.photo) y += 70; // photo
+    y += 24; // name
+    y += 18; // mobile
+    y += 18; // type
+    if (member.validTill) y += 18;
+    if (member.notes) y += 18;
+    y += 14; // ID
+    y += 10; // gap
+    y += 130; // QR
+    y += 10; // gap
+    y += 16; // footer
+    y += padding;
+
+    var canvas = document.createElement('canvas');
+    canvas.width = W;
+    canvas.height = y;
+    var ctx = canvas.getContext('2d');
+
+    // Background
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, W, y);
+
+    // Border
+    ctx.strokeStyle = '#cccccc';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(1, 1, W - 2, y - 2);
+
+    var cy = padding; // current Y position
+
+    // Header
+    ctx.fillStyle = '#666666';
+    ctx.font = 'bold 9px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText((appName + ' — MEMBER ID CARD').toUpperCase(), W / 2, cy + 10);
+    cy += 20;
+
+    // Blue line under header
+    ctx.fillStyle = '#1976d2';
+    ctx.fillRect(padding, cy, contentW, 2);
+    cy += 10;
+
+    // Photo
+    if (member.photo) {
+      try {
+        var img = new Image();
+        img.src = member.photo;
+        // Draw circular photo
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(W / 2, cy + 30, 30, 0, Math.PI * 2);
+        ctx.closePath();
+        ctx.clip();
+        ctx.drawImage(img, W / 2 - 30, cy, 60, 60);
+        ctx.restore();
+        cy += 70;
+      } catch (e) { cy += 10; }
+    }
+
+    // Name
+    ctx.fillStyle = '#000000';
+    ctx.font = 'bold 16px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(member.name || '', W / 2, cy + 16);
+    cy += 24;
+
+    // Details
+    ctx.font = '12px sans-serif';
+    ctx.fillStyle = '#333333';
+    ctx.fillText('Mobile: ' + (member.mobile || ''), W / 2, cy + 12);
+    cy += 18;
+    ctx.fillText('Type: ' + (member.memberType || 'Regular'), W / 2, cy + 12);
+    cy += 18;
+
+    if (member.validTill) {
+      var isExp = member.validTill < new Date().toISOString().split('T')[0];
+      ctx.fillStyle = isExp ? '#e53935' : '#43a047';
+      ctx.font = 'bold 12px sans-serif';
+      ctx.fillText('Valid till: ' + member.validTill, W / 2, cy + 12);
+      cy += 18;
+      ctx.fillStyle = '#333333';
+      ctx.font = '12px sans-serif';
+    }
+
+    if (member.notes) {
+      ctx.fillText('Notes: ' + member.notes, W / 2, cy + 12);
+      cy += 18;
+    }
+
+    // ID
+    ctx.fillStyle = '#999999';
+    ctx.font = '9px monospace';
+    ctx.fillText('ID: ' + (member.id || ''), W / 2, cy + 10);
+    cy += 14;
+    cy += 10;
+
+    // QR Code - draw from matrix
+    if (qrMatrix && qrMatrix.length > 0) {
+      var qrSize = 120;
+      var moduleCount = qrMatrix.length;
+      var cellSize = qrSize / moduleCount;
+      var qrX = (W - qrSize) / 2;
+      var qrY = cy;
+
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(qrX - 5, qrY - 5, qrSize + 10, qrSize + 10);
+
+      ctx.fillStyle = '#000000';
+      for (var r = 0; r < moduleCount; r++) {
+        for (var c = 0; c < qrMatrix[r].length; c++) {
+          if (qrMatrix[r][c]) {
+            ctx.fillRect(qrX + c * cellSize, qrY + r * cellSize, Math.ceil(cellSize), Math.ceil(cellSize));
+          }
+        }
+      }
+      cy += qrSize + 10;
+    }
+
+    // Footer
+    ctx.fillStyle = '#666666';
+    ctx.font = '10px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(appName, W / 2, cy + 12);
+
+    return canvas;
+  }
+
   async function shareWhatsApp() {
     var cardEl = document.querySelector('.id-card');
     if (!cardEl) { alert('No ID card to share.'); return; }
 
     try {
-      // Step 1: Read QR matrix from the table BEFORE we modify anything
+      // Get member data from the card DOM
+      var member = {};
+      var nameEl = cardEl.querySelector('.id-card-name');
+      if (nameEl) member.name = nameEl.textContent;
+      var details = cardEl.querySelectorAll('.id-card-detail');
+      details.forEach(function (d) {
+        var t = d.textContent;
+        if (t.indexOf('Mobile:') === 0) member.mobile = t.replace('Mobile: ', '');
+        else if (t.indexOf('Type:') === 0) member.memberType = t.replace('Type: ', '');
+        else if (t.indexOf('Valid till:') === 0) member.validTill = t.replace('Valid till: ', '');
+        else if (t.indexOf('Notes:') === 0) member.notes = t.replace('Notes: ', '');
+        else if (t.indexOf('ID:') === 0) member.id = t.replace('ID: ', '');
+      });
+      // Get photo
+      var photoImg = cardEl.querySelector('img[style*="border-radius:50%"]');
+      if (photoImg) member.photo = photoImg.src;
+
+      // Get QR matrix
       var qrContainer = cardEl.querySelector('.id-card-qr');
       var qrMatrix = getQRMatrix(qrContainer);
 
-      // Step 2: Hide the QR container so html2canvas doesn't try to render it
-      if (qrContainer) qrContainer.style.visibility = 'hidden';
+      // Draw card on canvas (pure canvas drawing - no html2canvas)
+      var canvas = drawCardOnCanvas(member, qrMatrix);
 
-      // Step 3: Capture the card with html2canvas (without QR)
-      await loadHtml2Canvas();
-      await new Promise(function (r) { setTimeout(r, 100); });
-      var canvas = await html2canvas(cardEl, { useCORS: true, backgroundColor: '#ffffff', allowTaint: true, logging: false });
-
-      // Step 4: Restore QR visibility
-      if (qrContainer) qrContainer.style.visibility = '';
-
-      // Step 5: Draw QR manually onto the captured canvas
-      if (qrMatrix && qrMatrix.length > 0) {
-        var ctx = canvas.getContext('2d');
-        // Find where QR container is positioned relative to the card
-        var cardRect = cardEl.getBoundingClientRect();
-        var qrRect = qrContainer.getBoundingClientRect();
-        var qrX = qrRect.left - cardRect.left;
-        var qrY = qrRect.top - cardRect.top;
-        var qrSize = 120;
-        var moduleCount = qrMatrix.length;
-        var cellSize = qrSize / moduleCount;
-
-        // Draw white background for QR area
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(qrX, qrY, qrSize, qrSize);
-
-        // Draw QR modules
-        ctx.fillStyle = '#000000';
-        for (var r = 0; r < moduleCount; r++) {
-          for (var c = 0; c < qrMatrix[r].length; c++) {
-            if (qrMatrix[r][c]) {
-              ctx.fillRect(
-                qrX + Math.floor(c * cellSize),
-                qrY + Math.floor(r * cellSize),
-                Math.ceil(cellSize),
-                Math.ceil(cellSize)
-              );
-            }
-          }
-        }
-      }
-
-      // Step 6: Export and share
+      // Export
       var blob = await new Promise(function (resolve) { canvas.toBlob(resolve, 'image/png'); });
       if (!blob) { alert('Could not generate image.'); return; }
 
-      // Share or download
       var file = new File([blob], 'id-card.png', { type: 'image/png' });
       var shared = false;
       if (navigator.share && navigator.canShare) {
@@ -160,7 +261,7 @@ const IdCard = (function () {
           }
         } catch (shareErr) {
           if (shareErr.name !== 'AbortError') shared = false;
-          else shared = true; // user cancelled is fine
+          else shared = true;
         }
       }
       if (!shared) downloadBlob(blob);
