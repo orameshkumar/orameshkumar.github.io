@@ -58,8 +58,23 @@ const IdCard = (function () {
     if (!cardEl) { alert('No ID card to share.'); return; }
 
     try {
+      // Convert any QR canvas elements to img tags so html2canvas captures them fully
+      var qrCanvases = cardEl.querySelectorAll('canvas');
+      qrCanvases.forEach(function (cvs) {
+        try {
+          var img = document.createElement('img');
+          img.src = cvs.toDataURL('image/png');
+          img.style.width = cvs.width + 'px';
+          img.style.height = cvs.height + 'px';
+          img.className = 'qr-img-snapshot';
+          cvs.parentNode.replaceChild(img, cvs);
+        } catch (e) {}
+      });
+
       await loadHtml2Canvas();
-      var canvas = await html2canvas(cardEl, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
+      // Small delay to ensure img is rendered
+      await new Promise(function (r) { setTimeout(r, 200); });
+      var canvas = await html2canvas(cardEl, { scale: 2, useCORS: true, backgroundColor: '#ffffff', allowTaint: true });
       var blob = await new Promise(function (resolve) { canvas.toBlob(resolve, 'image/png'); });
       if (!blob) { alert('Could not generate image.'); return; }
 
