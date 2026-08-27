@@ -9,7 +9,7 @@
   <meta http-equiv="Expires" content="0">
   <link rel="icon" type="image/png" href="icons/icon-192.png">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
-  <title>Room Activation</title>
+  <title>Court Activation</title>
   <style>
     :root {
       --bg: #0f0f1a; --surface: #1a1a2e; --card: #22223b; --card2: #2d2d4e;
@@ -88,7 +88,7 @@
 <body>
 
 <div class="header">
-  <h1>Room Activation</h1>
+  <h1><span id="profileName"></span>Court Activation</h1>
   <p id="headerDate"></p>
 </div>
 
@@ -517,14 +517,9 @@ async function pinSubmit() {
         document.getElementById('successOverlay').classList.remove('show');
         loadingSlots = false;
         loadSlots(); // Full refresh from Firebase
-        // Auto-close a few seconds after a successful activation, so
-        // whoever scanned the QR code doesn't have to close the tab
-        // themselves. Browsers only allow script-initiated window.close()
-        // on a tab that was itself opened via script — most QR scanners
-        // hand the link to the OS, which opens a normal, not
-        // script-opened, browser tab, so this silently does nothing there
-        // rather than erroring; the page just stays open as it always did.
-        setTimeout(() => { window.close(); }, 3000);
+        // Auto-close 5 seconds after a successful activation, so whoever
+        // scanned the QR code doesn't have to close the tab themselves.
+        setTimeout(() => closePage('activated'), 5000);
       }, 1500);
 
     } else {
@@ -563,6 +558,72 @@ async function pinSubmit() {
 // ── Boot ──────────────────────────────────────────────────────
 document.getElementById('headerDate').textContent =
   new Date().toLocaleDateString([], { weekday:'long', month:'long', day:'numeric' });
+
+// ── Auto-close (lifetime + idle) ──────────────────────────────
+// The activation page is meant to be short-lived: it closes 5s after a
+// successful activation (see pinSubmit), after 30s with no interaction,
+// or 2 min after opening no matter what. Browsers only allow a
+// script-initiated window.close() on a tab that a script itself opened.
+// Most QR scanners hand the link to the OS, which opens a normal tab, so
+// window.close() silently does nothing there — in that case we replace the
+// page with a "you may close this tab" message instead of leaving the
+// live, auto-refreshing booking UI open.
+const MAX_LIFETIME_MS = 2 * 60 * 1000; // hard cap: 2 minutes
+const IDLE_TIMEOUT_MS = 30 * 1000;     // idle cap: 30 seconds
+let pageClosed = false;
+
+function closePage(reason) {
+  if (pageClosed) return;
+  pageClosed = true;
+
+  // Stop background work so nothing keeps the page busy after we intend to close
+  if (typeof idleTimer !== 'undefined' && idleTimer) clearTimeout(idleTimer);
+  if (typeof lifetimeTimer !== 'undefined' && lifetimeTimer) clearTimeout(lifetimeTimer);
+
+  window.close();
+
+  // If window.close() was a no-op (non-script-opened tab), show a closing message
+  setTimeout(() => {
+    document.body.innerHTML =
+      '<div style="min-height:100vh;display:flex;flex-direction:column;' +
+      'align-items:center;justify-content:center;text-align:center;padding:24px;' +
+      'font-family:system-ui,-apple-system,sans-serif;color:#888;gap:12px;">' +
+      '<div style="font-size:40px">👋</div>' +
+      '<div style="font-size:16px">' +
+      (reason === 'activated' ? 'Activation complete.' : 'Session timed out.') +
+      '</div>' +
+      '<div style="font-size:13px">You can close this tab now.</div>' +
+      '</div>';
+  }, 300);
+}
+
+// Hard 2-minute lifetime cap — fires regardless of activity.
+let lifetimeTimer = setTimeout(() => closePage('timeout'), MAX_LIFETIME_MS);
+
+// 30-second idle timer — reset on any user interaction.
+let idleTimer = setTimeout(() => closePage('timeout'), IDLE_TIMEOUT_MS);
+function resetIdleTimer() {
+  if (pageClosed) return;
+  clearTimeout(idleTimer);
+  idleTimer = setTimeout(() => closePage('timeout'), IDLE_TIMEOUT_MS);
+}
+['pointerdown', 'keydown', 'touchstart', 'click'].forEach(evt => {
+  document.addEventListener(evt, resetIdleTimer, { passive: true });
+});
+
+// Show the profile's display name in front of the "Court Activation" heading.
+// The name is a display-only property at /profiles/{p}/name (see the dashboard's
+// pushProfileName). fbGet is already prefixed with /profiles/{PROFILE_NUM}.
+async function loadProfileName() {
+  if (!FIREBASE_URL || !PROFILE_NUM) return;
+  try {
+    const name = await fbGet('/name');
+    if (name) {
+      document.getElementById('profileName').textContent = name + ' — ';
+    }
+  } catch (e) { /* non-critical; heading falls back to "Court Activation" */ }
+}
+loadProfileName();
 
 loadSlots();
 
