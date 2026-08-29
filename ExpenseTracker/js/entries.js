@@ -113,6 +113,66 @@ export const Entries = {
     // Queue a full-document set so the replay is self-contained.
     await DB.queueOp({ collection: COLLECTION, op: 'set', docId: id, payload: merged });
     Sync.flush();
+    return merged;
+  },
+
+  /**
+   * Edit an entry's fields and its attachment set.
+   * @param {string} id
+   * @param {object} patch  field changes (gst is recomputed if amount/gst change)
+   * @param {object} [attachments] resolved attachment set:
+   *   { kept: [{name,data}], added: File[], changed: boolean }
+   *   - changed=false: leave the existing bundle untouched
+   *   - changed=true : rebuild from kept+added (empty => remove the bundle)
+   */
+  async edit(id, patch, attachments) {
+    const who = Auth.currentProfile();
+    if (!who) throw new Error('You must be signed in.');
+    const existing = await DB.getEntry(id);
+    if (!existing) throw new Error('Entry not found.');
+
+    const amount = patch.amount != null ? Number(patch.amount) : existing.amount;
+    const gstEnabled = patch.gstEnabled != null ? patch.gstEnabled : existing.gstEnabled;
+    const gstRate = patch.gstRate != null ? patch.gstRate : existing.gstRate;
+    const gst = computeGst(amount, gstEnabled, gstRate);
+
+    const next = {
+      ...existing,
+      ...patch,
+      amount,
+      gstEnabled: gst.gstEnabled,
+      gstRate: gst.gstRate,
+      gstAmount: gst.gstAmount,
+      totalAmount: gst.totalAmount,
+      updatedAt: nowIso()
+    };
+
+    if (attachments && attachments.changed) {
+      const kept = attachments.kept || [];
+      const added = attachments.added || [];
+      try {
+        const res = await AttachmentStore.rebuildZip(who.uid, id, kept, added);
+        if (res) {
+          next.attachmentPath = res.path;
+          next.attachmentUrl = res.url;
+          next.attachmentCount = res.count;
+        } else {
+          // Final set is empty -> remove the bundle entirely.
+          if (existing.attachmentPath) await AttachmentStore.remove(existing.attachmentPath);
+          next.attachmentPath = null;
+          next.attachmentUrl = null;
+          next.attachmentCount = 0;
+        }
+      } catch (e) {
+        console.warn('Attachment rebuild failed:', e && e.message);
+        throw new Error('Could not update attachments: ' + (e && e.message));
+      }
+    }
+
+    await DB.putEntry(next);
+    await DB.queueOp({ collection: COLLECTION, op: 'set', docId: id, payload: next });
+    Sync.flush();
+    return next;
   },
 
   async remove(id) {

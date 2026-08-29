@@ -8,11 +8,12 @@ import { Sync } from './sync.js';
 import { Reports } from './reports.js';
 import { UI } from './ui.js';
 import { Cropper } from './crop.js';
-import { compressImage, ATTACH_LIMITS } from './storage.js';
+import { compressImage, ATTACH_LIMITS, AttachmentStore } from './storage.js';
 import {
   authErrorMessage,
   isoToTimeInput,
   dateTimeToIso,
+  dateGroupKey,
   currentMonthInput,
   todayDateInput,
   downloadFile,
@@ -24,7 +25,11 @@ const state = {
   accounts: [],
   filters: { text: '', accountId: '', type: '' },
   historyFilters: { text: '', accountId: '', type: '' },
-  attachments: [],   // File[] selected for the current entry
+  attachments: [],       // File[] selected for a new entry
+  editItems: [],         // unified attachment list for the entry under edit:
+                         //   {kind:'existing', name, data, blob} | {kind:'new', name, file, sizeLabel}
+  editAttachChanged: false,
+  editType: 'expense',
   entryType: 'expense',
   lastReport: null,
   lastBalanceSheet: null,
@@ -204,7 +209,7 @@ function renderHistory() {
     state.accounts,
     state.historyFilters,
     Auth.current() && Auth.current().uid,
-    { onDelete: handleDeleteEntry }
+    { onDelete: handleDeleteEntry, onEdit: openEdit }
   );
 }
 
@@ -251,6 +256,160 @@ async function processIncoming(fileList) {
 
 function formatKb(bytes) {
   return Math.max(1, Math.round(bytes / 1024)) + ' KB';
+}
+
+// ---------------------------------------------------------------------------
+// Edit modal
+// ---------------------------------------------------------------------------
+function wireEditModal() {
+  // Type toggle
+  document.querySelectorAll('.edit-type-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.edit-type-btn').forEach((b) => b.classList.toggle('active', b === btn));
+      state.editType = btn.dataset.type;
+      UI.$('#edit-type').value = state.editType;
+    });
+  });
+
+  // GST toggle
+  UI.$('#edit-gst-enabled').addEventListener('change', (e) => {
+    UI.$('#edit-gst-fields').hidden = !e.target.checked;
+  });
+
+  // Attachment add (camera + files)
+  const cam = UI.$('#edit-attach-camera-input');
+  const file = UI.$('#edit-attach-file-input');
+  UI.$('#edit-attach-camera-btn').addEventListener('click', () => cam.click());
+  UI.$('#edit-attach-file-btn').addEventListener('click', () => file.click());
+  cam.addEventListener('change', () => { processEditIncoming(cam.files); cam.value = ''; });
+  file.addEventListener('change', () => { processEditIncoming(file.files); file.value = ''; });
+
+  UI.$('#edit-cancel').addEventListener('click', () => {
+    state.editItems = [];
+    state.editAttachChanged = false;
+    UI.closeEditModal();
+  });
+  UI.$('#edit-form').addEventListener('submit', handleSaveEdit);
+}
+
+async function openEdit(entry) {
+  state.editItems = [];
+  state.editAttachChanged = false;
+  state.editType = entry.type;
+  UI.openEditModal(entry, dateGroupKey, isoToTimeInput);
+  renderEditAttachmentPreview();
+
+  // Load and unzip existing attachments (online only) into the editable list.
+  if (entry.attachmentPath) {
+    if (!navigator.onLine) {
+      UI.$('#edit-attach-existing').textContent =
+        `${entry.attachmentCount || 0} existing attachment(s) — connect to view/edit them.`;
+      return;
+    }
+    try {
+      const files = await AttachmentStore.fetchAttachments(entry.attachmentPath);
+      // Only add if the modal is still showing this same entry.
+      if (UI.$('#edit-id').value !== entry.id) return;
+      for (const f of files) {
+        state.editItems.push({ kind: 'existing', name: f.name, data: f.data, blob: f.blob });
+      }
+      renderEditAttachmentPreview();
+    } catch (e) {
+      UI.$('#edit-attach-existing').textContent = 'Could not load existing attachments.';
+    }
+  }
+}
+
+async function processEditIncoming(fileList) {
+  for (const original of Array.from(fileList || [])) {
+    if (state.editItems.length >= ATTACH_LIMITS.MAX_ATTACHMENTS) {
+      UI.toast(`Max ${ATTACH_LIMITS.MAX_ATTACHMENTS} attachments per entry.`, 'error');
+      break;
+    }
+    if (!original.type || !original.type.startsWith('image/')) {
+      state.editItems.push({ kind: 'new', name: original.name, file: original });
+      state.editAttachChanged = true;
+      renderEditAttachmentPreview();
+      continue;
+    }
+    try {
+      const cropped = await Cropper.open(original);
+      if (cropped === null) continue;
+      const source = cropped === 'skip' ? original : cropped;
+      const blob = await compressImage(source);
+      const name = (original.name || 'photo').replace(/\.[^.]+$/, '') + '.jpg';
+      const f = new File([blob], name, { type: 'image/jpeg' });
+      state.editItems.push({ kind: 'new', name, file: f, sizeLabel: formatKb(blob.size) });
+      state.editAttachChanged = true;
+      renderEditAttachmentPreview();
+    } catch (e) {
+      UI.toast('Could not process image: ' + (e && e.message), 'error');
+    }
+  }
+}
+
+function renderEditAttachmentPreview() {
+  UI.renderEditAttachmentPreview(state.editItems, (i) => {
+    state.editItems.splice(i, 1);
+    state.editAttachChanged = true; // a removal is a change
+    renderEditAttachmentPreview();
+  });
+}
+
+async function handleSaveEdit(e) {
+  e.preventDefault();
+  const errEl = UI.$('#edit-error');
+  errEl.hidden = true;
+  const fail = (msg) => { errEl.textContent = msg; errEl.hidden = false; };
+
+  const id = UI.$('#edit-id').value;
+  const accountId = UI.$('#edit-account').value;
+  const amount = parseFloat(UI.$('#edit-amount').value);
+  const dateStr = UI.$('#edit-date').value;
+  const timeStr = UI.$('#edit-time').value;
+
+  if (!accountId) return fail('Select an account head.');
+  if (!(amount > 0)) return fail('Enter a valid amount.');
+  if (!dateStr) return fail('Pick a date.');
+
+  const patch = {
+    type: state.editType,
+    accountId,
+    amount,
+    category: UI.$('#edit-category').value.trim(),
+    description: UI.$('#edit-description').value,
+    date: dateTimeToIso(dateStr, timeStr),
+    gstEnabled: UI.$('#edit-gst-enabled').checked,
+    gstRate: parseFloat(UI.$('#edit-gst-rate').value) || 0
+  };
+
+  // Resolve the final attachment set only if the user touched attachments.
+  const hasNew = state.editItems.some((x) => x.kind === 'new');
+  const attachments = {
+    changed: state.editAttachChanged,
+    kept: state.editItems.filter((x) => x.kind === 'existing').map((x) => ({ name: x.name, data: x.data })),
+    added: state.editItems.filter((x) => x.kind === 'new').map((x) => x.file)
+  };
+
+  const saveBtn = UI.$('#edit-save');
+  saveBtn.disabled = true;
+  saveBtn.textContent = hasNew ? 'Uploading…' : 'Saving…';
+  try {
+    await Entries.edit(id, patch, attachments);
+    state.editItems = [];
+    state.editAttachChanged = false;
+    UI.closeEditModal();
+    state.entries = await Entries.getAllLocal();
+    renderEntries();
+    renderHistory();
+    renderAccounts();
+    UI.toast('Transaction updated.', 'success');
+  } catch (err) {
+    fail(err && err.message);
+  } finally {
+    saveBtn.disabled = false;
+    saveBtn.textContent = 'Save changes';
+  }
 }
 
 async function handleDeleteEntry(entry) {
@@ -329,6 +488,7 @@ function wireAppControls() {
 
   UI.$('#entry-form').addEventListener('submit', handleAddEntry);
   UI.$('#account-form').addEventListener('submit', handleAddAccount);
+  wireEditModal();
 
   // List filters
   UI.$('#list-search').addEventListener('input', (e) => {
