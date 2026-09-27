@@ -1,0 +1,2303 @@
+/*
+ * ============================================================
+ *  Room Controller — ESP32 + Firebase Realtime Database
+ *  Board  : ESP32 Dev Module
+ *  Libraries: WiFiManager (by tzapu — install via Library Manager),
+ *             LittleFS (bundled with modern ESP32 board packages),
+ *             WiFi, HTTPClient, WiFiClientSecure (all built-in)
+ *
+ *  v6.4a — Emergency corrective-write + boot-locked GPIO/warning fixes:
+ *  - Beeper is active-low and driven only by its timed state machine.
+ *  - GPIO configuration/read checks never call digitalWrite().
+ *  - recurringDef CREATE/UPDATE/DELETE and all Sync V2 changes retained.
+ *
+ *  v5.0 — ID-keyed Firebase Sync V2:
+ *  - Daily generation + revision delta sync under /sync.
+ *  - Stable slot IDs under /slotRecords/roomN/today/{slotId}.
+ *  - Settings use independent /configSync/version and are not reset daily.
+ *  - Sync cursors persist in LittleFS and generation mismatch forces full refresh.
+ *  - Legacy /rooms/roomN/slots remains supported during migration.
+ *
+ *  v4.0 — Multiple profiles (sites) can share one Firebase database:
+ *  - New "Profile number" field in the setup portal, alongside the
+ *    Firebase Database URL — matches the number shown next to this site's
+ *    profile in the PWA's Settings page. All reads/writes then go under
+ *    /profiles/{n}/... instead of the database root. Leave blank to use
+ *    the root directly, same as v3.0 deployments.
+ *
+ *  v3.0 — Configurable via captive portal, no more hardcoded secrets:
+ *  - First boot (or hold BOOT/GPIO0 for 3s at power-up): the board opens
+ *    its own WiFi hotspot "RoomController-Setup". Connect a phone to it,
+ *    a setup page should open automatically (or browse to 192.168.4.1),
+ *    fill in your home WiFi + the Firebase Database URL, tap Save.
+ *  - Each room's relay/LED GPIO pins now come from Firebase
+ *    (/rooms/roomN/relayPin, /rooms/roomN/ledPin) instead of a fixed
+ *    array — set them from the PWA's Settings page. ledPin may be left
+ *    unset ("No LED for this room") to skip the LED entirely.
+ *  - Room count is however many roomN nodes exist in Firebase (up to
+ *    MAX_ROOMS), instead of a fixed 6. Add/remove rooms from the PWA,
+ *    then reboot this board to pick up the change.
+ *  - Relay contact wiring (NC/NO) is read from /config/relayWiring, set
+ *    per-profile from the PWA Settings page — see applyRelayWiringConfig().
+ *
+ *  Flicker fix (unchanged from v2.0):
+ *  - Slot refresh does NOT call applyState during active slot
+ *  - Slots parsed into temp buffer first, only copied if valid
+ *  - Bad HTTP responses always skipped — state never changes
+ *  - Schedule check compares seconds not just minutes
+ * ============================================================
+ */
+
+#include <WiFi.h>
+#include <WiFiManager.h>
+#include <HTTPClient.h>
+#include <WiFiClientSecure.h>
+#include <time.h>
+#include <FS.h>
+#include <LittleFS.h>
+
+
+// Forward declarations used by Sync V2.
+void applyRelayWiringConfig();
+void applyEmergencyPinConfig();
+void applyEmergencyTimeoutConfig();
+void applyBeeperPinConfig();
+void applyWarnMinutesConfig();
+void applyBeepConfig();
+void setBeeperPhysicalState(bool on);
+void warningAwareDelay(unsigned long ms);
+void saveConfig();
+
+// ── Setup portal ────────────────────────────────────────────────
+#define CONFIG_PATH             "/config.json"
+#define CONFIG_PORTAL_AP        "RoomController-Setup"
+#define CONFIG_PORTAL_PASSWORD  "setup1234"   // shown to installer — change here if desired
+#define CONFIG_PORTAL_TIMEOUT_S 300           // give up and reboot after 5 min with no input
+#define CONFIG_BUTTON_PIN       0             // BOOT button on most ESP32 Dev Modules
+
+// GPIO reserved for system status (boot/WiFi/error blinks) — independent of
+// any room's LED, so we always have a way to signal status even before a
+// single room's pins are known. Matches the original wiring's Room-1 LED
+// pin, so existing boards need no rewiring.
+#define STATUS_LED_PIN 2
+
+// Timezone: IST India = 19800 | GMT = 0 | EST = -18000
+#define GMT_OFFSET_SEC  19800
+#define DST_OFFSET_SEC  0
+
+// ACTIVE LOW = most relay modules (LOW = relay ON)
+// ── Relay contact wiring — NC or NO ──────────────────────────
+// NC (Normally Closed): Light ON = relay de-energised = NC contact closed = GPIO HIGH
+//                        When ESP32 is OFF → relay de-energised → lights ON (fail-safe ON)
+// NO (Normally Open):   Light ON = relay energised = NO contact closed = GPIO LOW
+//                        When ESP32 is OFF → relay de-energised → lights OFF (fail-safe OFF)
+// Defaults to NC below; applyRelayWiringConfig() reads /config/relayWiring
+// ("NC" or "NO", set per-profile from the PWA Settings page) at boot and
+// swaps these two if the profile is configured for NO instead.
+int RELAY_ON  = HIGH;   // NC default: de-energise coil → NC closed → light ON
+int RELAY_OFF = LOW;    // NC default: energise coil    → NC open   → light OFF
+#define LED_ON    HIGH
+#define LED_OFF   LOW
+
+// ── Room limits ──────────────────────────────────────────────────
+// An ESP32 only has so many GPIOs safe to use as outputs once flash/
+// strapping/UART pins are excluded. 10 rooms (relay + optional LED each)
+// comfortably fits that budget — raise only if you've checked your board's
+// actual free-pin count first.
+#define MAX_ROOMS 10
+const int PIN_NONE = -1;  // sentinel: not configured
+
+// ── Emergency/standby light — global, not per-room ────────────
+// ON whenever every room is OFF, OFF the moment any room turns on. Read
+// from /config/emergencyPin (set per-profile from the PWA Settings page),
+// PIN_NONE if left blank. Driven with the same RELAY_ON/RELAY_OFF the
+// room relays use, so it follows the same NC/NO fail-safe convention —
+// NC wiring means it's ON by default even if the ESP32 itself loses power.
+int emergencyPin = PIN_NONE;
+
+// Optional auto-off timeout for the emergency light (minutes). Read from
+// /config/emergencyTimeout, 0 (or unset) = disabled = the original always-on
+// behaviour. When >0, the emergency light turns OFF after it has been ON
+// continuously for this many minutes, and re-arms the next time a room turns
+// on (which ends the all-off standby period). emergencyOnSince is the millis()
+// timestamp when the current continuous-ON period began (0 = not currently on);
+// emergencyLatchedOff is set once the timeout fires so we hold it off without
+// re-toggling every tick, and cleared when standby ends (a room comes on).
+int  emergencyTimeoutMin  = 0;      // 0 = disabled
+unsigned long emergencyOnSince = 0; // millis() when the light last turned ON
+// Last level actually written to emergencyPin. -1 = never written yet, so
+// the first real update always goes through. updateEmergencyLight() re-runs
+// its validation (all-rooms-off check, timeout comparison) far more often
+// than the pin's desired state actually changes — every room settling,
+// every loop tick — so writing digitalWrite() unconditionally on every one
+// of those re-checks touches the pin redundantly the whole time it's
+// sitting still validated-but-unchanged. See setEmergencyLightState() below.
+bool emergencyLatchedOff  = false;  // timed out, held off until room activity rearms it
+bool emergencyOutputOn    = false;  // software ownership state; only command function changes GPIO  // true = timed out, held off until re-arm
+
+// ── End-of-slot warning — shared beeper + per-room LED blink ──
+// A single controller-wide beeper (not per-room) sounds a short burst when
+// any room's ACTIVE slot enters its final warnMinutes, and that room's own
+// LED (the existing ledPin — no new per-room pin) blinks for the rest of the
+// window. Both settings are read from /config at boot and default to OFF, so
+// existing deployments that never set them behave exactly as before:
+//   /config/beeperPin  → PIN_NONE if unset  → beeper never driven
+//   /config/warnMinutes → <=0 if unset      → whole feature disabled
+// The beeper is driven with plain digitalWrite (active buzzer), same as LEDs.
+int beeperPin   = PIN_NONE;
+int warnMinutes = 0;   // 0 or negative = feature disabled
+// Beeper is powered through a relay contact. Use the SAME physical load-state
+// mapping as room/emergency relays. NC default: ON=HIGH releases the relay and
+// closes NC; OFF=LOW energizes the relay and opens NC. NO swaps automatically.
+#define BEEPER_ON  RELAY_ON
+#define BEEPER_OFF RELAY_OFF
+
+String firebaseUrl;  // e.g. https://your-project-default-rtdb.asia-southeast1.firebasedatabase.app
+
+// Profiles sharing one Firebase project are namespaced under /profiles/{n} —
+// set once during setup (matches whatever number the PWA's Settings page
+// shows for this site's profile). Empty means no namespacing — bare /rooms
+// at the database root, same as pre-v4 deployments.
+String profileNum;
+
+// ── Room state ────────────────────────────────────────────────
+// daysMask: 7-bit weekday set for recurring slots — bit 0=Sun .. bit 6=Sat.
+// 0 = no restriction (runs every day), which keeps pre-V1 recurring slots
+// (and all non-recurring slots) behaving exactly as before.
+// slotTs mirrors the PWA's per-slot modified-at timestamp (written by
+// pushRoom() on every create/edit). Kept as a string purely for equality
+// comparison in refreshSlotsOnly() — it's a JS millisecond timestamp
+// (~13 digits), too large for a 32-bit int, and nothing here ever needs
+// to do arithmetic on it, only detect "did this slot's content change."
+struct Slot {
+  int sh, sm, eh, em;
+  bool recurring;
+  bool activated;
+  bool expired;
+  int daysMask;
+  char slotTs[16];
+  char id[40];          // stable Firebase record identity
+  long version;         // per-record version from Sync V2
+};
+
+// A recurring DEFINITION read from /rooms/roomN/recurring — the authoritative
+// source the day buckets are generated FROM during rollover. daysMask uses the
+// same bit convention as Slot (0 = every day). code/bookedBy/phone are carried
+// through into the materialized day slot so the PWA/activate page keep them.
+struct RecurDef {
+  int  sh, sm, eh, em;
+  int  daysMask;
+  char code[6];      // "" = auto-approved (no code)
+  char bookedBy[24];
+  char phone[20];
+  char defId[24];    // matches the PWA's makeRecurDefId() — "" if this def
+                      // predates the id field. Stamped onto every day-bucket
+                      // instance materialized from it (see buildDefSlotJson)
+                      // so rollover can recognize "the same occurrence" across
+                      // the tomorrow→today relabeling and carry its activation
+                      // forward instead of resetting it.
+};
+
+struct Room {
+  bool lightOn   = false;
+  int  ovr       = -1;       // -1=auto  0=force OFF  1=force ON
+  int  relayPin  = PIN_NONE; // set from Firebase at boot
+  int  ledPin    = PIN_NONE; // PIN_NONE = no LED configured for this room
+  Slot slots[10];
+  int  slotCount = 0;
+  RecurDef recurDefs[10];    // recurring definitions for this room
+  int  recurDefCount = 0;
+  char name[24];
+  // End-of-slot warning state (see beeperPin/warnMinutes above). warning is
+  // true only while this room is inside an active slot's final warnMinutes;
+  // while true, the blink logic in loop() owns this room's LED instead of
+  // setRelay(). ledBlinkOn tracks the current blink phase so the toggle is
+  // non-blocking. Both stay false/unused when the feature is disabled.
+  bool warning    = false;
+  bool ledBlinkOn = false;
+};
+
+Room rooms[MAX_ROOMS];
+int  roomCount = 0;  // how many rooms were actually found in Firebase at boot (<= MAX_ROOMS)
+
+// Per-room cache of the last-seen /rooms/roomN/slotsUpdatedAt value —
+// refreshSlotsOnly() checks this cheap marker before paying for the full
+// /slots download. Every writer that touches a room's /slots bumps this
+// same field (the PWA's writeRoomSlots() helper; this firmware's own
+// midnightRollover()/markSlotExpired()) — see refreshSlotsOnly() for why an
+// empty/unset marker must never be treated as "unchanged".
+String lastSlotsMarker[MAX_ROOMS];
+
+unsigned long lastPollTime      = 0;
+unsigned long lastScheduleCheck = 0;
+unsigned long lastSlotRefresh   = 0;
+unsigned long lastStatusPush    = 0;
+bool          timeSynced        = false; // set once in setup() from getLocalTime()'s result — an
+                                          // unsynced clock's epoch day is garbage, so checkMidnight()
+                                          // must not trust it to decide whether a day has passed
+
+// Persisted across reboots (LittleFS) — lets setup() detect a day change
+// that happened while this board was off/rebooting/disconnected. Also the
+// single source of truth checkMidnight() advances only after a fully
+// successful rollover, so a dropped connection retries instead of being
+// silently skipped. -1 = no rollover recorded yet (first boot on this
+// firmware, or ever) — see loadConfig()/saveConfig().
+int lastRolloverDay = -1;
+
+// ── Firebase Sync V2 cursor (persisted in CONFIG_PATH) ─────────
+long syncGeneration = 0;     // YYYYMMDD daily generation
+long syncRevision = 0;       // last fully-applied daily revision
+long configVersion = 0;      // persistent settings version, independent of daily sync
+bool syncV2Available = false;
+
+
+// Intervals
+const unsigned long POLL_INTERVAL     = 3000;   // override poll every 3 sec
+const unsigned long SCHEDULE_INTERVAL = 10000;  // schedule check every 10 sec
+const unsigned long SLOT_REFRESH      = 10000;  // slot refresh every 10 sec — picks up activation fast
+const unsigned long HEARTBEAT         = 300000; // heartbeat every 5 min
+
+// ── End-of-slot warning timing (non-blocking) ────────────────
+const unsigned long LED_BLINK_INTERVAL = 100;  // LED toggle period during a warning window (faster blink)
+const unsigned long BEEP_GAP_MS        = 150;  // silence between beeps in a multi-beep burst (fixed)
+
+// Beep pattern — configurable from the PWA Settings page, read from
+// /config/beepMs and /config/beepCount at boot (reboot to apply). Defaults:
+// beepOnMs = on-time of EACH beep (250ms = 0.25s); beepBurstCount = number of
+// beeps (1 = single beep). Multiple beeps are separated by BEEP_GAP_MS.
+unsigned long beepOnMs       = 250;
+int           beepBurstCount = 1;
+unsigned long lastLedBlinkToggle = 0;
+// One controller-wide configured burst per aggregate warning episode.
+// A dedicated task guarantees pulse timing even while HTTPS calls block loop().
+TaskHandle_t beeperTaskHandle = nullptr;
+bool warningEpisodeActive = false;
+bool beeperHardwareInitialized = false;
+bool gpioAssignmentsLocked = false; // true after setup pinMode initialization; runtime config cannot change GPIO numbers
+const int MAX_WARNED_SLOT_IDS = MAX_ROOMS * 10;
+char warnedSlotIds[MAX_WARNED_SLOT_IDS][40] = {{0}};
+int warnedSlotIdCount = 0;
+
+// ── Time helpers ──────────────────────────────────────────────
+int nowH()    { struct tm t; getLocalTime(&t); return t.tm_hour; }
+int nowMn()   { struct tm t; getLocalTime(&t); return t.tm_min;  }
+int nowSec()  { struct tm t; getLocalTime(&t); return t.tm_sec;  }
+// Days since the Unix epoch — unlike day-of-month (tm_mday), this never
+// wraps at month/year boundaries, so a straight != comparison across a
+// reboot is always correct regardless of how much time actually passed.
+int currentEpochDay() { return (int)(time(nullptr) / 86400L); }
+int nowMins() { return nowH() * 60 + nowMn(); }
+int nowWeekday() { struct tm t; getLocalTime(&t); return t.tm_wday; } // 0=Sun..6=Sat
+
+// True if a recurring slot runs on the current weekday. daysMask 0 = every
+// day (back-compat). Non-recurring slots aren't day-restricted, so callers
+// only apply this to recurring ones.
+bool slotRunsToday(const Slot &sl) {
+  if (sl.daysMask == 0) return true;
+  return (sl.daysMask & (1 << nowWeekday())) != 0;
+}
+
+String getTime() {
+  struct tm t; getLocalTime(&t);
+  char buf[9]; snprintf(buf, 9, "%02d:%02d:%02d", t.tm_hour, t.tm_min, t.tm_sec);
+  return String(buf);
+}
+
+// "YYYY-MM-DD" for today, local time — matches the format the PWA stores
+// in each slot's "date" field (todayStr() there).
+String getDateStr() {
+  struct tm t; getLocalTime(&t);
+  char buf[11]; snprintf(buf, 11, "%04d-%02d-%02d", t.tm_year + 1900, t.tm_mon + 1, t.tm_mday);
+  return String(buf);
+}
+
+// "YYYY-MM-DD" for tomorrow, local time — used to stamp recurring slots
+// seeded into the slotsT (tomorrow) bucket during rollover.
+String getTomorrowDateStr() {
+  time_t tt = time(nullptr) + 86400L;
+  struct tm t; localtime_r(&tt, &t);
+  char buf[11]; snprintf(buf, 11, "%04d-%02d-%02d", t.tm_year + 1900, t.tm_mon + 1, t.tm_mday);
+  return String(buf);
+}
+// Tomorrow's weekday (0=Sun..6=Sat).
+int tomorrowWeekday() { return (nowWeekday() + 1) % 7; }
+
+bool parseTime(String s, int &h, int &m) {
+  s.trim();
+  int c = s.indexOf(':');
+  if (c < 0) return false;
+  h = s.substring(0, c).toInt();
+  m = s.substring(c + 1).toInt();
+  return (h >= 0 && h < 24 && m >= 0 && m < 60);
+}
+
+// ── Status LED — system-level signalling, independent of any room ────
+void flashStatusLed(int times, int ms) {
+  for (int i = 0; i < times; i++) {
+    digitalWrite(STATUS_LED_PIN, HIGH); delay(ms);
+    digitalWrite(STATUS_LED_PIN, LOW);  delay(ms);
+  }
+}
+
+// ── Relay + LED — only fires GPIO if state truly changes ──────
+void setRelay(int idx, bool on) {
+  // Always write to hardware — don't trust software state matches physical state
+  // NC wiring: RELAY_ON=HIGH (de-energised=NC closed=light ON)
+  //            RELAY_OFF=LOW (energised=NC open=light OFF)
+  if (rooms[idx].relayPin >= 0 && rooms[idx].relayPin != beeperPin) {
+    digitalWrite(rooms[idx].relayPin, on ? RELAY_ON : RELAY_OFF);
+  }
+  // While a room is in its end-of-slot warning window, the blink logic in
+  // loop() owns its LED — don't fight it here. The relay still switches
+  // normally; only the LED is deferred. When the warning ends,
+  // checkEndOfSlotWarnings() restores the LED to the current relay state.
+  if (rooms[idx].ledPin >= 0 && rooms[idx].ledPin != beeperPin && !rooms[idx].warning) {
+    digitalWrite(rooms[idx].ledPin, on ? LED_ON : LED_OFF);
+  }
+  if (rooms[idx].lightOn != on) {
+    rooms[idx].lightOn = on;
+    Serial.printf("[%s] Room %d → %s\n", getTime().c_str(), idx+1, on?"ON":"OFF");
+  }
+  updateEmergencyLight(); // re-check "are all rooms off" every time any one room's state settles
+}
+
+// ── mergeSlots — merge overlapping/adjacent slots into clean ranges ──
+// Example: [9-11, 10-12] → [9-12]  [9-10, 11-12] → [9-10, 11-12]
+// ── mergeSlots — only merge AUTO slots (no code required) ────
+// Slots with activation codes are kept SEPARATE — each has its own
+// code and activation state. Merging them would destroy that.
+// Only auto-approved (no-code) slots get merged when overlapping.
+void mergeSlots(int idx) {
+  if (rooms[idx].slotCount < 2) return;
+
+  // Sort slots by start time
+  for (int i = 0; i < rooms[idx].slotCount - 1; i++) {
+    for (int j = i + 1; j < rooms[idx].slotCount; j++) {
+      int si = rooms[idx].slots[i].sh * 60 + rooms[idx].slots[i].sm;
+      int sj = rooms[idx].slots[j].sh * 60 + rooms[idx].slots[j].sm;
+      if (sj < si) {
+        Slot tmp = rooms[idx].slots[i];
+        rooms[idx].slots[i] = rooms[idx].slots[j];
+        rooms[idx].slots[j] = tmp;
+      }
+    }
+  }
+  // Note: we intentionally do NOT merge slots with codes
+  // Each coded slot is independent with its own activation state
+  // isInSlot() checks each slot individually
+}
+
+// ── isInSlot — true if current time is in an ACTIVATED slot ──
+// Slot must be both: within time range AND activated by user code
+// Non-activated slots do NOT turn on the relay
+bool isInSlot(int idx) {
+  int nm = nowMins();
+  for (int i = 0; i < rooms[idx].slotCount; i++) {
+    // A recurring slot that isn't scheduled for today's weekday is ignored —
+    // this is the day-of-week gate. Non-recurring slots (and recurring slots
+    // with daysMask 0) are unaffected.
+    if (rooms[idx].slots[i].recurring && !slotRunsToday(rooms[idx].slots[i])) continue;
+    int s = rooms[idx].slots[i].sh * 60 + rooms[idx].slots[i].sm;
+    int e = rooms[idx].slots[i].eh * 60 + rooms[idx].slots[i].em;
+    if (nm >= s && nm < e) {
+      if (rooms[idx].slots[i].activated) return true;
+    }
+  }
+  return false;
+}
+
+// ── applyState — uses override first, then schedule ──────────
+void applyState(int idx) {
+  if      (rooms[idx].ovr == 1)  setRelay(idx, true);
+  else if (rooms[idx].ovr == 0)  setRelay(idx, false);
+  else                           setRelay(idx, isInSlot(idx));
+}
+
+void applyAllStates() {
+  for (int i = 0; i < roomCount; i++) applyState(i);
+}
+
+// ── LED startup test — quick blink on every configured room LED ──
+// Runs AFTER pins are known (Firebase read + pinMode), so it doubles as a
+// visual confirmation that each room's LED pin is wired correctly.
+void ledStartupTest() {
+  for (int b = 0; b < 3; b++) {
+    for (int i = 0; i < roomCount; i++) if (rooms[i].ledPin >= 0 && rooms[i].ledPin != beeperPin) digitalWrite(rooms[i].ledPin, LED_ON);
+    delay(150);
+    for (int i = 0; i < roomCount; i++) if (rooms[i].ledPin >= 0 && rooms[i].ledPin != beeperPin) digitalWrite(rooms[i].ledPin, LED_OFF);
+    delay(100);
+  }
+}
+
+// ── HTTP helpers — returns "error" on failure ─────────────────
+String profilePrefix() {
+  return profileNum.length() > 0 ? "/profiles/" + profileNum : "";
+}
+
+String fbGet(String path) {
+  WiFiClientSecure client;
+  client.setInsecure();
+  HTTPClient http;
+  http.begin(client, firebaseUrl + profilePrefix() + path + ".json");
+  http.setTimeout(5000);
+  int code = http.GET();
+  String result = "error";
+  if (code == 200) {
+    result = http.getString();
+    result.trim();
+  } else {
+    Serial.printf("fbGet failed %s code=%d\n", path.c_str(), code);
+  }
+  http.end();
+  return result;
+}
+
+bool fbPut(String path, String jsonValue) {
+  WiFiClientSecure client;
+  client.setInsecure();
+  HTTPClient http;
+  http.begin(client, firebaseUrl + profilePrefix() + path + ".json");
+  http.addHeader("Content-Type", "application/json");
+  http.setTimeout(5000);
+  int code = http.PUT(jsonValue);
+  http.end();
+  return (code == 200);
+}
+
+// PATCH selected children without replacing siblings.
+bool fbPatch(String path, String jsonValue) {
+  WiFiClientSecure client;
+  client.setInsecure();
+  HTTPClient http;
+  http.begin(client, firebaseUrl + profilePrefix() + path + ".json");
+  http.addHeader("Content-Type", "application/json");
+  http.setTimeout(5000);
+  int code = http.sendRequest("PATCH", jsonValue);
+  http.end();
+  return (code == 200);
+}
+
+// ── Push status back to Firebase ─────────────────────────────
+void pushStatus(int idx) {
+  String base = "/rooms/room" + String(idx + 1);
+  fbPut(base + "/lightOn",  rooms[idx].lightOn ? "true" : "false");
+  fbPut(base + "/lastSeen", "\"" + getTime() + "\"");
+}
+
+void pushAllStatus() {
+  for (int i = 0; i < roomCount; i++) { pushStatus(i); warningAwareDelay(150); }
+  // Controller-level heartbeat — a single "board last seen" timestamp for the
+  // whole profile (all rooms share one ESP32, so health is board-wide, not
+  // per-room). Full "YYYY-MM-DD HH:MM:SS" local time so the PWA can compute
+  // how long ago it was and flag the controller as not responding. Written to
+  // /status/lastSeen under this profile's namespace (via fbPut's prefix).
+  fbPut("/status/lastSeen", "\"" + getDateStr() + " " + getTime() + "\"");
+}
+
+// ── Parse an integer field like "relayPin":26 — returns PIN_NONE if the
+// field is missing, explicitly null, or not a number. Handles variable-
+// width values (1 or 2 digit GPIO numbers), unlike fixed-width substring
+// slicing used for the "HH:MM" time fields elsewhere in this file.
+int parseIntField(const String &json, const String &field) {
+  String key = "\"" + field + "\":";
+  int idx = json.indexOf(key);
+  if (idx < 0) return PIN_NONE;
+  int start = idx + key.length();
+  if (json.substring(start, start + 4) == "null") return PIN_NONE;
+  int end = start;
+  bool neg = false;
+  if (end < (int)json.length() && json[end] == '-') { neg = true; end++; }
+  int digitsStart = end;
+  while (end < (int)json.length() && isDigit(json[end])) end++;
+  if (end == digitsStart) return PIN_NONE; // no digits found — malformed, treat as unset
+  int val = json.substring(digitsStart, end).toInt();
+  return neg ? -val : val;
+}
+
+// ── Count contiguous roomN nodes (room1, room2, ...) up to MAX_ROOMS ──
+// The PWA always keeps room numbering contiguous (renumbering on delete),
+// so stopping at the first gap is a safe, simple way to size the array.
+int countRooms(const String &json) {
+  int n = 0;
+  while (n < MAX_ROOMS) {
+    String key = "\"room" + String(n + 1) + "\":{";
+    if (json.indexOf(key) < 0) break;
+    n++;
+  }
+  return n;
+}
+
+// ── Parse slots — into TEMP buffer, only copy if fully valid ──
+// ── Parse recurring DEFINITIONS from /rooms/roomN/recurring ──
+// Each def object: {"id","s","e","days":[..],"code","bookedBy","phone"}.
+// Stored into rooms[idx].recurDefs; these are the source of truth the
+// rollover generates day buckets from.
+void parseRecurDefs(int idx, String json) {
+  rooms[idx].recurDefCount = 0;
+  if (json == "null" || json == "" || json == "error" || json.length() < 5) return;
+  int pos = 0;
+  while (pos < (int)json.length() && rooms[idx].recurDefCount < 10) {
+    int si = json.indexOf("\"s\":\"", pos);
+    int ei = json.indexOf("\"e\":\"", pos);
+    if (si < 0 || ei < 0) break;
+    int objStart = json.lastIndexOf('{', si);
+    int objEnd   = json.indexOf('}', ei);
+    String startStr = json.substring(si + 5, si + 10);
+    String endStr   = json.substring(ei + 5, ei + 10);
+    int sh, sm, eh, em;
+    if (parseTime(startStr, sh, sm) && parseTime(endStr, eh, em) && objStart >= 0 && objEnd >= 0) {
+      String obj = json.substring(objStart, objEnd + 1);
+      RecurDef &d = rooms[idx].recurDefs[rooms[idx].recurDefCount];
+      d.sh = sh; d.sm = sm; d.eh = eh; d.em = em;
+      d.daysMask = daysMaskFromJson(obj);
+      String c  = extractStringField(obj, "code");  c.toCharArray(d.code, sizeof(d.code));
+      String bb = extractStringField(obj, "bookedBy"); bb.toCharArray(d.bookedBy, sizeof(d.bookedBy));
+      String ph = extractStringField(obj, "phone");    ph.toCharArray(d.phone, sizeof(d.phone));
+      String di = extractStringField(obj, "id");       di.toCharArray(d.defId, sizeof(d.defId));
+      rooms[idx].recurDefCount++;
+    }
+    pos = max(si, ei) + 10;
+  }
+}
+
+void parseSlots(int idx, String json) {
+  if (json == "null" || json == "" || json == "error" || json.length() < 5) {
+    rooms[idx].slotCount = 0;
+    return;
+  }
+
+  Slot tempSlots[10];
+  int  tempCount = 0;
+  int  pos = 0;
+  bool sawSlotObject = false; // true if we parsed ANY real slot object, deleted
+                              // or not — distinguishes "every slot got soft-
+                              // deleted, count really is 0" from "couldn't
+                              // parse anything", which must NOT stomp slotCount
+
+  while (pos < (int)json.length() && tempCount < 10) {
+    int si = json.indexOf("\"s\":\"", pos);
+    int ei = json.indexOf("\"e\":\"", pos);
+    if (si < 0 || ei < 0) break;
+    String startStr = json.substring(si + 5, si + 10);
+    String endStr   = json.substring(ei + 5, ei + 10);
+    int sh, sm, eh, em;
+    if (parseTime(startStr, sh, sm) && parseTime(endStr, eh, em)) {
+      sawSlotObject = true; // saw a real slot object, even if it turns out deleted below
+      int objStart = json.lastIndexOf('{', si);
+      int objEnd   = json.indexOf('}', ei);
+      bool isRecurring = false;
+      bool isActivated = false;
+      bool isExpired   = false;
+      bool isDeleted   = false;
+      int  slotDaysMask = 0; // 0 = every day (see Slot.daysMask)
+      String slotTsStr = ""; // "" if absent — compares unequal to any real timestamp, which is fine
+      String slotIdStr = "";
+      long slotVersion = 0;
+      if (objStart >= 0 && objEnd >= 0) {
+        String slotObj = json.substring(objStart, objEnd + 1);
+        slotTsStr = extractRawField(slotObj, "slotTs");
+        slotIdStr = extractStringField(slotObj, "id");
+        slotVersion = extractRawField(slotObj, "version").toInt();
+        // Soft-deleted (see the PWA's deleteSlot()) — skip entirely, never
+        // scheduled/activated. It stays in Firebase, still carrying its id,
+        // until the next midnightRollover() permanently drops it.
+        isDeleted = slotObj.indexOf("\"deleted\":true") >= 0;
+        // Recurring flag
+        isRecurring = slotObj.indexOf("\"recurring\":true") >= 0;
+        // Activated: activatedAt exists and is NOT null. This is now the SINGLE
+        // source of truth for whether a slot drives the relay — for BOTH coded
+        // and code-less ("Auto") slots.
+        //
+        // Previously a slot with "code":null was force-activated here regardless
+        // of activatedAt. That made an "Auto" slot impossible to turn OFF from
+        // the app: the admin's Deactivate nulled activatedAt but the firmware
+        // re-activated it anyway. Now the PWA SEEDS activatedAt for a no-code
+        // slot at creation (so it's on by default) and CLEARS it on Deactivate,
+        // and the firmware simply honours that flag — so Deactivate actually
+        // holds the relay off.
+        //
+        // Upgrade note: an Auto slot written by an OLDER PWA (has "code":null
+        // but no activatedAt) will read as NOT activated until it's re-saved /
+        // rolled over by the new PWA, which seeds activatedAt. This is the
+        // intended co-upgrade behaviour (flash firmware + update PWA together).
+        bool hasActivatedField = slotObj.indexOf("\"activatedAt\":") >= 0;
+        bool activatedIsNull   = slotObj.indexOf("\"activatedAt\":null") >= 0;
+        isActivated = (hasActivatedField && !activatedIsNull);
+        // Expired flag — MUST be read back, otherwise every slot refresh
+        // resets it to false and checkSchedules() re-marks it expired on the
+        // next tick, spamming the log and re-writing Firebase every 10s.
+        isExpired = slotObj.indexOf("\"expired\":true") >= 0;
+        // Recurring weekday set — the PWA writes "days":[0..6] (0=Sun). Parse
+        // the digits between [ and ] into a 7-bit mask. Absent/null/empty →
+        // mask 0 = "every day" (back-compat for pre-V1 recurring slots).
+        int daysKey = slotObj.indexOf("\"days\":[");
+        if (daysKey >= 0) {
+          int p = daysKey + 8; // just past "days":[
+          while (p < (int)slotObj.length() && slotObj[p] != ']') {
+            if (isDigit(slotObj[p])) {
+              int d = slotObj[p] - '0';         // single-digit 0..6
+              if (d >= 0 && d <= 6) slotDaysMask |= (1 << d);
+            }
+            p++;
+          }
+        }
+      }
+      if (!isDeleted) {
+        // char[] can't be filled via the brace initializer above, so set the
+        // scalar fields there and copy slotTs in as a separate step.
+        tempSlots[tempCount] = {sh, sm, eh, em, isRecurring, isActivated, isExpired, slotDaysMask};
+        slotTsStr.toCharArray(tempSlots[tempCount].slotTs, sizeof(tempSlots[tempCount].slotTs));
+        slotIdStr.toCharArray(tempSlots[tempCount].id, sizeof(tempSlots[tempCount].id));
+        tempSlots[tempCount].version = slotVersion;
+        tempCount++;
+      }
+    }
+    pos = max(si, ei) + 10;
+  }
+
+  if (tempCount > 0 || json == "[]" || sawSlotObject) {
+    rooms[idx].slotCount = tempCount;
+    for (int i = 0; i < tempCount; i++) rooms[idx].slots[i] = tempSlots[i];
+    mergeSlots(idx);
+  }
+}
+
+// ── Firebase Sync V2 ─────────────────────────────────────────
+String syncRawField(const String &json, const String &field) {
+  String key = "\"" + field + "\":";
+  int p = json.indexOf(key);
+  if (p < 0) return "";
+  p += key.length();
+  while (p < (int)json.length() && isspace(json[p])) p++;
+  if (p < (int)json.length() && json[p] == '"') {
+    int e = json.indexOf('"', p + 1);
+    return e < 0 ? "" : json.substring(p + 1, e);
+  }
+  int comma = json.indexOf(',', p);
+  int brace = json.indexOf('}', p);
+  int e = comma < 0 ? brace : (brace < 0 ? comma : min(comma, brace));
+  if (e < 0) e = json.length();
+  String out = json.substring(p, e); out.trim(); return out;
+}
+
+bool loadSyncMeta(long &remoteGeneration, long &remoteRevision) {
+  String meta = fbGet("/sync/meta");
+  if (meta == "error" || meta == "null" || meta.length() < 4) return false;
+  remoteGeneration = syncRawField(meta, "generation").toInt();
+  remoteRevision = syncRawField(meta, "revision").toInt();
+  return remoteGeneration > 0 && remoteRevision >= 0;
+}
+
+int roomIndexFromId(const String &roomId) {
+  String digits = roomId;
+  if (digits.startsWith("room")) digits.remove(0, 4);
+  int n = digits.toInt();
+  return (n >= 1 && n <= roomCount) ? n - 1 : -1;
+}
+
+bool parseOneCanonicalSlot(const String &json, Slot &out) {
+  if (json == "error" || json == "null" || json.length() < 5) return false;
+  String ss = extractStringField(json, "s");
+  String ee = extractStringField(json, "e");
+  if (!parseTime(ss, out.sh, out.sm) || !parseTime(ee, out.eh, out.em)) return false;
+  out.recurring = json.indexOf("\"recurring\":true") >= 0;
+  out.activated = json.indexOf("\"activatedAt\":") >= 0 && json.indexOf("\"activatedAt\":null") < 0;
+  out.expired = json.indexOf("\"expired\":true") >= 0;
+  out.daysMask = daysMaskFromJson(json);
+  extractRawField(json, "slotTs").toCharArray(out.slotTs, sizeof(out.slotTs));
+  extractStringField(json, "id").toCharArray(out.id, sizeof(out.id));
+  out.version = extractRawField(json, "version").toInt();
+  return json.indexOf("\"deleted\":true") < 0;
+}
+
+int findLocalSlotById(int roomIdx, const String &slotId) {
+  for (int i = 0; i < rooms[roomIdx].slotCount; i++) {
+    if (String(rooms[roomIdx].slots[i].id) == slotId) return i;
+  }
+  return -1;
+}
+
+bool applyCanonicalSlotDelta(const String &roomId, const String &bucket,
+                             const String &recordId, const String &operation) {
+  // ESP32 drives today's schedule only. Tomorrow changes are consumed by the
+  // next daily full refresh after rollover.
+  if (bucket != "today") return true;
+  int ri = roomIndexFromId(roomId);
+  if (ri < 0) return false;
+  int existing = findLocalSlotById(ri, recordId);
+  if (operation == "delete") {
+    if (existing >= 0) {
+      for (int i = existing; i < rooms[ri].slotCount - 1; i++) rooms[ri].slots[i] = rooms[ri].slots[i + 1];
+      rooms[ri].slotCount--;
+      applyState(ri);
+    }
+    return true;
+  }
+  String raw = fbGet("/slotRecords/room" + String(ri + 1) + "/today/" + recordId);
+  Slot incoming = {};
+  if (!parseOneCanonicalSlot(raw, incoming)) return false;
+  if (existing >= 0) rooms[ri].slots[existing] = incoming;
+  else {
+    if (rooms[ri].slotCount >= 10) return false;
+    rooms[ri].slots[rooms[ri].slotCount++] = incoming;
+  }
+  mergeSlots(ri);
+  applyState(ri);
+  return true;
+}
+
+bool refreshAllSlotsFromCanonical() {
+  bool allOk = true;
+  for (int i = 0; i < roomCount; i++) {
+    String json = fbGet("/slotRecords/room" + String(i + 1) + "/today");
+    if (json == "error") { allOk = false; continue; }
+    if (json == "null") json = "[]";
+    parseSlots(i, json);
+    applyState(i);
+    warningAwareDelay(100);
+  }
+  return allOk;
+}
+
+void refreshPersistentConfig() {
+  // Settings are independent of daily slot sync. Pin changes still require a
+  // reboot because pinMode is established during setup.
+  applyRelayWiringConfig();
+  // GPIO-number assignments are boot-locked. Runtime refresh changes behavior
+  // settings only; pin changes in Firebase take effect after reboot.
+  applyEmergencyTimeoutConfig();
+  applyWarnMinutesConfig();
+  applyBeepConfig();
+  int requestedEmergencyPin = readConfiguredGpio("/config/emergencyPin");
+  int requestedBeeperPin = readConfiguredGpio("/config/beeperPin");
+  if (requestedEmergencyPin != emergencyPin)
+    Serial.printf("Emergency GPIO change pending reboot: %d -> %d\n", emergencyPin, requestedEmergencyPin);
+  if (requestedBeeperPin != beeperPin)
+    Serial.printf("Beeper GPIO change pending reboot: %d -> %d\n", beeperPin, requestedBeeperPin);
+  Serial.println("Sync V2: runtime settings refreshed; GPIO assignments remain locked until reboot");
+}
+
+bool fullSyncV2Refresh() {
+  if (!refreshAllSlotsFromCanonical()) return false;
+  long g, r;
+  if (!loadSyncMeta(g, r)) return false;
+  syncGeneration = g;
+  syncRevision = r;
+  syncV2Available = true;
+  saveConfig();
+  return true;
+}
+
+// Apply one recurring-definition delta by stable defId. Definitions are
+// persistent schedule rules; concrete today/tomorrow slot occurrences arrive
+// through slot or roomSnapshot events. This function keeps the ESP32's local
+// definition cache current even when the rule does not apply today/tomorrow.
+int findRecurringDefById(int roomIdx, const String &defId) {
+  for (int i = 0; i < rooms[roomIdx].recurDefCount; i++) {
+    if (String(rooms[roomIdx].recurDefs[i].defId) == defId) return i;
+  }
+  return -1;
+}
+
+bool parseOneCanonicalRecurringDef(const String &json, RecurDef &out) {
+  if (json == "error" || json == "null" || json.length() < 5) return false;
+  if (json.indexOf("\"deleted\":true") >= 0) return false;
+  String start = extractStringField(json, "s");
+  String end   = extractStringField(json, "e");
+  if (!parseTime(start, out.sh, out.sm) || !parseTime(end, out.eh, out.em)) return false;
+  out.daysMask = daysMaskFromJson(json);
+  extractStringField(json, "code").toCharArray(out.code, sizeof(out.code));
+  extractStringField(json, "bookedBy").toCharArray(out.bookedBy, sizeof(out.bookedBy));
+  extractStringField(json, "phone").toCharArray(out.phone, sizeof(out.phone));
+  extractStringField(json, "id").toCharArray(out.defId, sizeof(out.defId));
+  return strlen(out.defId) > 0;
+}
+
+bool applyRecurringDefDelta(const String &roomIdRaw, const String &defId,
+                            const String &operation) {
+  int roomIdx = roomIndexFromId(roomIdRaw);
+  if (roomIdx < 0 || defId.length() == 0) return false;
+  int existing = findRecurringDefById(roomIdx, defId);
+
+  if (operation == "delete") {
+    if (existing >= 0) {
+      for (int i = existing; i < rooms[roomIdx].recurDefCount - 1; i++)
+        rooms[roomIdx].recurDefs[i] = rooms[roomIdx].recurDefs[i + 1];
+      rooms[roomIdx].recurDefCount--;
+    }
+    Serial.printf("Sync V2: recurringDef DELETE room=%d id=%s\n",
+      roomIdx + 1, defId.c_str());
+    return true;
+  }
+
+  String raw = fbGet("/recurringDefs/room" + String(roomIdx + 1) + "/" + defId);
+  RecurDef incoming = {};
+  if (!parseOneCanonicalRecurringDef(raw, incoming)) return false;
+
+  if (existing >= 0) rooms[roomIdx].recurDefs[existing] = incoming;
+  else {
+    if (rooms[roomIdx].recurDefCount >= 10) {
+      Serial.printf("Sync V2: recurring definition capacity reached for room %d\n", roomIdx + 1);
+      return false;
+    }
+    rooms[roomIdx].recurDefs[rooms[roomIdx].recurDefCount++] = incoming;
+  }
+  Serial.printf("Sync V2: recurringDef %s room=%d id=%s\n",
+    operation.c_str(), roomIdx + 1, defId.c_str());
+  return true;
+}
+
+bool processSyncChange(long revisionNo) {
+  String change = fbGet("/sync/changes/" + String(revisionNo));
+  if (change == "error" || change == "null") return false;
+  if (syncRawField(change, "type") == "FULL_SYNC") return fullSyncV2Refresh();
+  String entity = syncRawField(change, "entity");
+  if (entity == "slot") {
+    return applyCanonicalSlotDelta(syncRawField(change, "roomId"),
+      syncRawField(change, "bucket"), syncRawField(change, "recordId"),
+      syncRawField(change, "operation"));
+  }
+  if (entity == "recurringDef") {
+    return applyRecurringDefDelta(syncRawField(change, "roomId"),
+      syncRawField(change, "recordId"), syncRawField(change, "operation"));
+  }
+  // A room snapshot carries materialized today/tomorrow occurrences and must
+  // rebuild the active schedule. The recurringDef event itself only updates
+  // the persistent definition cache.
+  if (entity == "roomSnapshot") return fullSyncV2Refresh();
+  return true;
+}
+
+void syncSlotsV2() {
+  long remoteGeneration, remoteRevision;
+  if (!loadSyncMeta(remoteGeneration, remoteRevision)) {
+    syncV2Available = false;
+    refreshSlotsOnly(); // migration fallback
+    return;
+  }
+  syncV2Available = true;
+  if (syncGeneration != remoteGeneration || syncRevision > remoteRevision) {
+    fullSyncV2Refresh();
+    return;
+  }
+  for (long r = syncRevision + 1; r <= remoteRevision; r++) {
+    if (!processSyncChange(r)) return;
+    // FULL_SYNC may already have moved the cursor to the current remote head.
+    if (syncRevision >= remoteRevision) return;
+    syncRevision = r;        // advance only after successful application
+    saveConfig();
+  }
+}
+
+void syncConfigV2() {
+  String raw = fbGet("/configSync/version");
+  if (raw == "error" || raw == "null" || raw.length() == 0) return;
+  long remote = raw.toInt();
+  if (remote == configVersion) return;
+  refreshPersistentConfig();
+  configVersion = remote;
+  saveConfig();
+}
+
+// ── Relay wiring (NC/NO) — set per-profile from the PWA Settings page ──
+// Defaults to NC (this project's original assumption) for any value other
+// than exactly "NO" — including a missing field, so existing deployments
+// that never set this are unaffected.
+void applyRelayWiringConfig() {
+  String val = fbGet("/config/relayWiring");
+  if (val == "\"NO\"") {
+    RELAY_ON  = LOW;
+    RELAY_OFF = HIGH;
+    Serial.println("Relay wiring: Normally Open (fail-safe OFF)");
+  } else {
+    RELAY_ON  = HIGH;
+    RELAY_OFF = LOW;
+    Serial.println("Relay wiring: Normally Closed (fail-safe ON) — default");
+  }
+}
+
+int readConfiguredGpio(const String &path) {
+  String val = fbGet(path);
+  if (val == "" || val == "null" || val == "error") return PIN_NONE;
+  return val.toInt();
+}
+
+// ── Emergency/standby light pin — read once at boot ───────────
+// /config/emergencyPin is a bare scalar (not nested in an object), so this
+// parses it directly rather than via parseIntField(), which expects a
+// "field": prefix inside a larger JSON blob.
+void applyEmergencyPinConfig() {
+  int requestedPin = readConfiguredGpio("/config/emergencyPin");
+  if (!gpioAssignmentsLocked) {
+    emergencyPin = requestedPin;
+    if (emergencyPin < 0) Serial.println("Emergency light: not configured");
+    else Serial.printf("Emergency light: GPIO %d (locked after boot)\n", emergencyPin);
+    return;
+  }
+  if (requestedPin != emergencyPin) {
+    Serial.printf("Emergency GPIO config changed %d -> %d; ignored until reboot\n", emergencyPin, requestedPin);
+  }
+}
+
+// ── Emergency light auto-off timeout — read once at boot ──────────────
+// Same bare-scalar /config read. Missing/null/error/<=0 → 0 (disabled), so the
+// emergency light stays always-on for setups that haven't opted in.
+void applyEmergencyTimeoutConfig() {
+  String val = fbGet("/config/emergencyTimeout");
+  int m = val.toInt();
+  if (val == "" || val == "null" || val == "error" || m <= 0) {
+    emergencyTimeoutMin = 0;
+    Serial.println("Emergency light auto-off: disabled");
+  } else {
+    emergencyTimeoutMin = m;
+    Serial.printf("Emergency light auto-off: %d min\n", emergencyTimeoutMin);
+  }
+}
+
+// ── Shared end-of-slot warning beeper pin — read once at boot ─────────
+// Same bare-scalar /config read as applyEmergencyPinConfig(). Missing/null/
+// error → PIN_NONE, so no beeper is ever driven (backward-compatible off).
+void applyBeeperPinConfig() {
+  int requestedPin = readConfiguredGpio("/config/beeperPin");
+  if (!gpioAssignmentsLocked) {
+    beeperPin = requestedPin;
+    if (beeperPin < 0) Serial.println("End-of-slot beeper: not configured");
+    else Serial.printf("End-of-slot beeper: GPIO %d (locked after boot)\n", beeperPin);
+    return;
+  }
+  if (requestedPin != beeperPin) {
+    Serial.printf("Beeper GPIO config changed %d -> %d; ignored until reboot\n", beeperPin, requestedPin);
+  }
+}
+
+// ── Warn-minutes-before-slot-end — read once at boot ─────────────────
+// Missing/null/error → toInt() gives 0 → treated as disabled. A negative or
+// zero value also disables, so the feature stays fully off for any
+// deployment that hasn't explicitly opted in with a positive number.
+void applyWarnMinutesConfig() {
+  String val = fbGet("/config/warnMinutes");
+  int m = val.toInt();
+  if (val == "" || val == "null" || val == "error" || m <= 0) {
+    warnMinutes = 0;
+    Serial.println("End-of-slot warning: disabled");
+  } else {
+    warnMinutes = m;
+    Serial.printf("End-of-slot warning: %d min before end\n", warnMinutes);
+  }
+}
+
+// ── Beep pattern (per-beep duration + count) — read once at boot ─────
+// /config/beepMs = on-time of each beep (ms), /config/beepCount = number of
+// beeps. Missing/invalid → sensible defaults (250ms, 1 beep). Values are
+// clamped so a bad config can't produce a 0ms beep or a negative count.
+void applyBeepConfig() {
+  String msVal = fbGet("/config/beepMs");
+  long ms = msVal.toInt();
+  if (msVal == "" || msVal == "null" || msVal == "error" || ms <= 0) beepOnMs = 250;
+  else beepOnMs = (unsigned long)constrain(ms, 20L, 5000L);
+
+  // Missing/null/error → default 1 beep. An explicit 0 means "no beep" (mute;
+  // the LED warning still blinks). Negatives are clamped to 0.
+  String cntVal = fbGet("/config/beepCount");
+  if (cntVal == "" || cntVal == "null" || cntVal == "error") {
+    beepBurstCount = 1;
+  } else {
+    int cnt = cntVal.toInt();
+    beepBurstCount = constrain(cnt, 0, 10);
+  }
+
+  Serial.printf("Beep pattern: %lu ms x %d%s\n", beepOnMs, beepBurstCount, beepBurstCount == 0 ? " (muted)" : "");
+}
+
+// Always enforce the requested physical level. The room relays already use
+// this same corrective-write principle: software state alone is not proof that
+// the actual relay output still matches it. This is especially important for
+// NC wiring, where emergency OFF must be driven with RELAY_OFF (LOW).
+void setEmergencyLightState(bool on) {
+  if (emergencyPin < 0 || emergencyPin == beeperPin) return;
+
+  const int requestedLevel = on ? RELAY_ON : RELAY_OFF;
+  digitalWrite(emergencyPin, requestedLevel);
+
+  // Keep logs edge-triggered even though the GPIO is corrected on every call.
+  if (emergencyOutputOn != on) {
+    emergencyOutputOn = on;
+    Serial.printf("[%s] Emergency light -> %s, GPIO=%d, level=%d\n",
+      getTime().c_str(), on ? "ON" : "OFF", emergencyPin, requestedLevel);
+  }
+}
+
+// Recomputed after every room state change (called from setRelay(), the
+// single funnel every schedule/override/activation change already goes
+// through) — ON only when every known room is currently OFF.
+void updateEmergencyLight() {
+  if (emergencyPin < 0 || emergencyPin == beeperPin) return;
+  bool allOff = true;
+  for (int i = 0; i < roomCount; i++) {
+    if (rooms[i].lightOn) { allOff = false; break; }
+  }
+
+  if (!allOff) {
+    // A room is on → emergency light off, and reset the standby timer + latch
+    // so the timeout re-arms for the NEXT all-off period (re-arm on activity).
+    setEmergencyLightState(false);
+    emergencyOnSince = 0;
+    emergencyLatchedOff = false;
+    return;
+  }
+
+  // All rooms are off → the emergency light wants to be ON.
+  if (emergencyTimeoutMin <= 0) {
+    // No timeout configured — original always-on-while-standby behaviour.
+    setEmergencyLightState(true);
+    return;
+  }
+
+  // Timeout is configured. Start the standby timer on the rising edge (the
+  // moment we enter the all-off period).
+  if (emergencyOnSince == 0 && !emergencyLatchedOff) {
+    emergencyOnSince = millis();
+  }
+  // If we've already timed out this standby period, keep it off.
+  if (emergencyLatchedOff) {
+    setEmergencyLightState(false);
+    return;
+  }
+  // Still within the allowed window → on; past it → latch off.
+  if (millis() - emergencyOnSince >= (unsigned long)emergencyTimeoutMin * 60000UL) {
+    emergencyLatchedOff = true;
+    setEmergencyLightState(false);
+    Serial.printf("[%s] Emergency light auto-off after %d min standby\n", getTime().c_str(), emergencyTimeoutMin);
+  } else {
+    setEmergencyLightState(true);
+  }
+}
+
+// ── Read all rooms from Firebase — pins, overrides, names, slots ──
+// Only touches rooms[0..roomCount-1] — roomCount itself is fixed at boot
+// (see setup()) so a room added in the PWA mid-day won't suddenly get a
+// pin here without pinMode() ever having been called for it; that's why
+// new rooms/pin changes need a reboot to take effect.
+void readAllRooms() {
+  String json = fbGet("/rooms");
+  if (json == "" || json == "null" || json == "error") {
+    Serial.println("readAllRooms: could not reach Firebase — keeping existing state");
+    return;
+  }
+
+  for (int i = 0; i < roomCount; i++) {
+    String key = "\"room" + String(i + 1) + "\":{";
+    int start = json.indexOf(key);
+    if (start < 0) continue;
+    String roomJson = json.substring(start);
+
+    // ── Pins — only overwrite relayPin if Firebase actually has a value;
+    // never blank out an already-working pin because of one bad/short read.
+    // ledPin's PIN_NONE is itself a valid, meaningful state, so always apply it.
+    int rp = parseIntField(roomJson, "relayPin");
+    if (rp >= 0) rooms[i].relayPin = rp;
+    rooms[i].ledPin = parseIntField(roomJson, "ledPin");
+
+    // ── Override — strict parsing, never reset on bad value ──
+    int ovIdx = roomJson.indexOf("\"override\":");
+    if (ovIdx >= 0) {
+      String ovVal = roomJson.substring(ovIdx + 11, ovIdx + 16);
+      ovVal.trim();
+      if      (ovVal.startsWith("true"))  rooms[i].ovr = 1;
+      else if (ovVal.startsWith("false")) rooms[i].ovr = 0;
+      else if (ovVal.startsWith("null") || ovVal.startsWith("-1"))
+                                          rooms[i].ovr = -1;
+      // else: unknown/malformed — KEEP existing ovr, do not reset
+    }
+    // If override field missing entirely — keep existing ovr too
+    // (do NOT reset to -1 just because field is absent)
+
+    // Name
+    int nameIdx = roomJson.indexOf("\"name\":\"");
+    if (nameIdx >= 0) {
+      int ns = nameIdx + 8;
+      int ne = roomJson.indexOf("\"", ns);
+      if (ne > ns) roomJson.substring(ns, ne).toCharArray(rooms[i].name, sizeof(rooms[i].name));
+    }
+
+    // Slots — Firebase stores as nested object {"slots":{"0":{...},"1":{...}}}
+    // Try array format first, then object format
+    int slotIdx = roomJson.indexOf("\"slots\":[");
+    if (slotIdx >= 0) {
+      int as = slotIdx + 8;
+      int ae = roomJson.indexOf("]", as) + 1;
+      parseSlots(i, roomJson.substring(as, ae));
+    } else {
+      // Firebase nested format — fetch directly for this room
+      String slotJson = fbGet("/rooms/room" + String(i + 1) + "/slots");
+      if (slotJson != "error" && slotJson != "null" && slotJson.length() > 2) {
+        parseSlots(i, slotJson);
+      } else {
+        rooms[i].slotCount = 0;
+      }
+    }
+
+    // Recurring definitions — the authoritative source rollover generates
+    // day buckets from. Fetched directly (not embedded in the /rooms blob).
+    String recJson = fbGet("/rooms/room" + String(i + 1) + "/recurring");
+    parseRecurDefs(i, recJson);
+  }
+}
+
+// ── Refresh slots only — does NOT touch relay state ──────────
+// KEY FIX: separate from applyState so slot update never causes flicker
+void refreshSlotsOnly() {
+  for (int i = 0; i < roomCount; i++) {
+    // Cheap check first: only pay for the full /slots download when this
+    // room's marker actually moved since we last looked. An empty/"null"
+    // marker (a room that predates this feature, or hasn't had its first
+    // post-deploy write yet) never counts as "unchanged" — that would skip
+    // the very first real read.
+    String marker = fbGet("/rooms/room" + String(i+1) + "/slotsUpdatedAt");
+    if (marker != "error" && marker != "" && marker != "null" && marker == lastSlotsMarker[i]) {
+      warningAwareDelay(150);
+      continue;
+    }
+    if (marker != "error") lastSlotsMarker[i] = marker;
+
+    String slotJson = fbGet("/rooms/room" + String(i+1) + "/slots");
+    if (slotJson != "error") {
+      // Save previous state for comparison
+      int  prevCount = rooms[i].slotCount;
+      bool prevActivated[10] = {};
+      char prevSlotTs[10][16] = {{0}};
+      for (int j = 0; j < rooms[i].slotCount && j < 10; j++) {
+        prevActivated[j] = rooms[i].slots[j].activated;
+        strncpy(prevSlotTs[j], rooms[i].slots[j].slotTs, sizeof(prevSlotTs[j]));
+      }
+
+      parseSlots(i, slotJson);
+
+      // Re-apply if slot count changed, any activation flag changed, or any
+      // slot's own slotTs changed. slotTs is the PWA's per-slot "this
+      // content was touched" marker (written on every create/edit, e.g. a
+      // time-range or code change) -- comparing it catches edits the
+      // activation-only check above would otherwise miss, since editing a
+      // slot's time doesn't necessarily also change whether it's activated.
+      bool needsReapply = false;
+      if (rooms[i].slotCount != prevCount) {
+        needsReapply = true;
+      } else {
+        for (int j = 0; j < rooms[i].slotCount; j++) {
+          if (rooms[i].slots[j].activated != prevActivated[j] ||
+              strcmp(rooms[i].slots[j].slotTs, prevSlotTs[j]) != 0) {
+            needsReapply = true;
+            break;
+          }
+        }
+      }
+
+      if (needsReapply) {
+        applyState(i);
+      }
+    }
+    warningAwareDelay(150);
+  }
+}
+
+// ── Poll overrides every 5 seconds ───────────────────────────
+void pollOverrides() {
+  for (int i = 0; i < roomCount; i++) {
+    String val = fbGet("/rooms/room" + String(i + 1) + "/override");
+
+    // Skip bad reads — NEVER change state on error
+    if (val == "error" || val == "") { warningAwareDelay(100); continue; }
+
+    int newOvr;
+    if      (val == "true"  || val == "1")  newOvr = 1;
+    else if (val == "false" || val == "0")  newOvr = 0;
+    else if (val == "null"  || val == "-1") newOvr = -1;
+    else {
+      // Unknown value — skip, never change active override
+      warningAwareDelay(100); continue;
+    }
+
+    // Extra guard: if manual override is active and new value is auto (-1)
+    // only accept if Firebase returned full "null" string — not a short bad read
+    if (rooms[i].ovr != -1 && newOvr == -1 && val.length() < 4) {
+      warningAwareDelay(100); continue;
+    }
+
+    if (newOvr != rooms[i].ovr) {
+      Serial.printf("Room %d override: %d → %d\n", i+1, rooms[i].ovr, newOvr);
+      rooms[i].ovr = newOvr;
+      applyState(i);
+      pushStatus(i);
+    }
+    warningAwareDelay(100);
+  }
+}
+
+// Extracts a quoted string field's value from a raw JSON object substring
+// — e.g. extractStringField(obj, "phone") for {"phone":"9198...",...}
+// returns "9198...". Returns "" if the field is missing or not a plain
+// string (explicitly null, a number, etc) — callers only append it to the
+// rebuilt JSON when non-empty, so a missing field is simply omitted.
+String extractStringField(const String &json, const String &field) {
+  String key = "\"" + field + "\":\"";
+  int idx = json.indexOf(key);
+  if (idx < 0) return "";
+  int start = idx + key.length();
+  int end = json.indexOf("\"", start);
+  if (end < 0) return "";
+  return json.substring(start, end);
+}
+
+// Extracts a field's raw (unquoted) value — a number, null, true/false — from
+// a JSON object substring, e.g. extractRawField(obj, "activatedAt") on
+// {"activatedAt":1690000000123,...} returns "1690000000123". Returns "" if
+// the field is missing. Unlike extractStringField, the value isn't
+// necessarily a plain string, so this is used only where the raw JSON value
+// is meant to be re-embedded verbatim (see findActivatedRecurringInstance).
+String extractRawField(const String &json, const String &field) {
+  String key = "\"" + field + "\":";
+  int idx = json.indexOf(key);
+  if (idx < 0) return "";
+  int start = idx + key.length();
+  int endComma = json.indexOf(',', start);
+  int endBrace = json.indexOf('}', start);
+  int end = (endComma < 0) ? endBrace : (endBrace < 0 ? endComma : min(endComma, endBrace));
+  if (end < 0) return "";
+  return json.substring(start, end);
+}
+
+// Scans a bucket's raw slots JSON (e.g. the pre-rollover /slotsT, fetched
+// BEFORE it gets overwritten) for a recurring instance matching the given
+// def — by defId when both sides have one, else falling back to matching by
+// start+end time (same fallback the PWA's deleteRecurringDef() already uses,
+// since an instance materialized before the defId field existed carries
+// none). Returns true and fills outActivatedAtRaw/outActivatedBy only when a
+// match is found AND it's actually activated (activatedAt present and not
+// null) — a rollover relabels an existing occurrence from "tomorrow" to
+// "today", it isn't a new booking, so an activation already granted for it
+// shouldn't be undone just because the calendar date changed under it.
+bool findActivatedRecurringInstance(const String &bucketJson, const String &defId,
+                                     const String &sStr, const String &eStr,
+                                     String &outActivatedAtRaw, String &outActivatedBy) {
+  if (bucketJson == "null" || bucketJson == "" || bucketJson == "error" || bucketJson.length() < 5) return false;
+  int pos = 0;
+  while (pos < (int)bucketJson.length()) {
+    int si = bucketJson.indexOf("\"s\":\"", pos);
+    int ei = bucketJson.indexOf("\"e\":\"", pos);
+    if (si < 0 || ei < 0) break;
+    int objStart = bucketJson.lastIndexOf('{', si);
+    int objEnd   = bucketJson.indexOf('}', ei);
+    if (objStart < 0 || objEnd < 0) { pos = max(si, ei) + 10; continue; }
+    String obj = bucketJson.substring(objStart, objEnd + 1);
+    pos = objEnd + 1;
+
+    if (obj.indexOf("\"recurring\":true") < 0) continue; // one-time slot — not what we're matching
+
+    String objDefId = extractStringField(obj, "defId");
+    bool matched = (defId.length() > 0 && objDefId == defId) ||
+                   (objDefId.length() == 0 &&
+                    bucketJson.substring(si + 5, si + 10) == sStr &&
+                    bucketJson.substring(ei + 5, ei + 10) == eStr);
+    if (!matched) continue;
+
+    bool hasActivatedField = obj.indexOf("\"activatedAt\":") >= 0;
+    bool activatedIsNull   = obj.indexOf("\"activatedAt\":null") >= 0;
+    if (!hasActivatedField || activatedIsNull) return false; // matched, but not activated — nothing to carry
+    outActivatedAtRaw = extractRawField(obj, "activatedAt");
+    outActivatedBy    = extractStringField(obj, "activatedBy");
+    return true;
+  }
+  return false;
+}
+
+// ── Midnight rollover — runs once when date changes ───────────
+// Rule:
+//   Recurring slots → today only, stay forever, never in tomorrow
+//   One-time today, dated today     → kept as-is (see below)
+//   One-time today, dated otherwise → deleted (genuinely stale)
+//   One-time tomorrow → moves to today, tomorrow cleared after
+// The "dated today" check matters when this runs more than once on the
+// same calendar day (e.g. the PWA's force-rollover already ran earlier
+// ── Rollover helpers for the day-of-week recurring model ──────
+// A daysMask (bit d = weekday d) with value 0 means "every day".
+bool maskRunsOnDay(int daysMask, int weekday) {
+  if (daysMask == 0) return true;
+  return (daysMask & (1 << weekday)) != 0;
+}
+
+// Builds the ",\"days\":[..]" JSON fragment from a daysMask (empty string when
+// mask 0 = every day, matching how the PWA writes it).
+String daysFieldFromMask(int daysMask) {
+  if (daysMask == 0) return "";
+  String out = ",\"days\":[";
+  bool dfirst = true;
+  for (int dd = 0; dd < 7; dd++) {
+    if (daysMask & (1 << dd)) { if (!dfirst) out += ","; out += String(dd); dfirst = false; }
+  }
+  out += "]";
+  return out;
+}
+
+// Parses a "days":[..] array out of a raw slot JSON object into a mask.
+int daysMaskFromJson(const String &slotObj) {
+  int mask = 0;
+  int k = slotObj.indexOf("\"days\":[");
+  if (k < 0) return 0;
+  int p = k + 8;
+  while (p < (int)slotObj.length() && slotObj[p] != ']') {
+    if (isDigit(slotObj[p])) { int d = slotObj[p] - '0'; if (d >= 0 && d <= 6) mask |= (1 << d); }
+    p++;
+  }
+  return mask;
+}
+
+// Scans a slots JSON array string and, for each RECURRING slot that runs on
+// targetWd, appends a rebuilt recurring-slot JSON (dated dateStr) to `out`,
+// skipping any whose s|e|daysMask key is already in `seen` (dedup). Updates
+// `first` for comma handling and adds emitted keys to `seen`. Used to fold in
+// recurring defs that live only in slotsT (e.g. a weekday slot created on an
+// off day, seeded by the PWA into tomorrow only) so the ESP32's own rollover
+// doesn't drop them.
+// `seenKeys` is a running string of "|s|e|mask|" tokens already emitted, used
+// for dedup via substring search (avoids pulling in STL containers).
+void appendRecurringFromJson(const String &slotsJson, int targetWd, const String &dateStr,
+                             String &out, bool &first, String &seenKeys) {
+  if (slotsJson == "null" || slotsJson == "" || slotsJson == "error" || slotsJson.length() < 5) return;
+  int pos = 0;
+  while (pos < (int)slotsJson.length()) {
+    int si = slotsJson.indexOf("\"s\":\"", pos);
+    int ei = slotsJson.indexOf("\"e\":\"", pos);
+    if (si < 0 || ei < 0) break;
+    int objStart = slotsJson.lastIndexOf('{', si);
+    int objEnd   = slotsJson.indexOf('}', ei);
+    if (objStart >= 0 && objEnd >= 0) {
+      String obj = slotsJson.substring(objStart, objEnd + 1);
+      if (obj.indexOf("\"recurring\":true") >= 0) {
+        String sStr = slotsJson.substring(si + 5, si + 10);
+        String eStr = slotsJson.substring(ei + 5, ei + 10);
+        int mask = daysMaskFromJson(obj);
+        String key = "|" + sStr + "|" + eStr + "|" + String(mask) + "|";
+        bool dup = seenKeys.indexOf(key) >= 0;
+        if (!dup && maskRunsOnDay(mask, targetWd)) {
+          seenKeys += key;
+          String codeField = "", bookedByField = "", phoneField = "";
+          bool hasCode = false;
+          String c = extractStringField(obj, "code");
+          if (c.length() > 0) { codeField = ",\"code\":\"" + c + "\""; hasCode = true; }
+          String bb = extractStringField(obj, "bookedBy");
+          if (bb.length() > 0) bookedByField = ",\"bookedBy\":\"" + bb + "\"";
+          String ph = extractStringField(obj, "phone");
+          if (ph.length() > 0) phoneField = ",\"phone\":\"" + ph + "\"";
+          if (!first) out += ",";
+          // No-code slot → seed activatedAt (auto-active); coded → null.
+          String activatedField = hasCode ? ",\"activatedAt\":null" : ",\"activatedAt\":1";
+          out += "{\"s\":\"" + sStr + "\",\"e\":\"" + eStr + "\",\"recurring\":true" +
+            codeField + bookedByField + phoneField + daysFieldFromMask(mask) +
+            ",\"date\":\"" + dateStr + "\"" + activatedField + "}";
+          first = false;
+        }
+      }
+    }
+    pos = max(si, ei) + 10;
+  }
+}
+
+// Builds a full recurring-slot JSON object for a given room slot, stamped to
+// dateStr, activation reset. Preserves code/bookedBy/phone read from Firebase.
+String buildRecurringSlotJson(int roomIdx, int j, const String &base, const String &dateStr) {
+  char s[6], e[6];
+  snprintf(s, 6, "%02d:%02d", rooms[roomIdx].slots[j].sh, rooms[roomIdx].slots[j].sm);
+  snprintf(e, 6, "%02d:%02d", rooms[roomIdx].slots[j].eh, rooms[roomIdx].slots[j].em);
+  String existingSlot = fbGet(base + "/slots/" + String(j));
+  String codeField = "", bookedByField = "", phoneField = "";
+  bool hasCode = false;
+  if (existingSlot != "error" && existingSlot != "null") {
+    String c = extractStringField(existingSlot, "code");
+    if (c.length() > 0) { codeField = ",\"code\":\"" + c + "\""; hasCode = true; }
+    String bb = extractStringField(existingSlot, "bookedBy");
+    if (bb.length() > 0) bookedByField = ",\"bookedBy\":\"" + bb + "\"";
+    String ph = extractStringField(existingSlot, "phone");
+    if (ph.length() > 0) phoneField = ",\"phone\":\"" + ph + "\"";
+  }
+  String daysField = daysFieldFromMask(rooms[roomIdx].slots[j].daysMask);
+  // No-code slot → seed activatedAt (auto-active); coded slot → null (waits for
+  // activation). See buildDefSlotJson for the rationale.
+  String activatedField = hasCode ? ",\"activatedAt\":null" : ",\"activatedAt\":1";
+  return "{\"s\":\"" + String(s) + "\",\"e\":\"" + String(e) + "\",\"recurring\":true" +
+    codeField + bookedByField + phoneField + daysField + ",\"date\":\"" + dateStr + "\"" + activatedField + "}";
+}
+
+// Materialize a recurring DEFINITION (rooms[roomIdx].recurDefs[k]) into a
+// day-slot JSON object dated dateStr. Carries the def's stable code + booker/
+// phone + days + defId, activation reset by default. This is the def-driven
+// replacement for buildRecurringSlotJson during rollover.
+//
+// overrideActivatedAtRaw/overrideActivatedBy let a caller carry an existing
+// activation forward instead of resetting it — used when rollover finds this
+// same occurrence was already activated in the bucket it's being promoted
+// FROM (see findActivatedRecurringInstance in midnightRollover). Leave both
+// empty for the normal reset-on-materialize behavior.
+String buildDefSlotJson(int roomIdx, int k, const String &dateStr,
+                         const String &overrideActivatedAtRaw, const String &overrideActivatedBy) {
+  RecurDef &d = rooms[roomIdx].recurDefs[k];
+  char s[6], e[6];
+  snprintf(s, 6, "%02d:%02d", d.sh, d.sm);
+  snprintf(e, 6, "%02d:%02d", d.eh, d.em);
+  bool hasCode = strlen(d.code) > 0;
+  // Per-INSTANCE id — distinct from defId (the link back to the definition).
+  // A new one every materialization, same as the PWA's materializeRecurringSlot
+  // (makeSlotId()) — identity resets daily by design, only defId is stable.
+  // dateStr+k is unique within this one rollover write (each def index k
+  // appears once per day), which is all the PWA's merge-by-id needs — it
+  // only ever compares ids within the same room's CURRENT /slots snapshot.
+  String idField    = ",\"id\":\"sl_" + dateStr + "_" + String(k) + "\"";
+  String codeField  = hasCode ? (",\"code\":\"" + String(d.code) + "\"") : "";
+  String bbField    = (strlen(d.bookedBy) > 0) ? (",\"bookedBy\":\"" + String(d.bookedBy) + "\"") : "";
+  String phField    = (strlen(d.phone) > 0)    ? (",\"phone\":\"" + String(d.phone) + "\"") : "";
+  String defIdField = (strlen(d.defId) > 0)    ? (",\"defId\":\"" + String(d.defId) + "\"") : "";
+  String daysField = daysFieldFromMask(d.daysMask);
+  String activatedField, activatedByField;
+  if (overrideActivatedAtRaw.length() > 0) {
+    activatedField   = ",\"activatedAt\":" + overrideActivatedAtRaw;
+    activatedByField = (overrideActivatedBy.length() > 0) ? (",\"activatedBy\":\"" + overrideActivatedBy + "\"") : "";
+  } else {
+    // No-code ("Auto") slots are active by default: seed a non-null activatedAt
+    // so the relay comes on for the window (parseSlots now keys purely on
+    // activatedAt, no longer force-activating on code:null). Coded slots reset to
+    // null so they wait for the QR PIN / admin Activate. Sentinel 1 = "activated,
+    // exact time unknown" — parseSlots only checks non-null.
+    activatedField = hasCode ? ",\"activatedAt\":null" : ",\"activatedAt\":1";
+  }
+  return "{\"s\":\"" + String(s) + "\",\"e\":\"" + String(e) + "\",\"recurring\":true" + idField + defIdField +
+    codeField + bbField + phField + daysField + ",\"date\":\"" + dateStr + "\"" + activatedField + activatedByField + "}";
+}
+
+// today) — a slot created for today AFTER that first run must not be
+// treated the same as leftover junk from a previous day just because
+// both happen to sit in the same "today" bucket.
+// Returns false if any room's Firebase write failed (e.g. WiFi down right
+// at midnight) — callers must NOT treat that as done: lastRolloverDay is
+// only advanced on a fully-successful run, specifically so a dropped
+// connection doesn't silently skip a day's rollover forever.
+bool midnightRollover() {
+  Serial.println("=== Midnight rollover ===");
+  bool allOk = true;
+
+  // Global marker (not per-room, unlike slotsUpdatedAt) — request.html's
+  // loadAvailability() checks this once before fetching every room, so one
+  // write covering the whole rollover is enough. Written before any of the
+  // per-room work below, same fail-safe reasoning as slotsUpdatedAt: if
+  // rollover fails partway through, a visitor doing one wasted-but-safe
+  // extra fetch is fine, missing a real change is not.
+  fbPut("/config/roomsUpdatedAt", String((unsigned long)time(nullptr)));
+
+  for (int i = 0; i < roomCount; i++) {
+    String base = "/rooms/room" + String(i + 1);
+
+    // Read tomorrow's one-time slots from Firebase
+    String tomorrowJson = fbGet(base + "/slotsT");
+
+    // ── Build new TODAY ───────────────────────────────────────
+    // Keep today's recurring slots + add tomorrow's one-time slots
+    String newTodayJson = "[";
+    bool first = true;
+
+    // Regenerate today's recurring slots FROM the recurring DEFINITIONS
+    // (/rooms/roomN/recurring), not from whatever is in the buckets. A def
+    // whose daysMask excludes today is simply not emitted into today. daysMask
+    // 0 = every day. Stable code + booker/phone carried; activation resets
+    // UNLESS this same occurrence was already activated in tomorrowJson (the
+    // bucket it's being promoted FROM) — e.g. someone used the activation
+    // page's lookahead window to activate it before midnight. That activation
+    // is carried forward instead of being silently undone by the relabel.
+    int todayWd = nowWeekday();
+    for (int k = 0; k < rooms[i].recurDefCount; k++) {
+      RecurDef &def = rooms[i].recurDefs[k];
+      if (!maskRunsOnDay(def.daysMask, todayWd)) continue;
+      if (!first) newTodayJson += ",";
+      char sBuf[6], eBuf[6];
+      snprintf(sBuf, 6, "%02d:%02d", def.sh, def.sm);
+      snprintf(eBuf, 6, "%02d:%02d", def.eh, def.em);
+      String overrideAt = "", overrideBy = "";
+      findActivatedRecurringInstance(tomorrowJson, String(def.defId), String(sBuf), String(eBuf), overrideAt, overrideBy);
+      newTodayJson += buildDefSlotJson(i, k, getDateStr(), overrideAt, overrideBy);
+      first = false;
+    }
+
+    // Keep today's one-time slots whose OWN date is still actually
+    // today — created after an earlier rollover already ran today (or
+    // just now via the PWA's force-rollover), not a leftover from a
+    // previous day. Copied verbatim rather than rebuilt field-by-field:
+    // nothing about it needs to change since it isn't transitioning from
+    // anywhere, so activatedAt/attempts/lockedUntil/expired must all
+    // survive exactly as they are — a slot someone just activated must
+    // not have that reset just because rollover ran again today.
+    String todayDateStr = getDateStr();
+    for (int j = 0; j < rooms[i].slotCount; j++) {
+      if (rooms[i].slots[j].recurring) continue; // already handled above
+      String existingSlot = fbGet(base + "/slots/" + String(j));
+      if (existingSlot == "error" || existingSlot == "null" || existingSlot.length() < 5) continue;
+      if (extractStringField(existingSlot, "date") != todayDateStr) continue; // not today — genuinely stale, drop it
+      // Soft-deleted (PWA's deleteSlot()) — this is the permanent purge the
+      // tombstone was waiting for: just don't carry it into the new today.
+      if (existingSlot.indexOf("\"deleted\":true") >= 0) continue;
+      if (!first) newTodayJson += ",";
+      newTodayJson += existingSlot;
+      first = false;
+    }
+
+    // Move tomorrow's one-time slots into today
+    // (skip any recurring ones — recurring should only be in today)
+    if (tomorrowJson != "null" && tomorrowJson != "" &&
+        tomorrowJson != "error" && tomorrowJson.length() > 2) {
+      int pos = 0;
+      while (pos < (int)tomorrowJson.length()) {
+        int si = tomorrowJson.indexOf("\"s\":\"", pos);
+        int ei = tomorrowJson.indexOf("\"e\":\"", pos);
+        if (si < 0 || ei < 0) break;
+        int objStart = tomorrowJson.lastIndexOf('{', si);
+        int objEnd   = tomorrowJson.indexOf('}', ei);
+        if (objStart >= 0 && objEnd >= 0) {
+          String obj = tomorrowJson.substring(objStart, objEnd + 1);
+          // Only move one-time, non-deleted slots (skip recurring, and skip a
+          // soft-deleted tomorrow slot — that's this tombstone's permanent
+          // purge, same as the "keep today's slots" loop above).
+          if (obj.indexOf("\"recurring\":true") < 0 && obj.indexOf("\"deleted\":true") < 0) {
+            String startStr = tomorrowJson.substring(si + 5, si + 10);
+            String endStr   = tomorrowJson.substring(ei + 5, ei + 10);
+            if (!first) newTodayJson += ",";
+            // Preserve id + code + the booker's name/phone (see the recurring
+            // loop above for why) — omit only activatedAt, and re-stamp
+            // date to today since this slot is leaving "tomorrow" now. This
+            // is the SAME slot (just relabeled to today), so its id must
+            // survive the move — dropping it would make the PWA's merge-by-id
+            // treat it as a brand-new slot instead of recognizing it, on the
+            // next push. Only a slot that somehow has no id yet (pre-dates
+            // the id field) gets a fresh one here.
+            String id2 = extractStringField(obj, "id");
+            String idField2 = (id2.length() > 0) ? (",\"id\":\"" + id2 + "\"") : (",\"id\":\"sl_" + getDateStr() + "_" + String(si) + "\"");
+            String codeField2 = "", bookedByField2 = "", phoneField2 = "";
+            String c2 = extractStringField(obj, "code");
+            if (c2.length() > 0) codeField2 = ",\"code\":\"" + c2 + "\"";
+            String bb2 = extractStringField(obj, "bookedBy");
+            if (bb2.length() > 0) bookedByField2 = ",\"bookedBy\":\"" + bb2 + "\"";
+            String ph2 = extractStringField(obj, "phone");
+            if (ph2.length() > 0) phoneField2 = ",\"phone\":\"" + ph2 + "\"";
+            // No-code slot → seed activatedAt so it's auto-active after
+            // promotion; coded slot → null (re-activation required). Matches
+            // the new activatedAt-only rule in parseSlots.
+            String activatedField2 = (c2.length() > 0) ? ",\"activatedAt\":null" : ",\"activatedAt\":1";
+            newTodayJson += "{\"s\":\"" + startStr + "\",\"e\":\"" + endStr + "\"" + idField2 +
+              codeField2 + bookedByField2 + phoneField2 + ",\"date\":\"" + getDateStr() + "\"" + activatedField2 + "}";
+            first = false;
+          }
+        }
+        pos = max(si, ei) + 10;
+      }
+    }
+    newTodayJson += "]";
+
+    // Build new TOMORROW: only the recurring slots that run on tomorrow's
+    // weekday (fresh, activation reset, dated tomorrow). One-time tomorrow
+    // slots were promoted into today above, so they are not carried here.
+    // This is what makes the Tomorrow view show the right recurring slots
+    // straight after rollover, matching the PWA's rolloverRoomLocally().
+    int tomorrowWd = tomorrowWeekday();
+    String tomorrowDate = getTomorrowDateStr();
+    String newTomorrowJson = "[";
+    bool tfirst = true;
+    // Tomorrow's recurring slots, also generated FROM the definitions. These
+    // are brand-new future occurrences (not yet materialized anywhere), so
+    // there's nothing to carry forward — always the normal reset.
+    for (int k = 0; k < rooms[i].recurDefCount; k++) {
+      if (!maskRunsOnDay(rooms[i].recurDefs[k].daysMask, tomorrowWd)) continue;
+      if (!tfirst) newTomorrowJson += ",";
+      newTomorrowJson += buildDefSlotJson(i, k, tomorrowDate, "", "");
+      tfirst = false;
+    }
+    newTomorrowJson += "]";
+
+    // Marker written BEFORE the data — fail-safe ordering: if the /slots
+    // write below fails, "marker says changed but data didn't move" just
+    // costs refreshSlotsOnly() one wasted full re-fetch next cycle, never a
+    // missed one. Not load-bearing for THIS firmware's own correctness
+    // (readAllRooms() right after this function returns already refreshes
+    // everything unconditionally) — this is for any other reader/hygiene.
+    String newMarker = String((unsigned long)time(nullptr));
+    fbPut(base + "/slotsUpdatedAt", newMarker);
+    lastSlotsMarker[i] = newMarker;
+
+    bool ok1 = fbPut(base + "/slots",  newTodayJson);
+    bool ok2 = fbPut(base + "/slotsT", newTomorrowJson);
+    allOk = allOk && ok1 && ok2;
+    delay(200);
+  }
+
+  if (!allOk) {
+    Serial.println("=== Rollover incomplete — a Firebase write failed, will retry ===");
+    return false;
+  }
+
+  readAllRooms();
+  // Clear any stale end-of-slot warning state carried across the rollover —
+  // yesterday's slots are gone, so no LED should still be blinking. Silence
+  // the shared beeper burst too. applyAllStates() below then re-drives every
+  // LED from the fresh relay state. All no-ops when the feature is disabled.
+  for (int i = 0; i < roomCount; i++) { rooms[i].warning = false; rooms[i].ledBlinkOn = false; }
+  warningEpisodeActive = false;
+  applyAllStates();
+
+  // Record that today's transition is now handled — this is what lets
+  // setup() detect a *missed* rollover after a reboot, so update it however
+  // this function was reached (normal per-minute checkMidnight(), or the
+  // boot-time catch-up call). Only reached when every room's write above
+  // actually succeeded — see the function comment for why that matters.
+  lastRolloverDay = currentEpochDay();
+  warnedSlotIdCount = 0;
+  memset(warnedSlotIds, 0, sizeof(warnedSlotIds));
+  saveConfig();
+
+  // Also expose it in Firebase — the PWA has no other way to tell whether
+  // today's rollover has actually happened, since it only ever reads the
+  // rooms/slots data itself, not this board's local state.
+  fbPut("/config/lastRolloverEpochDay", String(lastRolloverDay));
+  // PWA establishes the daily Sync V2 baseline; invalidate local cursor so
+  // the next sync observes the new generation and performs a full refresh.
+  syncGeneration = 0;
+  syncRevision = 0;
+  saveConfig();
+
+  Serial.println("=== Rollover complete ===");
+  return true;
+}
+
+// ── Adopt a rollover the PWA already forced today ─────────────
+// The PWA's Settings → "Force slot rollover now" button applies the same
+// rule as midnightRollover() and writes this same Firebase marker
+// afterward. Without checking it here, this board would have no way to
+// know that happened and would redundantly re-run its own rollover at
+// the next check — resetting activation state on any slot someone
+// activates between the PWA's manual run and this board's own midnight.
+// Returns true if today is already covered (nothing more to do here);
+// 0 from a failed/empty fbGet never satisfies >= a real epoch day, so a
+// network hiccup just falls through to running midnightRollover() as usual.
+bool syncRolloverMarkerFromFirebase(int todayEpochDay) {
+  int remoteDay = fbGet("/config/lastRolloverEpochDay").toInt();
+  if (remoteDay >= todayEpochDay) {
+    lastRolloverDay = remoteDay;
+    saveConfig();
+    return true;
+  }
+  return false;
+}
+
+// ── Check if date changed — called every minute ───────────────
+// Uses the same persisted lastRolloverDay/currentEpochDay() marker as the
+// boot-time catch-up in setup() — one shared, retry-safe source of truth.
+// If midnightRollover() fails (e.g. WiFi down right at midnight), the
+// marker is deliberately left unadvanced, so this keeps retrying every
+// minute until it actually succeeds instead of silently skipping that
+// day's rollover until the next reboot.
+void checkMidnight() {
+  if (!timeSynced) return; // an unsynced clock's epoch day is meaningless
+  int todayEpochDay = currentEpochDay();
+  if (lastRolloverDay == -1) {
+    lastRolloverDay = todayEpochDay; // first run ever — nothing to catch up on
+    saveConfig();
+    return;
+  }
+  if (todayEpochDay != lastRolloverDay) {
+    if (syncRolloverMarkerFromFirebase(todayEpochDay)) {
+      Serial.println("Rollover already done today via PWA — syncing marker");
+      return;
+    }
+    midnightRollover();
+  }
+}
+
+// ── Mark slot as expired in Firebase ─────────────────────────
+// Writes ONLY the single field /rooms/roomN/slots/{slotIdx}/expired = true —
+// a targeted per-field write, NOT a full-array rewrite.
+//
+// The previous version fetched the whole /slots array, located the slot by a
+// start-time STRING match (first "s":"HH:MM" occurrence — no unique id), spliced
+// expired:true in, and PUT the entire array back. That had two problems with
+// adjacent/coded slots: (1) it matched only by start time with no per-slot id,
+// and (2) the read-modify-write of the whole array raced with the PWA's own
+// per-slot writes — either side's full-array PUT could clobber the other's
+// changes, which could drop/merge slots. Writing just the one field by the
+// index we already hold removes both the string-match fragility and the race:
+// it touches nothing else in the array, so it can never merge or delete slots.
+void markSlotExpired(int roomIdx, int slotIdx) {
+  if (slotIdx < 0 || slotIdx >= rooms[roomIdx].slotCount) return;
+  // Never expire a slot that's currently activated — the firmware already
+  // tracks this per slot, so we don't need to fetch/parse the array to know it.
+  if (rooms[roomIdx].slots[slotIdx].activated) return;
+  String base = "/rooms/room" + String(roomIdx + 1);
+  // Marker before data — same fail-safe ordering as midnightRollover(), and
+  // likewise not load-bearing for this firmware's own correctness (the
+  // caller already latched rooms[roomIdx].slots[slotIdx].expired locally
+  // before calling this) — just keeps slotsUpdatedAt honest for any other
+  // reader.
+  String newMarker = String((unsigned long)time(nullptr));
+  fbPut(base + "/slotsUpdatedAt", newMarker);
+  lastSlotsMarker[roomIdx] = newMarker;
+  fbPut(base + "/slots/" + String(slotIdx) + "/expired", "true");
+  if (strlen(rooms[roomIdx].slots[slotIdx].id) > 0) {
+    fbPut("/slotRecords/room" + String(roomIdx + 1) + "/today/" +
+      String(rooms[roomIdx].slots[slotIdx].id) + "/expired", "true");
+  }
+  char startBuf[6], endBuf[6];
+  snprintf(startBuf, 6, "%02d:%02d", rooms[roomIdx].slots[slotIdx].sh, rooms[roomIdx].slots[slotIdx].sm);
+  snprintf(endBuf,   6, "%02d:%02d", rooms[roomIdx].slots[slotIdx].eh, rooms[roomIdx].slots[slotIdx].em);
+  Serial.printf("Room %d slot %s-%s marked expired\n", roomIdx+1, startBuf, endBuf);
+}
+
+// ── End-of-slot warning ──────────────────────────────────────
+// True if the room is currently inside an ACTIVATED slot's final
+// warnMinutes, i.e. now ∈ [slotEnd - warnMinutes, slotEnd). Only activated
+// slots count — there's no point warning about a slot nobody turned on.
+// Always false when the feature is disabled (warnMinutes <= 0), so callers
+// need no extra guard.
+bool wasSlotWarningTriggered(const char *slotId) {
+  if (!slotId || !slotId[0]) return false;
+  for (int i = 0; i < warnedSlotIdCount; i++) {
+    if (strcmp(warnedSlotIds[i], slotId) == 0) return true;
+  }
+  return false;
+}
+void markSlotWarningTriggered(const char *slotId) {
+  if (!slotId || !slotId[0] || wasSlotWarningTriggered(slotId)) return;
+  if (warnedSlotIdCount >= MAX_WARNED_SLOT_IDS) return;
+  strncpy(warnedSlotIds[warnedSlotIdCount], slotId, 39);
+  warnedSlotIds[warnedSlotIdCount][39] = '\0';
+  warnedSlotIdCount++;
+}
+bool slotIsInWarningWindow(const Slot &sl) {
+  if (warnMinutes <= 0 || !sl.activated) return false;
+  if (sl.recurring && !slotRunsToday(sl)) return false;
+  int nowSeconds = nowH() * 3600 + nowMn() * 60 + nowSec();
+  int startSeconds = sl.sh * 3600 + sl.sm * 60;
+  int endSeconds = sl.eh * 3600 + sl.em * 60;
+  if (nowSeconds < startSeconds || nowSeconds >= endSeconds) return false;
+  int remainingSeconds = endSeconds - nowSeconds;
+  return remainingSeconds > 0 && remainingSeconds <= warnMinutes * 60;
+}
+
+bool inWarningWindow(int idx) {
+  for (int j = 0; j < rooms[idx].slotCount; j++) {
+    if (slotIsInWarningWindow(rooms[idx].slots[j])) return true;
+  }
+  return false;
+}
+
+// Kick off the one-shot attention burst on the shared beeper. Non-blocking:
+// the actual on/off toggling happens in serviceBeeper() from loop(). No-op
+// if no beeper pin is configured, OR if a burst is already in progress —
+// so when several rooms enter their warning window together (e.g. multiple
+// slots ending at the same time), the shared bell rings exactly ONCE rather
+// than being re-triggered/extended per room.
+void setBeeperPhysicalState(bool on) {
+  if (!beeperHardwareInitialized || beeperPin < 0) return;
+  // No cached pin state. The requested physical state is written directly.
+  // Normal state is OFF; ON is used only by the short warning burst task.
+  digitalWrite(beeperPin, on ? BEEPER_ON : BEEPER_OFF);
+}
+
+void beeperBurstTask(void *parameter) {
+  const int count = beepBurstCount;
+  const TickType_t onTicks = pdMS_TO_TICKS(max(20UL, beepOnMs));
+  const TickType_t gapTicks = pdMS_TO_TICKS(BEEP_GAP_MS);
+  Serial.printf("BEEPER burst start: %d pulse(s), %lums each, pin=%d, ON=%d, OFF=%d\n",
+    count, beepOnMs, beeperPin, BEEPER_ON, BEEPER_OFF);
+  for (int i = 0; i < count; i++) {
+    setBeeperPhysicalState(true);
+    vTaskDelay(onTicks);
+    setBeeperPhysicalState(false);
+    if (i + 1 < count) vTaskDelay(gapTicks);
+  }
+  setBeeperPhysicalState(false);
+  Serial.println("BEEPER burst complete; output OFF");
+  beeperTaskHandle = nullptr;
+  vTaskDelete(nullptr);
+}
+
+void startBeepBurst() {
+  if (!beeperHardwareInitialized || beeperPin < 0) { Serial.println("BEEPER skipped: hardware not initialized"); return; }
+  if (warnMinutes <= 0 || beepOnMs == 0 || beepBurstCount <= 0) { Serial.println("BEEPER skipped: warning/beep config disabled"); return; }
+  if (beeperTaskHandle != nullptr) { Serial.println("BEEPER skipped: burst already active"); return; }
+  BaseType_t ok = xTaskCreatePinnedToCore(beeperBurstTask, "beeperBurst", 2048, nullptr, 1, &beeperTaskHandle, 0);
+  if (ok != pdPASS) {
+    beeperTaskHandle = nullptr;
+    setBeeperPhysicalState(false);
+    Serial.println("BEEPER ERROR: task creation failed");
+  }
+}
+
+// Advances the non-blocking beep burst one phase at a time. Called every
+// loop() iteration; cheap no-op when nothing is beeping or no pin is set.
+void serviceBeeper() {
+  // Dedicated beeperBurstTask owns precise timing. No GPIO writes from loop.
+}
+
+// Toggles the LED of every room currently in its warning window, so it
+// blinks for the duration. Rooms not warning are left untouched — their LED
+// stays owned by setRelay(). Non-blocking: one shared toggle timer for all
+// warning LEDs. No-op when the feature is disabled.
+void serviceWarningLeds() {
+  if (warnMinutes <= 0) return;
+  if (millis() - lastLedBlinkToggle < LED_BLINK_INTERVAL) return;
+  lastLedBlinkToggle = millis();
+  bool anyWarning = false;
+  for (int i = 0; i < roomCount; i++) {
+    if (!rooms[i].warning || rooms[i].ledPin < 0 || rooms[i].ledPin == beeperPin) continue;
+    anyWarning = true;
+    rooms[i].ledBlinkOn = !rooms[i].ledBlinkOn;
+    digitalWrite(rooms[i].ledPin, rooms[i].ledBlinkOn ? LED_ON : LED_OFF);
+  }
+  (void)anyWarning;
+}
+
+// A delay() replacement that keeps the warning LED blink + beeper serviced
+// while it waits. The Firebase poll/push loops (pollOverrides, refreshSlotsOnly,
+// pushAllStatus) each block for hundreds of ms per room plus up to a 5s HTTP
+// timeout; during a plain delay()/blocking fetch the loop() can't run, so the
+// blink froze mid-cycle for seconds (the "off for a few sec, then blinks"
+// symptom). Slicing the wait and pumping the outputs keeps the blink rhythmic.
+void warningAwareDelay(unsigned long ms) {
+  unsigned long start = millis();
+  while (millis() - start < ms) {
+    serviceWarningLeds();
+    serviceBeeper();
+    delay(5);
+  }
+}
+
+// Recomputes each room's warning flag from the clock + activated slots, and
+// fires the shared beeper burst once on the rising edge (window just
+// entered). On the falling edge (window ended / slot over) it restores the
+// LED to its relay-driven steady state so setRelay() owns it again. Entirely
+// skipped when the feature is disabled.
+void checkEndOfSlotWarnings() {
+  bool anyWarningNow = false;
+  bool anyNewSlotWarning = false;
+  for (int i = 0; i < roomCount; i++) {
+    bool roomWarningNow = false;
+    for (int j = 0; j < rooms[i].slotCount; j++) {
+      Slot &sl = rooms[i].slots[j];
+      if (!slotIsInWarningWindow(sl)) continue;
+      roomWarningNow = true;
+      anyWarningNow = true;
+      if (!wasSlotWarningTriggered(sl.id)) {
+        markSlotWarningTriggered(sl.id);
+        anyNewSlotWarning = true;
+        Serial.printf("[%s] Beeper marked triggered: room=%d slot=%s\n", getTime().c_str(), i + 1, sl.id);
+      }
+    }
+    if (roomWarningNow && !rooms[i].warning) {
+      rooms[i].warning = true;
+      rooms[i].ledBlinkOn = false;
+    } else if (!roomWarningNow && rooms[i].warning) {
+      rooms[i].warning = false;
+      if (rooms[i].ledPin >= 0 && rooms[i].ledPin != beeperPin)
+        digitalWrite(rooms[i].ledPin, rooms[i].lightOn ? LED_ON : LED_OFF);
+    }
+  }
+  // Mark every qualifying slot first, then create one shared burst.
+  if (anyNewSlotWarning && beeperTaskHandle == nullptr) startBeepBurst();
+  warningEpisodeActive = anyWarningNow;
+  // Do not touch the beeper GPIO during ordinary warning scans. The burst task
+  // always returns it to OFF immediately after its final pulse.
+}
+
+// ── Schedule check every 10 seconds ──────────────────────────
+void checkSchedules() {
+  int nm = nowMins();
+  for (int i = 0; i < roomCount; i++) {
+    if (rooms[i].ovr != -1) continue; // manual override — skip
+
+    // Check each slot individually for expiry detection
+    for (int j = 0; j < rooms[i].slotCount; j++) {
+      int slotStart = rooms[i].slots[j].sh * 60 + rooms[i].slots[j].sm;
+      int slotEnd   = rooms[i].slots[j].eh * 60 + rooms[i].slots[j].em;
+      bool hasCode  = true; // assume code required (safe default)
+
+      // Slot just ended — check if it was never activated. Guard on the
+      // local `expired` flag and latch it here so this fires exactly ONCE
+      // per slot: markSlotExpired() only writes to Firebase, so without
+      // this the check kept re-matching every 10s tick for the whole
+      // minute after slotEnd, spamming the log and re-writing Firebase.
+      if (nm >= slotEnd && nm <= slotEnd + 1) {
+        if (!rooms[i].slots[j].activated && hasCode && !rooms[i].slots[j].expired) {
+          // Slot ended without activation — mark expired (once)
+          rooms[i].slots[j].expired = true; // latch locally so we don't re-fire
+          markSlotExpired(i, j);
+        }
+      }
+    }
+
+    bool shouldOn = isInSlot(i);
+    if (shouldOn != rooms[i].lightOn) {
+      Serial.printf("[%s] Room %d schedule: %s → %s\n",
+        getTime().c_str(), i+1,
+        rooms[i].lightOn ? "ON" : "OFF",
+        shouldOn ? "ON" : "OFF");
+      setRelay(i, shouldOn);
+      pushStatus(i);
+    }
+  }
+  // Re-evaluate the emergency light every tick too — its auto-off timeout must
+  // fire during a long standby when no room state changes (setRelay() only
+  // calls this on a change). No-op when the pin is unconfigured or the timeout
+  // is disabled and the light is already in the right state.
+  updateEmergencyLight();
+}
+
+// ── WiFi watchdog — relies on WiFi.setAutoReconnect(); this just
+// detects a prolonged outage and reboots as a last-resort safety net ──
+void wifiWatchdog() {
+  static unsigned long disconnectedSince = 0;
+
+  if (WiFi.status() == WL_CONNECTED) { disconnectedSince = 0; return; }
+
+  if (disconnectedSince == 0) {
+    disconnectedSince = millis();
+    Serial.println("WiFi lost — waiting for auto-reconnect");
+    flashStatusLed(3, 200);
+  }
+
+  if (millis() - disconnectedSince > 120000) {
+    Serial.println("WiFi did not recover within 2 minutes — rebooting");
+    delay(300);
+    ESP.restart();
+  }
+}
+
+// ── LittleFS config (Firebase URL + profile number) — set via setup portal ──
+// Extracts a "field":"value" string from our own small flat JSON config —
+// not for Firebase's richer JSON (see parseIntField() for that).
+String readJsonStringField(const String &json, const String &field) {
+  String key = "\"" + field + "\":\"";
+  int idx = json.indexOf(key);
+  if (idx < 0) return "";
+  int start = idx + key.length();
+  int end = json.indexOf("\"", start);
+  if (end < 0) return "";
+  return json.substring(start, end);
+}
+
+bool loadConfig() {
+  if (!LittleFS.begin(true)) {
+    Serial.println("LittleFS mount failed");
+    return false;
+  }
+  if (!LittleFS.exists(CONFIG_PATH)) return false;
+  File f = LittleFS.open(CONFIG_PATH, "r");
+  if (!f) return false;
+  String json = f.readString();
+  f.close();
+
+  firebaseUrl = readJsonStringField(json, "fbUrl");
+  profileNum  = readJsonStringField(json, "profileNum");
+  lastRolloverDay = parseIntField(json, "lastRolloverDay"); // -1 if missing — see declaration
+  syncGeneration = syncRawField(json, "syncGeneration").toInt();
+  syncRevision = syncRawField(json, "syncRevision").toInt();
+  configVersion = syncRawField(json, "configVersion").toInt();
+  return firebaseUrl.length() > 0;
+}
+
+void saveConfig() {
+  File f = LittleFS.open(CONFIG_PATH, "w");
+  if (!f) { Serial.println("Failed to save config to LittleFS"); return; }
+  String json = "{\"fbUrl\":\"" + firebaseUrl + "\",\"profileNum\":\"" + profileNum +
+    "\",\"lastRolloverDay\":" + String(lastRolloverDay) +
+    ",\"syncGeneration\":" + String(syncGeneration) +
+    ",\"syncRevision\":" + String(syncRevision) +
+    ",\"configVersion\":" + String(configVersion) + "}";
+  f.print(json);
+  f.close();
+  Serial.println("Config saved to LittleFS");
+}
+
+// ── Setup portal (WiFiManager) ────────────────────────────────
+bool shouldSaveConfig = false;
+void saveConfigCallback() { shouldSaveConfig = true; }
+
+void configModeCallback(WiFiManager *wm) {
+  Serial.println("=== Setup mode ===");
+  Serial.printf("Connect to WiFi \"%s\" (password: %s)\n", CONFIG_PORTAL_AP, CONFIG_PORTAL_PASSWORD);
+  Serial.printf("Then browse to %s if it doesn't open automatically\n", WiFi.softAPIP().toString().c_str());
+  flashStatusLed(3, 150);
+}
+
+// Returns true if BOOT (GPIO0) was held low for 3s right at power-up
+bool shouldForceConfigPortal() {
+  pinMode(CONFIG_BUTTON_PIN, INPUT_PULLUP);
+  if (digitalRead(CONFIG_BUTTON_PIN) != LOW) return false;
+  Serial.println("BOOT held at power-up — checking for 3s hold to force setup mode...");
+  unsigned long start = millis();
+  while (digitalRead(CONFIG_BUTTON_PIN) == LOW) {
+    if (millis() - start > 3000) return true;
+    delay(50);
+  }
+  return false;
+}
+
+void runConfigPortal(bool forceReset) {
+  WiFiManager wm;
+  wm.setSaveConfigCallback(saveConfigCallback);
+  wm.setAPCallback(configModeCallback);
+  wm.setConfigPortalTimeout(CONFIG_PORTAL_TIMEOUT_S);
+
+  WiFiManagerParameter customFbUrl("fburl", "Firebase Database URL", firebaseUrl.c_str(), 200);
+  WiFiManagerParameter customProfileNum("profilenum", "Profile number (from the PWA Settings page)", profileNum.c_str(), 10);
+  wm.addParameter(&customFbUrl);
+  wm.addParameter(&customProfileNum);
+
+  if (forceReset) wm.resetSettings();
+
+  bool connected = wm.autoConnect(CONFIG_PORTAL_AP, CONFIG_PORTAL_PASSWORD);
+
+  if (shouldSaveConfig) {
+    firebaseUrl = String(customFbUrl.getValue());
+    firebaseUrl.trim();
+    if (firebaseUrl.endsWith("/")) firebaseUrl.remove(firebaseUrl.length() - 1);
+    profileNum = String(customProfileNum.getValue());
+    profileNum.trim();
+    saveConfig();
+  }
+
+  if (!connected) {
+    Serial.println("Setup portal timed out without connecting — rebooting to try again");
+    flashStatusLed(10, 150);
+    delay(2000);
+    ESP.restart();
+  }
+}
+
+// ── Setup ─────────────────────────────────────────────────────
+void setup() {
+  Serial.begin(115200);
+  delay(400);
+  Serial.println("\n\n=== Room Controller Booting ===");
+
+  pinMode(STATUS_LED_PIN, OUTPUT);
+  digitalWrite(STATUS_LED_PIN, LOW);
+
+  bool forceSetup = shouldForceConfigPortal();
+  if (forceSetup) Serial.println("Forcing setup portal (BOOT held 3s)");
+
+  loadConfig(); // pre-fills firebaseUrl from a previous setup, if any
+
+  runConfigPortal(forceSetup);
+
+  if (firebaseUrl.length() == 0) {
+    Serial.println("No Firebase URL configured — hold BOOT for 3s at power-up to open setup. Rebooting in 5s.");
+    flashStatusLed(10, 150);
+    delay(5000);
+    ESP.restart();
+  }
+
+  WiFi.setAutoReconnect(true);
+  Serial.printf("WiFi connected — IP: %s\n", WiFi.localIP().toString().c_str());
+  Serial.printf("Firebase URL: %s\n", firebaseUrl.c_str());
+  Serial.printf("Profile: %s\n", profileNum.length() > 0 ? ("/profiles/" + profileNum).c_str() : "(none — using database root)");
+
+  // Sync time
+  configTime(GMT_OFFSET_SEC, DST_OFFSET_SEC, "pool.ntp.org", "time.google.com");
+  Serial.print("NTP");
+  struct tm t; int n = 0;
+  timeSynced = getLocalTime(&t);
+  while (!timeSynced && n++ < 20) { delay(500); Serial.print("."); timeSynced = getLocalTime(&t); }
+  Serial.println("\nTime: " + getTime());
+
+  // Discover rooms from Firebase — this only happens here at boot. Adding a
+  // room or changing a pin in the PWA needs a reboot of this board to take
+  // effect, since pins must be pinMode()'d before we can safely use them.
+  String roomsJson = fbGet("/rooms");
+  if (roomsJson != "" && roomsJson != "null" && roomsJson != "error") {
+    int found = countRooms(roomsJson);
+    if (found > MAX_ROOMS) {
+      Serial.printf("WARNING: Firebase has %d rooms — only the first %d fit MAX_ROOMS, the rest are ignored\n", found, MAX_ROOMS);
+    }
+    roomCount = min(found, MAX_ROOMS);
+  }
+
+  if (roomCount == 0) {
+    Serial.println("No rooms found under /rooms in Firebase — check the PWA Settings page. Rebooting in 10s.");
+    flashStatusLed(6, 300);
+    delay(10000);
+    ESP.restart();
+  }
+  Serial.printf("Found %d room(s) in Firebase\n", roomCount);
+
+  for (int i = 0; i < roomCount; i++) snprintf(rooms[i].name, sizeof(rooms[i].name), "Room %d", i + 1);
+
+  readAllRooms(); // fills pins/names/overrides/slots for rooms[0..roomCount-1]
+  applyRelayWiringConfig();  // must run before pin init below, so RELAY_OFF is already correct
+  applyEmergencyPinConfig(); // same — emergencyPin must be known before pinMode() below
+  applyEmergencyTimeoutConfig(); // emergency light auto-off timeout (0 = disabled)
+  applyBeeperPinConfig();    // shared end-of-slot beeper pin (off/PIN_NONE if unconfigured)
+  applyWarnMinutesConfig();  // warn window in minutes (0 = feature disabled)
+  applyBeepConfig();         // per-beep duration + count (defaults 250ms, 1)
+  if (beeperPin == STATUS_LED_PIN || beeperPin == CONFIG_BUTTON_PIN) {
+    Serial.printf("BEEPER GPIO %d conflicts with reserved controller GPIO; disabling beeper until config is corrected and rebooted\n", beeperPin);
+    beeperPin = PIN_NONE;
+  }
+  Serial.printf("BEEPER config summary: pin=%d warn=%dmin count=%d ms=%lu relay=%s ON=%d OFF=%d\n",
+    beeperPin, warnMinutes, beepBurstCount, beepOnMs,
+    (RELAY_ON == HIGH ? "NC" : "NO"), BEEPER_ON, BEEPER_OFF);
+
+  // Configure pins now that we know which GPIOs each room actually uses
+  for (int i = 0; i < roomCount; i++) {
+    if (rooms[i].relayPin >= 0 && rooms[i].relayPin != beeperPin) {
+      pinMode(rooms[i].relayPin, OUTPUT);
+      digitalWrite(rooms[i].relayPin, RELAY_OFF); // start OFF — correct state restored below
+    } else {
+      Serial.printf("Room %d has no relay GPIO configured — set one in the PWA Settings and reboot\n", i + 1);
+    }
+    if (rooms[i].ledPin >= 0 && rooms[i].ledPin != beeperPin) {
+      pinMode(rooms[i].ledPin, OUTPUT);
+      digitalWrite(rooms[i].ledPin, LED_OFF);
+    } else {
+      Serial.printf("Room %d has no LED configured — skipping its LED indicator\n", i + 1);
+    }
+  }
+  if (emergencyPin >= 0 && emergencyPin != beeperPin) {
+    digitalWrite(emergencyPin, RELAY_OFF); // preload physical OFF before OUTPUT
+    pinMode(emergencyPin, OUTPUT);
+    digitalWrite(emergencyPin, RELAY_OFF);
+    emergencyOutputOn = false;
+  }
+  // Shared end-of-slot beeper — only touch the pin if it's actually
+  // configured, so unconfigured deployments never drive a random GPIO.
+  if (beeperPin >= 0) {
+    // One-time hardware initialization. Preload NC relay OFF before OUTPUT.
+    digitalWrite(beeperPin, BEEPER_OFF);
+    pinMode(beeperPin, OUTPUT);
+    digitalWrite(beeperPin, BEEPER_OFF);
+    beeperTaskHandle = nullptr;
+    warningEpisodeActive = false;
+    beeperHardwareInitialized = true;
+    Serial.printf("BEEPER initialized OFF on GPIO %d, level %d\n", beeperPin, BEEPER_OFF);
+  }
+
+  gpioAssignmentsLocked = true;
+  Serial.println("GPIO assignments locked for this boot");
+
+  ledStartupTest();
+  applyAllStates(); // also brings the emergency light to its correct state via setRelay() -> updateEmergencyLight()
+  pushAllStatus();
+
+  // Catch up on a missed rollover — a reboot, power loss, or WiFi drop
+  // spanning midnight would otherwise skip that day's rollover, since
+  // checkMidnight() in loop() only detects a date change while it's
+  // continuously running. lastRolloverDay is persisted in LittleFS
+  // specifically to survive that gap. Only run this when NTP actually
+  // synced — comparing against an unsynced clock (epoch 0) would
+  // otherwise look like a huge missed gap on every boot and wrongly wipe
+  // active slots. If NTP hasn't synced yet, this same check runs again
+  // from loop()'s NTP retry the moment it eventually does — see there.
+  if (timeSynced) {
+    catchUpMissedRollover();
+  } else {
+    Serial.println("NTP never synced at boot — will keep retrying in the background; rollover catch-up runs once it succeeds");
+  }
+
+  // Initialize independent settings and daily slot synchronization cursors.
+  syncConfigV2();
+  syncSlotsV2();
+
+  Serial.println("=== Ready — state restored from Firebase ===");
+}
+
+// Runs the exact "did we miss a rollover" check setup() runs at boot, but
+// callable again later once a delayed NTP sync finally succeeds (see the
+// retry in loop()) -- factored out so both call sites share one path
+// rather than two copies that could drift apart. Only ever called with
+// timeSynced already true -- an unsynced clock's epoch day is meaningless
+// and would look like a huge missed gap, wrongly wiping active slots.
+// Safe to call even when nothing was actually missed: syncRolloverMarkerFromFirebase()
+// and midnightRollover()'s own date-based keep-filter mean this can never
+// clobber a slot legitimately created for today while this board's clock
+// was still unsynced.
+void catchUpMissedRollover() {
+  int todayEpochDay = currentEpochDay();
+  if (lastRolloverDay == -1) {
+    // No baseline yet (first boot on this firmware, or ever) — nothing to
+    // catch up on, just record today so future checks have something to
+    // compare against.
+    lastRolloverDay = todayEpochDay;
+    saveConfig();
+    return;
+  }
+  if (todayEpochDay != lastRolloverDay) {
+    if (syncRolloverMarkerFromFirebase(todayEpochDay)) {
+      Serial.println("Rollover already done today via PWA — syncing marker");
+    } else {
+      Serial.println("Missed rollover while offline — catching up now");
+      midnightRollover(); // updates lastRolloverDay + saveConfig() itself
+    }
+  }
+}
+
+// ── Loop ──────────────────────────────────────────────────────
+void loop() {
+
+  // Poll override every 5 seconds
+  if (millis() - lastPollTime > POLL_INTERVAL) {
+    lastPollTime = millis();
+    if (WiFi.status() == WL_CONNECTED) pollOverrides();
+  }
+
+  // Check schedule every 10 seconds
+  if (millis() - lastScheduleCheck > SCHEDULE_INTERVAL) {
+    lastScheduleCheck = millis();
+
+    // NTP is a one-shot attempt at boot (20 tries over ~10s) — if the
+    // network wasn't fully up yet (e.g. a power outage where the local
+    // WiFi reconnects before the router's own internet uplink does),
+    // timeSynced stays false for the rest of this boot with nothing ever
+    // retrying it, and checkMidnight() below silently never runs at all.
+    // Retry here on the same 10s cadence, WiFi permitting; the instant it
+    // succeeds, run the same missed-rollover catch-up setup() runs at
+    // boot, so a slow network recovery doesn't cost a whole reboot cycle.
+    if (!timeSynced && WiFi.status() == WL_CONNECTED) {
+      struct tm t;
+      timeSynced = getLocalTime(&t);
+      if (timeSynced) {
+        Serial.println("NTP synced (delayed) — Time: " + getTime());
+        catchUpMissedRollover();
+      }
+    }
+
+    checkSchedules();
+    checkEndOfSlotWarnings(); // update per-room warning flags, fire beeper burst on entry
+    checkMidnight();  // detect date change → rollover slots
+  }
+
+  // Non-blocking end-of-slot warning outputs — run every iteration so the
+  // beep burst and LED blink are smooth. Both no-op when disabled/unconfigured.
+  serviceBeeper();
+  serviceWarningLeds();
+
+  // Refresh slots only — no relay state change unless slots count changes
+  if (millis() - lastSlotRefresh > SLOT_REFRESH) {
+    lastSlotRefresh = millis();
+    if (WiFi.status() == WL_CONNECTED) {
+      syncConfigV2();
+      syncSlotsV2();
+    }
+  }
+
+  // Heartbeat every 5 minutes
+  if (millis() - lastStatusPush > HEARTBEAT) {
+    lastStatusPush = millis();
+    pushAllStatus();
+  }
+
+  // WiFi watchdog — reboots if disconnected too long
+  wifiWatchdog();
+
+  delay(10);
+}
