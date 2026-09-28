@@ -6,7 +6,7 @@
  *             LittleFS (bundled with modern ESP32 board packages),
  *             WiFi, HTTPClient, WiFiClientSecure (all built-in)
  *
- *  v6.4b — Sync V2 failed-revision recovery + v6.4 GPIO/warning fixes:
+ *  v6.4c — Beeper fixed NO polarity + Sync V2 recovery + compiler prototypes:
  *  - Beeper is active-low and driven only by its timed state machine.
  *  - GPIO configuration/read checks never call digitalWrite().
  *  - recurringDef CREATE/UPDATE/DELETE and all Sync V2 changes retained.
@@ -67,6 +67,18 @@ void applyBeepConfig();
 void setBeeperPhysicalState(bool on);
 void warningAwareDelay(unsigned long ms);
 void saveConfig();
+void updateEmergencyLight();
+void refreshSlotsOnly();
+bool loadSyncMeta(long &remoteGeneration, long &remoteRevision);
+bool fullSyncV2Refresh();
+bool processSyncChange(long revisionNo);
+void syncSlotsV2();
+void syncConfigV2();
+int daysMaskFromJson(const String &slotObj);
+String extractStringField(const String &json, const String &field);
+String extractRawField(const String &json, const String &field);
+void catchUpMissedRollover();
+bool midnightRollover();
 
 // ── Setup portal ────────────────────────────────────────────────
 #define CONFIG_PATH             "/config.json"
@@ -149,6 +161,10 @@ int warnMinutes = 0;   // 0 or negative = feature disabled
 // Beeper is powered through a relay contact. Use the SAME physical load-state
 // mapping as room/emergency relays. NC default: ON=HIGH releases the relay and
 // closes NC; OFF=LOW energizes the relay and opens NC. NO swaps automatically.
+// Beeper relay is physically wired using COM + NO on an active-low relay input.
+// Keep this polarity independent from /config/relayWiring used by room and
+// emergency relays. Normal beeper state = HIGH (relay released, NO open).
+// Warning state = LOW (relay energized, NO closed).
 #define BEEPER_ON  LOW
 #define BEEPER_OFF HIGH
 
@@ -870,74 +886,35 @@ bool processSyncChange(long revisionNo) {
 
 void syncSlotsV2() {
   long remoteGeneration, remoteRevision;
-
   if (!loadSyncMeta(remoteGeneration, remoteRevision)) {
     syncV2Available = false;
-    refreshSlotsOnly(); // migration fallback
+    refreshSlotsOnly();
     return;
   }
-
   syncV2Available = true;
 
-  if (syncGeneration != remoteGeneration ||
-      syncRevision > remoteRevision) {
-    Serial.printf(
-      "Sync V2: generation/cursor mismatch; local=%ld/%ld remote=%ld/%ld; forcing full sync\n",
-      syncGeneration,
-      syncRevision,
-      remoteGeneration,
-      remoteRevision
-    );
-
+  if (syncGeneration != remoteGeneration || syncRevision > remoteRevision) {
+    Serial.printf("Sync V2: generation/cursor mismatch; local=%ld/%ld remote=%ld/%ld; forcing full sync\n",
+      syncGeneration, syncRevision, remoteGeneration, remoteRevision);
     if (!fullSyncV2Refresh()) {
-      Serial.println(
-        "Sync V2: generation/cursor recovery full sync failed; "
-        "local cursor unchanged"
-      );
+      Serial.println("Sync V2: generation/cursor recovery full sync failed; local cursor unchanged");
     }
     return;
   }
 
-  for (long revision = syncRevision + 1;
-       revision <= remoteRevision;
-       revision++) {
-
+  for (long revision = syncRevision + 1; revision <= remoteRevision; revision++) {
     if (!processSyncChange(revision)) {
-      Serial.printf(
-        "Sync V2: revision %ld failed; forcing full canonical sync\n",
-        revision
-      );
-
-      // Never skip a failed revision. A successful full refresh replaces RAM
-      // with the authoritative current schedule and then adopts the current
-      // Firebase generation/revision. If recovery fails, the previous cursor
-      // remains unchanged so the next cycle can retry safely.
+      Serial.printf("Sync V2: revision %ld failed; forcing full canonical sync\n", revision);
       if (!fullSyncV2Refresh()) {
-        Serial.printf(
-          "Sync V2: recovery full sync failed at revision %ld; "
-          "cursor remains generation=%ld revision=%ld\n",
-          revision,
-          syncGeneration,
-          syncRevision
-        );
+        Serial.printf("Sync V2: recovery full sync failed at revision %ld; cursor remains generation=%ld revision=%ld\n",
+          revision, syncGeneration, syncRevision);
       } else {
-        Serial.printf(
-          "Sync V2: recovery full sync complete; "
-          "generation=%ld revision=%ld\n",
-          syncGeneration,
-          syncRevision
-        );
+        Serial.printf("Sync V2: recovery full sync complete; generation=%ld revision=%ld\n",
+          syncGeneration, syncRevision);
       }
       return;
     }
-
-    // A FULL_SYNC event may already have moved the cursor to the current
-    // remote head through fullSyncV2Refresh().
-    if (syncRevision >= remoteRevision) {
-      return;
-    }
-
-    // Advance only after this individual revision was applied successfully.
+    if (syncRevision >= remoteRevision) return;
     syncRevision = revision;
     saveConfig();
   }
@@ -2194,9 +2171,8 @@ void setup() {
     Serial.printf("BEEPER GPIO %d conflicts with reserved controller GPIO; disabling beeper until config is corrected and rebooted\n", beeperPin);
     beeperPin = PIN_NONE;
   }
-  Serial.printf("BEEPER config summary: pin=%d warn=%dmin count=%d ms=%lu relay=%s ON=%d OFF=%d\n",
-    beeperPin, warnMinutes, beepBurstCount, beepOnMs,
-    (RELAY_ON == HIGH ? "NC" : "NO"), BEEPER_ON, BEEPER_OFF);
+  Serial.printf("BEEPER config summary: pin=%d warn=%dmin count=%d ms=%lu wiring=NO ON=%d OFF=%d\n",
+    beeperPin, warnMinutes, beepBurstCount, beepOnMs, BEEPER_ON, BEEPER_OFF);
 
   // Configure pins now that we know which GPIOs each room actually uses
   for (int i = 0; i < roomCount; i++) {
