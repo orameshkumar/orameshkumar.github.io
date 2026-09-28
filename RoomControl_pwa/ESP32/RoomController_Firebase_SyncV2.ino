@@ -6,7 +6,7 @@
  *             LittleFS (bundled with modern ESP32 board packages),
  *             WiFi, HTTPClient, WiFiClientSecure (all built-in)
  *
- *  v6.4a — Emergency corrective-write + boot-locked GPIO/warning fixes:
+ *  v6.4b — Sync V2 failed-revision recovery + v6.4 GPIO/warning fixes:
  *  - Beeper is active-low and driven only by its timed state machine.
  *  - GPIO configuration/read checks never call digitalWrite().
  *  - recurringDef CREATE/UPDATE/DELETE and all Sync V2 changes retained.
@@ -149,8 +149,8 @@ int warnMinutes = 0;   // 0 or negative = feature disabled
 // Beeper is powered through a relay contact. Use the SAME physical load-state
 // mapping as room/emergency relays. NC default: ON=HIGH releases the relay and
 // closes NC; OFF=LOW energizes the relay and opens NC. NO swaps automatically.
-#define BEEPER_ON  RELAY_ON
-#define BEEPER_OFF RELAY_OFF
+#define BEEPER_ON  LOW
+#define BEEPER_OFF HIGH
 
 String firebaseUrl;  // e.g. https://your-project-default-rtdb.asia-southeast1.firebasedatabase.app
 
@@ -870,21 +870,75 @@ bool processSyncChange(long revisionNo) {
 
 void syncSlotsV2() {
   long remoteGeneration, remoteRevision;
+
   if (!loadSyncMeta(remoteGeneration, remoteRevision)) {
     syncV2Available = false;
     refreshSlotsOnly(); // migration fallback
     return;
   }
+
   syncV2Available = true;
-  if (syncGeneration != remoteGeneration || syncRevision > remoteRevision) {
-    fullSyncV2Refresh();
+
+  if (syncGeneration != remoteGeneration ||
+      syncRevision > remoteRevision) {
+    Serial.printf(
+      "Sync V2: generation/cursor mismatch; local=%ld/%ld remote=%ld/%ld; forcing full sync\n",
+      syncGeneration,
+      syncRevision,
+      remoteGeneration,
+      remoteRevision
+    );
+
+    if (!fullSyncV2Refresh()) {
+      Serial.println(
+        "Sync V2: generation/cursor recovery full sync failed; "
+        "local cursor unchanged"
+      );
+    }
     return;
   }
-  for (long r = syncRevision + 1; r <= remoteRevision; r++) {
-    if (!processSyncChange(r)) return;
-    // FULL_SYNC may already have moved the cursor to the current remote head.
-    if (syncRevision >= remoteRevision) return;
-    syncRevision = r;        // advance only after successful application
+
+  for (long revision = syncRevision + 1;
+       revision <= remoteRevision;
+       revision++) {
+
+    if (!processSyncChange(revision)) {
+      Serial.printf(
+        "Sync V2: revision %ld failed; forcing full canonical sync\n",
+        revision
+      );
+
+      // Never skip a failed revision. A successful full refresh replaces RAM
+      // with the authoritative current schedule and then adopts the current
+      // Firebase generation/revision. If recovery fails, the previous cursor
+      // remains unchanged so the next cycle can retry safely.
+      if (!fullSyncV2Refresh()) {
+        Serial.printf(
+          "Sync V2: recovery full sync failed at revision %ld; "
+          "cursor remains generation=%ld revision=%ld\n",
+          revision,
+          syncGeneration,
+          syncRevision
+        );
+      } else {
+        Serial.printf(
+          "Sync V2: recovery full sync complete; "
+          "generation=%ld revision=%ld\n",
+          syncGeneration,
+          syncRevision
+        );
+      }
+      return;
+    }
+
+    // A FULL_SYNC event may already have moved the cursor to the current
+    // remote head through fullSyncV2Refresh().
+    if (syncRevision >= remoteRevision) {
+      return;
+    }
+
+    // Advance only after this individual revision was applied successfully.
+    syncRevision = revision;
     saveConfig();
   }
 }
@@ -1009,22 +1063,18 @@ void applyBeepConfig() {
   Serial.printf("Beep pattern: %lu ms x %d%s\n", beepOnMs, beepBurstCount, beepBurstCount == 0 ? " (muted)" : "");
 }
 
-// Always enforce the requested physical level. The room relays already use
-// this same corrective-write principle: software state alone is not proof that
-// the actual relay output still matches it. This is especially important for
-// NC wiring, where emergency OFF must be driven with RELAY_OFF (LOW).
+// Only actually touches the pin when the desired level differs from what
+// was last written — updateEmergencyLight() re-validates (all-rooms-off
+// check, timeout comparison) far more often than the answer actually
+// changes, so calling digitalWrite() unconditionally on every one of those
+// re-checks was toggling the pin the whole time it sat there
+// validated-but-unchanged.
 void setEmergencyLightState(bool on) {
   if (emergencyPin < 0 || emergencyPin == beeperPin) return;
-
-  const int requestedLevel = on ? RELAY_ON : RELAY_OFF;
-  digitalWrite(emergencyPin, requestedLevel);
-
-  // Keep logs edge-triggered even though the GPIO is corrected on every call.
-  if (emergencyOutputOn != on) {
-    emergencyOutputOn = on;
-    Serial.printf("[%s] Emergency light -> %s, GPIO=%d, level=%d\n",
-      getTime().c_str(), on ? "ON" : "OFF", emergencyPin, requestedLevel);
-  }
+  if (emergencyOutputOn == on) return; // verification only, no redundant GPIO assignment
+  digitalWrite(emergencyPin, on ? RELAY_ON : RELAY_OFF);
+  emergencyOutputOn = on;
+  Serial.printf("[%s] Emergency light -> %s\n", getTime().c_str(), on ? "ON" : "OFF");
 }
 
 // Recomputed after every room state change (called from setRelay(), the
