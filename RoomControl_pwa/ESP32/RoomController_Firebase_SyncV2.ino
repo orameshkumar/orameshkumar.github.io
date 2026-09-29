@@ -6,10 +6,12 @@
  *             LittleFS (bundled with modern ESP32 board packages),
  *             WiFi, HTTPClient, WiFiClientSecure (all built-in)
  *
- *  v6.5 — 30 slots/room + canonical-gap fallback + Sync V2 recovery:
+ *  v6.4d — Missing-revision authoritative full-sync recovery:
  *  - Beeper is active-low and driven only by its timed state machine.
  *  - GPIO configuration/read checks never call digitalWrite().
  *  - recurringDef CREATE/UPDATE/DELETE and all Sync V2 changes retained.
+ *  - Missing Sync V2 revisions are retried, then recovered from /rooms.
+ *  - Cursor advances only after authoritative refresh and meta reread succeed.
  *
  *  v5.0 — ID-keyed Firebase Sync V2:
  *  - Daily generation + revision delta sync under /sync.
@@ -67,19 +69,9 @@ void applyBeepConfig();
 void setBeeperPhysicalState(bool on);
 void warningAwareDelay(unsigned long ms);
 void saveConfig();
-void updateEmergencyLight();
-void refreshSlotsOnly();
-bool loadSyncMeta(long &remoteGeneration, long &remoteRevision);
-bool fullSyncV2Refresh();
 bool processSyncChange(long revisionNo);
-bool refreshOneRoomFromLegacy(int roomIdx);
-void syncSlotsV2();
-void syncConfigV2();
-int daysMaskFromJson(const String &slotObj);
-String extractStringField(const String &json, const String &field);
-String extractRawField(const String &json, const String &field);
-void catchUpMissedRollover();
-bool midnightRollover();
+bool refreshAllSlotsFromRooms();
+bool recoverMissingSyncRevision(long missingRevision);
 
 // ── Setup portal ────────────────────────────────────────────────
 #define CONFIG_PATH             "/config.json"
@@ -118,7 +110,6 @@ int RELAY_OFF = LOW;    // NC default: energise coil    → NC open   → light 
 // comfortably fits that budget — raise only if you've checked your board's
 // actual free-pin count first.
 #define MAX_ROOMS 10
-#define MAX_SLOTS_PER_ROOM 30
 const int PIN_NONE = -1;  // sentinel: not configured
 
 // ── Emergency/standby light — global, not per-room ────────────
@@ -163,12 +154,8 @@ int warnMinutes = 0;   // 0 or negative = feature disabled
 // Beeper is powered through a relay contact. Use the SAME physical load-state
 // mapping as room/emergency relays. NC default: ON=HIGH releases the relay and
 // closes NC; OFF=LOW energizes the relay and opens NC. NO swaps automatically.
-// Beeper relay is physically wired using COM + NO on an active-low relay input.
-// Keep this polarity independent from /config/relayWiring used by room and
-// emergency relays. Normal beeper state = HIGH (relay released, NO open).
-// Warning state = LOW (relay energized, NO closed).
-#define BEEPER_ON  LOW
-#define BEEPER_OFF HIGH
+#define BEEPER_ON  RELAY_ON
+#define BEEPER_OFF RELAY_OFF
 
 String firebaseUrl;  // e.g. https://your-project-default-rtdb.asia-southeast1.firebasedatabase.app
 
@@ -221,7 +208,7 @@ struct Room {
   int  ovr       = -1;       // -1=auto  0=force OFF  1=force ON
   int  relayPin  = PIN_NONE; // set from Firebase at boot
   int  ledPin    = PIN_NONE; // PIN_NONE = no LED configured for this room
-  Slot slots[MAX_SLOTS_PER_ROOM];
+  Slot slots[10];
   int  slotCount = 0;
   RecurDef recurDefs[10];    // recurring definitions for this room
   int  recurDefCount = 0;
@@ -292,7 +279,7 @@ TaskHandle_t beeperTaskHandle = nullptr;
 bool warningEpisodeActive = false;
 bool beeperHardwareInitialized = false;
 bool gpioAssignmentsLocked = false; // true after setup pinMode initialization; runtime config cannot change GPIO numbers
-const int MAX_WARNED_SLOT_IDS = MAX_ROOMS * MAX_SLOTS_PER_ROOM;
+const int MAX_WARNED_SLOT_IDS = MAX_ROOMS * 10;
 char warnedSlotIds[MAX_WARNED_SLOT_IDS][40] = {{0}};
 int warnedSlotIdCount = 0;
 
@@ -584,7 +571,7 @@ void parseSlots(int idx, String json) {
     return;
   }
 
-  Slot tempSlots[MAX_SLOTS_PER_ROOM];
+  Slot tempSlots[10];
   int  tempCount = 0;
   int  pos = 0;
   bool sawSlotObject = false; // true if we parsed ANY real slot object, deleted
@@ -592,7 +579,7 @@ void parseSlots(int idx, String json) {
                               // deleted, count really is 0" from "couldn't
                               // parse anything", which must NOT stomp slotCount
 
-  while (pos < (int)json.length() && tempCount < MAX_SLOTS_PER_ROOM) {
+  while (pos < (int)json.length() && tempCount < 10) {
     int si = json.indexOf("\"s\":\"", pos);
     int ei = json.indexOf("\"e\":\"", pos);
     if (si < 0 || ei < 0) break;
@@ -753,17 +740,10 @@ bool applyCanonicalSlotDelta(const String &roomId, const String &bucket,
   }
   String raw = fbGet("/slotRecords/room" + String(ri + 1) + "/today/" + recordId);
   Slot incoming = {};
-  if (!parseOneCanonicalSlot(raw, incoming)) {
-    Serial.printf("Sync V2: canonical slot unavailable room=%d id=%s; trying /rooms fallback\n",
-      ri + 1, recordId.c_str());
-    return refreshOneRoomFromLegacy(ri);
-  }
+  if (!parseOneCanonicalSlot(raw, incoming)) return false;
   if (existing >= 0) rooms[ri].slots[existing] = incoming;
   else {
-    if (rooms[ri].slotCount >= MAX_SLOTS_PER_ROOM) {
-      Serial.printf("Sync V2: slot capacity reached for room %d (%d slots)\n", ri + 1, MAX_SLOTS_PER_ROOM);
-      return false;
-    }
+    if (rooms[ri].slotCount >= 10) return false;
     rooms[ri].slots[rooms[ri].slotCount++] = incoming;
   }
   mergeSlots(ri);
@@ -782,6 +762,84 @@ bool refreshAllSlotsFromCanonical() {
     warningAwareDelay(100);
   }
   return allOk;
+}
+
+
+// Authoritative recovery source for the currently materialized Today schedule.
+// This is intentionally separate from canonical delta replay: if a revision is
+// missing, the ESP must converge to the current state displayed by the PWA.
+bool refreshAllSlotsFromRooms() {
+  bool allOk = true;
+  Serial.println("Sync V2: authoritative full refresh from /rooms started");
+
+  for (int i = 0; i < roomCount; i++) {
+    String path = "/rooms/room" + String(i + 1) + "/slots";
+    String json = fbGet(path);
+
+    if (json == "error") {
+      Serial.printf("Sync V2: /rooms refresh failed for room %d\n", i + 1);
+      allOk = false;
+      warningAwareDelay(100);
+      continue;
+    }
+
+    if (json == "null") json = "[]";
+    parseSlots(i, json);
+    applyState(i);
+    Serial.printf("Sync V2: room %d authoritative refresh complete; slots=%d\n",
+      i + 1, rooms[i].slotCount);
+    warningAwareDelay(100);
+  }
+
+  return allOk;
+}
+
+// A missing X+1 must never be skipped in order to process X+2 or X+4.
+// Retry briefly in case Firebase visibility is delayed. If the gap remains,
+// replace ESP RAM from /rooms and adopt the current head only after success.
+bool recoverMissingSyncRevision(long missingRevision) {
+  Serial.printf("Sync V2: revision %ld missing; retrying before full sync\n",
+    missingRevision);
+
+  for (int retry = 1; retry <= 2; retry++) {
+    warningAwareDelay(250);
+    String change = fbGet("/sync/changes/" + String(missingRevision));
+    if (change != "error" && change != "null" && change.length() >= 4) {
+      Serial.printf("Sync V2: revision %ld appeared on retry %d\n",
+        missingRevision, retry);
+      return processSyncChange(missingRevision);
+    }
+  }
+
+  Serial.printf("Sync V2: confirmed gap at revision %ld; forcing authoritative full sync\n",
+    missingRevision);
+
+  if (!refreshAllSlotsFromRooms()) {
+    Serial.printf("Sync V2: missing-revision full sync failed; cursor remains %ld/%ld\n",
+      syncGeneration, syncRevision);
+    return false;
+  }
+
+  long recoveredGeneration, recoveredRevision;
+  if (!loadSyncMeta(recoveredGeneration, recoveredRevision)) {
+    Serial.println("Sync V2: full sync succeeded but meta reread failed; cursor unchanged");
+    return false;
+  }
+
+  if (recoveredGeneration <= 0 || recoveredRevision < missingRevision) {
+    Serial.printf("Sync V2: invalid recovery head %ld/%ld for missing revision %ld; cursor unchanged\n",
+      recoveredGeneration, recoveredRevision, missingRevision);
+    return false;
+  }
+
+  syncGeneration = recoveredGeneration;
+  syncRevision = recoveredRevision;
+  syncV2Available = true;
+  saveConfig();
+
+  Serial.printf("Sync V2: missing revision recovered; cursor=%ld/%ld\n",
+    syncGeneration, syncRevision);
+  return true;
 }
 
 void refreshPersistentConfig() {
@@ -872,19 +930,6 @@ bool applyRecurringDefDelta(const String &roomIdRaw, const String &defId,
   return true;
 }
 
-// Room-level fallback for create/copy snapshots and missing canonical records.
-bool refreshOneRoomFromLegacy(int roomIdx) {
-  if (roomIdx < 0 || roomIdx >= roomCount) return false;
-  String raw = fbGet("/rooms/room" + String(roomIdx + 1) + "/slots");
-  if (raw == "error") return false;
-  if (raw == "null") raw = "[]";
-  parseSlots(roomIdx, raw);
-  applyState(roomIdx);
-  Serial.printf("Sync V2: room %d refreshed from /rooms fallback (%d slots)\n",
-    roomIdx + 1, rooms[roomIdx].slotCount);
-  return true;
-}
-
 bool processSyncChange(long revisionNo) {
   String change = fbGet("/sync/changes/" + String(revisionNo));
   if (change == "error" || change == "null") return false;
@@ -902,60 +947,89 @@ bool processSyncChange(long revisionNo) {
   // A room snapshot carries materialized today/tomorrow occurrences and must
   // rebuild the active schedule. The recurringDef event itself only updates
   // the persistent definition cache.
-  if (entity == "roomSnapshot") {
-    int roomIdx = roomIndexFromId(syncRawField(change, "roomId"));
-    return refreshOneRoomFromLegacy(roomIdx);
-  }
+  if (entity == "roomSnapshot") return fullSyncV2Refresh();
   return true;
 }
 
 void syncSlotsV2() {
   long remoteGeneration, remoteRevision;
+
   if (!loadSyncMeta(remoteGeneration, remoteRevision)) {
     syncV2Available = false;
-    refreshSlotsOnly();
+    refreshSlotsOnly(); // migration fallback
     return;
   }
+
   syncV2Available = true;
 
-  if (syncGeneration != remoteGeneration || syncRevision > remoteRevision) {
-    Serial.printf("Sync V2: generation/cursor mismatch; local=%ld/%ld remote=%ld/%ld; forcing full sync\n",
-      syncGeneration, syncRevision, remoteGeneration, remoteRevision);
+  if (syncGeneration != remoteGeneration ||
+      syncRevision > remoteRevision) {
+    Serial.printf(
+      "Sync V2: generation/cursor mismatch; local=%ld/%ld remote=%ld/%ld; forcing full sync\n",
+      syncGeneration,
+      syncRevision,
+      remoteGeneration,
+      remoteRevision
+    );
+
     if (!fullSyncV2Refresh()) {
-      Serial.println("Sync V2: generation/cursor recovery full sync failed; local cursor unchanged");
+      Serial.println(
+        "Sync V2: generation/cursor recovery full sync failed; "
+        "local cursor unchanged"
+      );
     }
     return;
   }
 
-  for (long revision = syncRevision + 1; revision <= remoteRevision; revision++) {
+  for (long revision = syncRevision + 1;
+       revision <= remoteRevision;
+       revision++) {
+
+    // Detect a true history gap before ordinary delta processing. Do not skip
+    // the expected revision even when later revisions already exist.
+    String expectedChange = fbGet("/sync/changes/" + String(revision));
+    if (expectedChange == "error" || expectedChange == "null" ||
+        expectedChange.length() < 4) {
+      recoverMissingSyncRevision(revision);
+      return;
+    }
+
     if (!processSyncChange(revision)) {
-      Serial.printf("Sync V2: revision %ld failed; forcing full canonical sync\n", revision);
+      Serial.printf(
+        "Sync V2: revision %ld failed; forcing full canonical sync\n",
+        revision
+      );
+
+      // Never skip a failed revision. A successful full refresh replaces RAM
+      // with the authoritative current schedule and then adopts the current
+      // Firebase generation/revision. If recovery fails, the previous cursor
+      // remains unchanged so the next cycle can retry safely.
       if (!fullSyncV2Refresh()) {
-        Serial.printf("Sync V2: canonical recovery failed at revision %ld; trying /rooms fallback\n", revision);
-        bool legacyOk = true;
-        for (int i = 0; i < roomCount; i++) {
-          if (!refreshOneRoomFromLegacy(i)) legacyOk = false;
-          warningAwareDelay(100);
-        }
-        long recoveredGeneration, recoveredRevision;
-        if (legacyOk && loadSyncMeta(recoveredGeneration, recoveredRevision)) {
-          syncGeneration = recoveredGeneration;
-          syncRevision = recoveredRevision;
-          syncV2Available = true;
-          saveConfig();
-          Serial.printf("Sync V2: /rooms fallback recovery complete; generation=%ld revision=%ld\n",
-            syncGeneration, syncRevision);
-        } else {
-          Serial.printf("Sync V2: all recovery paths failed at revision %ld; cursor remains generation=%ld revision=%ld\n",
-            revision, syncGeneration, syncRevision);
-        }
+        Serial.printf(
+          "Sync V2: recovery full sync failed at revision %ld; "
+          "cursor remains generation=%ld revision=%ld\n",
+          revision,
+          syncGeneration,
+          syncRevision
+        );
       } else {
-        Serial.printf("Sync V2: recovery full sync complete; generation=%ld revision=%ld\n",
-          syncGeneration, syncRevision);
+        Serial.printf(
+          "Sync V2: recovery full sync complete; "
+          "generation=%ld revision=%ld\n",
+          syncGeneration,
+          syncRevision
+        );
       }
       return;
     }
-    if (syncRevision >= remoteRevision) return;
+
+    // A FULL_SYNC event may already have moved the cursor to the current
+    // remote head through fullSyncV2Refresh().
+    if (syncRevision >= remoteRevision) {
+      return;
+    }
+
+    // Advance only after this individual revision was applied successfully.
     syncRevision = revision;
     saveConfig();
   }
@@ -1232,9 +1306,9 @@ void refreshSlotsOnly() {
     if (slotJson != "error") {
       // Save previous state for comparison
       int  prevCount = rooms[i].slotCount;
-      bool prevActivated[MAX_SLOTS_PER_ROOM] = {};
-      char prevSlotTs[MAX_SLOTS_PER_ROOM][16] = {{0}};
-      for (int j = 0; j < rooms[i].slotCount && j < MAX_SLOTS_PER_ROOM; j++) {
+      bool prevActivated[10] = {};
+      char prevSlotTs[10][16] = {{0}};
+      for (int j = 0; j < rooms[i].slotCount && j < 10; j++) {
         prevActivated[j] = rooms[i].slots[j].activated;
         strncpy(prevSlotTs[j], rooms[i].slots[j].slotTs, sizeof(prevSlotTs[j]));
       }
@@ -2212,8 +2286,9 @@ void setup() {
     Serial.printf("BEEPER GPIO %d conflicts with reserved controller GPIO; disabling beeper until config is corrected and rebooted\n", beeperPin);
     beeperPin = PIN_NONE;
   }
-  Serial.printf("BEEPER config summary: pin=%d warn=%dmin count=%d ms=%lu wiring=NO ON=%d OFF=%d\n",
-    beeperPin, warnMinutes, beepBurstCount, beepOnMs, BEEPER_ON, BEEPER_OFF);
+  Serial.printf("BEEPER config summary: pin=%d warn=%dmin count=%d ms=%lu relay=%s ON=%d OFF=%d\n",
+    beeperPin, warnMinutes, beepBurstCount, beepOnMs,
+    (RELAY_ON == HIGH ? "NC" : "NO"), BEEPER_ON, BEEPER_OFF);
 
   // Configure pins now that we know which GPIOs each room actually uses
   for (int i = 0; i < roomCount; i++) {
