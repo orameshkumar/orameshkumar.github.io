@@ -19,6 +19,10 @@ var Auth = (function() {
     version: STORAGE_PREFIX + 'version'
   };
 
+  // Session marker lives in sessionStorage so an unlocked session survives a
+  // page reload within the same tab, but is cleared when the tab/app is closed.
+  var SESSION_KEY = STORAGE_PREFIX + 'session_expiry';
+
   // ─── State ───
   var _isUnlocked = false;
   var _sessionTimer = null;
@@ -240,13 +244,46 @@ var Auth = (function() {
 
   function unlock() {
     _isUnlocked = true;
+    _writeSessionMarker();
   }
 
   function lock() {
     _isUnlocked = false;
+    _clearSessionMarker();
     stopSessionTimer();
     if (typeof _onLockCallback === 'function') {
       _onLockCallback();
+    }
+  }
+
+  // ─── Session Persistence (survives reload within the same tab) ───
+  function _writeSessionMarker() {
+    try {
+      var timeoutMs = getTimeoutMinutes() * 60 * 1000;
+      // "Never" timeout: use a far-future expiry so reloads never re-prompt
+      // within the tab session. sessionStorage still clears on tab close.
+      var expiry = timeoutMs === 0 ? (Date.now() + 365 * 24 * 60 * 60 * 1000) : (Date.now() + timeoutMs);
+      sessionStorage.setItem(SESSION_KEY, String(expiry));
+    } catch (e) { /* sessionStorage unavailable — fall back to in-memory only */ }
+  }
+
+  function _clearSessionMarker() {
+    try { sessionStorage.removeItem(SESSION_KEY); } catch (e) {}
+  }
+
+  function _hasValidSessionMarker() {
+    try {
+      var stored = sessionStorage.getItem(SESSION_KEY);
+      if (!stored) return false;
+      var expiry = parseInt(stored, 10);
+      if (isNaN(expiry)) return false;
+      if (Date.now() > expiry) {
+        _clearSessionMarker();
+        return false;
+      }
+      return true;
+    } catch (e) {
+      return false;
     }
   }
 
@@ -280,6 +317,9 @@ var Auth = (function() {
   // ─── Activity Tracking ───
   function _resetActivity() {
     _lastActivity = Date.now();
+    // Keep the persisted session expiry in sync with activity so a reload
+    // during active use continues to skip the login prompt.
+    if (_isUnlocked) _writeSessionMarker();
   }
 
   function _bindActivityListeners() {
@@ -349,8 +389,14 @@ var Auth = (function() {
     if (isSetup() && !localStorage.getItem(KEYS.version)) {
       localStorage.setItem(KEYS.version, '1');
     }
-    // Start in locked state
-    _isUnlocked = false;
+    // Restore an unlocked session if a valid (non-expired) session marker
+    // exists in sessionStorage — this lets reloads skip the login prompt.
+    // Otherwise start in locked state.
+    if (isSetup() && _hasValidSessionMarker()) {
+      _isUnlocked = true;
+    } else {
+      _isUnlocked = false;
+    }
   }
 
   // ─── Public API ───

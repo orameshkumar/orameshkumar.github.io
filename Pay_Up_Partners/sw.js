@@ -1,4 +1,4 @@
-const CACHE_NAME = 'pay-up-partners-v2';
+const CACHE_NAME = 'pay-up-partners-v3';
 const FILES_TO_CACHE = [
   './',
   './index.html',

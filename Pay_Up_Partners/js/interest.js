@@ -225,25 +225,57 @@ const InterestCollection = (function() {
         var paidInCurrentPeriod = getTotalInterestPaidInPeriod(payments, currentPeriod.periodStart, currentPeriod.periodEnd);
         var effectivePaidCurrentPeriod = paidInCurrentPeriod + advanceCredit;
 
+        // Interest and principal actually collected ON the selected reference
+        // date (that day only).
+        var interestPaidOnDate = 0;
+        var principalPaidOnDate = 0;
+        for (var pi = 0; pi < payments.length; pi++) {
+          if (payments[pi].date === referenceDate) {
+            if (payments[pi].paymentType === 'interest') {
+              interestPaidOnDate += payments[pi].amount;
+            } else if (payments[pi].paymentType === 'principal') {
+              principalPaidOnDate += payments[pi].amount;
+            }
+          }
+        }
+        interestPaidOnDate = Math.round(interestPaidOnDate * 100) / 100;
+        principalPaidOnDate = Math.round(principalPaidOnDate * 100) / 100;
+        var paidOnReferenceDate = Math.round((interestPaidOnDate + principalPaidOnDate) * 100) / 100;
+
         // Total due
         var totalDue = Math.round((expectedInterest + carryForward - effectivePaidCurrentPeriod) * 100) / 100;
 
-        if (totalDue <= 0) continue;
+        var isUnpaid = totalDue > 0;
+        var isPaidOnDate = paidOnReferenceDate > 0;
 
-        // Apply unpaid filter: when enabled, show only loans with NO interest
-        // payment in the current period (fully untouched this period). Loans that
-        // are partially paid but still owe a balance remain visible when unchecked.
-        if (showUnpaidOnly && paidInCurrentPeriod > 0) continue;
+        // Visibility rules:
+        //  - "Show unpaid only" CHECKED (default): show only loans that still owe
+        //    interest for the period (unpaid). Unchanged behavior.
+        //  - UNCHECKED: ALSO include loans that received an interest payment on the
+        //    selected reference date — a "who paid on this date" view — even if the
+        //    loan is now fully settled for the period.
+        if (showUnpaidOnly) {
+          if (!isUnpaid) continue;
+        } else {
+          if (!isUnpaid && !isPaidOnDate) continue;
+        }
+
+        // A row is shown purely as a paid record when nothing is owed anymore.
+        var isPaidRecord = !isUnpaid && isPaidOnDate;
 
         displayItems.push({
           loan: loan,
           client: client,
           currentPeriod: currentPeriod,
-          totalDue: totalDue,
+          totalDue: totalDue > 0 ? totalDue : 0,
           carryForward: carryForward,
           advanceCredit: advanceCredit,
           paidInCurrentPeriod: paidInCurrentPeriod,
-          effectivePrincipal: effectivePrincipal
+          paidOnReferenceDate: paidOnReferenceDate,
+          interestPaidOnDate: interestPaidOnDate,
+          principalPaidOnDate: principalPaidOnDate,
+          effectivePrincipal: effectivePrincipal,
+          isPaidRecord: isPaidRecord
         });
       }
 
@@ -263,17 +295,37 @@ const InterestCollection = (function() {
         if (item.advanceCredit > 0) notes += ' (₹' + item.advanceCredit.toFixed(2) + ' advance applied)';
         if (item.paidInCurrentPeriod > 0) notes += ' (₹' + item.paidInCurrentPeriod.toFixed(2) + ' already paid)';
 
-        html += '<div class="collection-item">';
+        var itemClass = 'collection-item' + (item.isPaidRecord ? ' collection-item-paid' : '');
+
+        html += '<div class="' + itemClass + '">';
         html += '<div class="collection-info">';
         html += '<div class="collection-client-name">' + esc(item.client.name) + '</div>';
         html += '<div class="collection-pending">Period: ' + formatDate(item.currentPeriod.periodStart) + ' - ' + formatDate(item.currentPeriod.periodEnd) + '</div>';
         html += '<div class="collection-principal">Principal: ₹' + item.loan.principalBalance.toFixed(2) + ' @ ' + item.loan.interestRate + '%</div>';
-        html += '<div class="collection-interest-due">Balance Due: ₹' + item.totalDue.toFixed(2) + notes + '</div>';
+        // Breakdown of what was collected on the selected date (interest/principal).
+        var paidOnDateParts = [];
+        if (item.interestPaidOnDate > 0) paidOnDateParts.push('Interest ₹' + item.interestPaidOnDate.toFixed(2));
+        if (item.principalPaidOnDate > 0) paidOnDateParts.push('Principal ₹' + item.principalPaidOnDate.toFixed(2));
+        var paidOnDateText = paidOnDateParts.join(' + ');
+
+        if (item.isPaidRecord) {
+          html += '<div class="collection-interest-due">Paid on ' + formatDate(referenceDate) + ': ' + paidOnDateText + '</div>';
+          html += '<div class="collection-paid-badge">✓ Paid on this date</div>';
+        } else {
+          html += '<div class="collection-interest-due">Balance Due: ₹' + item.totalDue.toFixed(2) + notes + '</div>';
+          if (paidOnDateText) {
+            html += '<div class="collection-paid-badge">✓ Paid on ' + formatDate(referenceDate) + ': ' + paidOnDateText + '</div>';
+          }
+        }
         html += '</div>';
         html += '<div class="collection-buttons">';
-        html += '<button class="btn-collect-interest" data-loan-id="' + item.loan.id + '">Collect Interest</button>';
+        if (!item.isPaidRecord) {
+          html += '<button class="btn-collect-interest" data-loan-id="' + item.loan.id + '">Collect Interest</button>';
+        }
         html += '<button class="btn-collect-principal" data-loan-id="' + item.loan.id + '">Pay Principal</button>';
-        html += '<button class="btn-reminder" data-loan-id="' + item.loan.id + '" data-client-id="' + item.client.id + '">📱 Remind</button>';
+        if (!item.isPaidRecord) {
+          html += '<button class="btn-reminder" data-loan-id="' + item.loan.id + '" data-client-id="' + item.client.id + '">📱 Remind</button>';
+        }
         html += '</div>';
         html += '</div>';
       }
