@@ -21,6 +21,55 @@ const Settings = (function () {
   }
   function set(key, val) { try { localStorage.setItem(key, val); } catch (e) {} }
 
+  // ═══ Activity log (Cloud Sync) ═══════════════════════════════
+  // Mirrors the Lights On project: a small, persisted, newest-first log of the
+  // last 40 sync/test-connection activities, rendered into #sync-log-list.
+  var LOG_KEY = 'tyf_sync_log';
+  var LOG_MAX = 40;
+
+  function _loadLog() {
+    try { var raw = localStorage.getItem(LOG_KEY); return raw ? JSON.parse(raw) : []; }
+    catch (e) { return []; }
+  }
+  function _saveLog(arr) {
+    try { localStorage.setItem(LOG_KEY, JSON.stringify(arr)); } catch (e) {}
+  }
+
+  // status: 'ok' | 'err'. msg: short description.
+  function logActivity(status, msg) {
+    var now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    var arr = _loadLog();
+    arr.unshift({ time: now, msg: String(msg), status: (status === 'ok' ? 'ok' : 'err') });
+    if (arr.length > LOG_MAX) arr = arr.slice(0, LOG_MAX);
+    _saveLog(arr);
+    renderLog();
+    // Mirror to console for deeper debugging.
+    try { console.log('[SYNC-LOG]', status, msg); } catch (e) {}
+  }
+
+  function clearLog() {
+    _saveLog([]);
+    renderLog();
+  }
+
+  function esc(s) {
+    return s ? String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;') : '';
+  }
+
+  function renderLog() {
+    var el = document.getElementById('sync-log-list');
+    if (!el) return;
+    var arr = _loadLog();
+    if (!arr.length) { el.innerHTML = '<div class="log-empty">No activity yet</div>'; return; }
+    el.innerHTML = arr.map(function (l) {
+      return '<div class="log-entry">' +
+        '<span class="log-time">' + esc(l.time) + '</span>' +
+        '<span class="log-cmd">' + esc(l.msg) + '</span>' +
+        '<span class="log-status ' + (l.status === 'ok' ? 'ok' : 'err') + '">' + (l.status === 'ok' ? '✓' : '✗') + '</span>' +
+        '</div>';
+    }).join('');
+  }
+
   function getAppName()            { return get(KEYS.APP_NAME, DEFAULTS.APP_NAME); }
   function setAppName(v)           { set(KEYS.APP_NAME, (v || '').trim() || DEFAULTS.APP_NAME); }
   function getUpiId()              { return get(KEYS.UPI_ID, ''); }
@@ -154,6 +203,7 @@ const Settings = (function () {
     var syncToggle = document.getElementById('sync-toggle');
     var syncSaveBtn = document.getElementById('sync-settings-save-btn');
     var syncTestBtn = document.getElementById('sync-test-btn');
+    var syncLogClear = document.getElementById('sync-log-clear');
 
     // Populate fields
     populateSyncFields();
@@ -166,10 +216,12 @@ const Settings = (function () {
       if (syncToggle)  syncToggle.addEventListener('change', handleSyncToggle);
       if (syncSaveBtn) syncSaveBtn.addEventListener('click', handleSyncSave);
       if (syncTestBtn) syncTestBtn.addEventListener('click', handleSyncTest);
+      if (syncLogClear) syncLogClear.addEventListener('click', clearLog);
       _syncSettingsBound = true;
     }
 
-    // Update status display
+    // Render the activity log and update status display.
+    renderLog();
     updateSyncStatus();
   }
 
@@ -263,17 +315,23 @@ const Settings = (function () {
     var resultEl = document.getElementById('sync-test-result');
     if (errorEl) errorEl.textContent = '';
 
+    logActivity('ok', 'Test connection: clicked');
+
     var fields = gatherSyncFields();
+    logActivity('ok', 'Config read: collection="' + (fields.collectionName || '(empty)') +
+      '", project="' + (fields.config.projectId || '(empty)') + '"');
 
     // Validate before attempting a connection.
     var result = FirestoreConfig.validate(fields.config, fields.collectionName);
     if (!result.valid) {
       if (errorEl) errorEl.textContent = result.errors.join(' ');
+      logActivity('err', 'Validation failed: ' + result.errors.join(' '));
       return;
     }
 
     if (typeof SyncEngine === 'undefined' || !SyncEngine.testConnection) {
       if (errorEl) errorEl.textContent = 'Sync engine unavailable.';
+      logActivity('err', 'SyncEngine unavailable (script not loaded?)');
       return;
     }
 
@@ -284,6 +342,7 @@ const Settings = (function () {
       resultEl.textContent = 'Connecting to Firestore…';
       resultEl.removeAttribute('hidden');
     }
+    logActivity('ok', 'Connecting to Firestore (loading SDK)…');
 
     var res;
     try {
@@ -309,6 +368,7 @@ const Settings = (function () {
       resultEl.textContent = (res.ok ? '✅ ' : '❌ ') + res.message;
       resultEl.removeAttribute('hidden');
     }
+    logActivity(res.ok ? 'ok' : 'err', 'Result: ' + res.message);
   }
 
   function handleSyncSave(e) {
@@ -394,6 +454,7 @@ const Settings = (function () {
     getDefaultGuestFee, setDefaultGuestFee,
     applyTheme, updateAppNameDisplay,
     getAllSettings, restoreSettings,
-    initSyncSettings, updateSyncStatus
+    initSyncSettings, updateSyncStatus,
+    logActivity, renderLog, clearLog
   };
 })();

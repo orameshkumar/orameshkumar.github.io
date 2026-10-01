@@ -72,6 +72,12 @@ const SyncEngine = (function () {
     } catch (e) {}
   }
 
+  // Safe bridge to the Settings activity log (no-op if Settings isn't loaded).
+  function slog(status, msg) {
+    try { if (typeof Settings !== 'undefined' && Settings.logActivity) Settings.logActivity(status, msg); }
+    catch (e) {}
+  }
+
   // --- Firebase SDK Loading ---
 
   function loadScript(src) {
@@ -401,12 +407,13 @@ const SyncEngine = (function () {
         var localMap = {};
         localRecords.forEach(function (r) { if (r.id) localMap[r.id] = r; });
 
-        // Delete local records absent from remote.
-        for (var localId in localMap) {
-          if (!remoteDocs[localId]) {
-            try { await DB[methods.delete](localId); } catch (e) {}
-          }
-        }
+        // NON-DESTRUCTIVE MERGE: never delete a local record just because it is
+        // absent from the remote. "Absent" is ambiguous — it can mean "created
+        // locally, not yet pushed" (common on first sync / empty remote), and
+        // deleting it would destroy brand-new data. Record deletions propagate
+        // ONLY through explicit change-stream delete envelopes in
+        // incrementalPull() → applyRemoteDoc(store, id, 'delete'). Full merge is
+        // upsert-only; any local-only record is kept and uploaded by the next push().
 
         // Merge remote → local, newest updatedAt wins when both exist.
         for (var remoteId in remoteDocs) {
@@ -534,10 +541,13 @@ const SyncEngine = (function () {
 
     var testApp = null;
     try {
+      slog('ok', 'Loading Firebase SDK from gstatic.com…');
       await loadFirebaseSDK();
       if (!window.firebase) {
+        slog('err', 'Firebase SDK not available after load');
         return { ok: false, message: 'Firebase SDK could not be loaded. Check your internet connection.' };
       }
+      slog('ok', 'Firebase SDK loaded; initializing app…');
 
       var firebaseConfig = {};
       if (configObj.apiKey) firebaseConfig.apiKey = configObj.apiKey;
@@ -554,8 +564,10 @@ const SyncEngine = (function () {
       var testDb = firebase.firestore(testApp);
       // Lightweight read: limit(1) on the members collection under this prefix.
       var colName = (collectionName || FirestoreConfig.getCollectionName() || 'test');
+      slog('ok', 'Reading ' + colName + '_members (limit 1)…');
       await testDb.collection(colName + '_members').limit(1).get();
 
+      slog('ok', 'Read succeeded');
       return { ok: true, message: 'Connected successfully to project "' + (configObj.projectId || '') + '".' };
     } catch (e) {
       var msg = (e && e.message) ? e.message : 'Unknown error';
