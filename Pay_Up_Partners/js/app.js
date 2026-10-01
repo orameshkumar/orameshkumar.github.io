@@ -2,6 +2,7 @@ var App = (function() {
   'use strict';
 
   var currentScreen = 'collection-screen';
+  var modulesInitialized = false;
 
   async function initApp() {
     try {
@@ -45,26 +46,36 @@ var App = (function() {
   }
 
   function continueAppInit() {
-    // Initialize all modules
-    Settings.init();
-    if (typeof License !== 'undefined') License.init();
-    Loans.init();
-    ClientMaster.init();
-    Collection.init();
-    InterestCollection.init();
-    if (typeof WhatsApp !== 'undefined') WhatsApp.init();
-    PaymentHistory.init();
-    Reports.init();
-    Backup.init();
+    // One-time wiring: event listeners and service worker registration.
+    // Guarded so re-authentication/unlock does not re-bind listeners,
+    // which would otherwise cause duplicate records (e.g. two loans per save).
+    if (!modulesInitialized) {
+      modulesInitialized = true;
 
-    // Setup navigation
-    setupTabNavigation();
+      // Initialize all modules
+      Settings.init();
+      if (typeof License !== 'undefined') License.init();
+      Loans.init();
+      ClientMaster.init();
+      Collection.init();
+      InterestCollection.init();
+      if (typeof WhatsApp !== 'undefined') WhatsApp.init();
+      PaymentHistory.init();
+      Reports.init();
+      Backup.init();
+
+      // Setup navigation
+      setupTabNavigation();
+
+      // Register service worker
+      registerServiceWorker();
+    } else {
+      // On subsequent unlocks, just re-show the current screen and refresh data.
+      navigateToScreen(currentScreen);
+    }
 
     // Update app name display
     Settings.updateAppNameDisplay();
-
-    // Register service worker
-    registerServiceWorker();
 
     // Check backup reminder
     Backup.checkBackupReminder();

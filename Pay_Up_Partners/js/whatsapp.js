@@ -80,6 +80,55 @@ const WhatsApp = (function() {
     return 'https://wa.me/91' + mobile + '?text=' + encodeURIComponent(message);
   }
 
+  // ─── openWhatsApp(url, fromUserGesture) ───
+  // iOS Safari/PWA blocks window.open after async gaps.
+  // fromUserGesture=true: called synchronously from a button tap → use temp <a> click
+  // fromUserGesture=false/omit: called after await → show tappable toast
+  function openWhatsApp(url, fromUserGesture) {
+    if (fromUserGesture) {
+      var tempLink = document.createElement('a');
+      tempLink.href = url;
+      tempLink.target = '_blank';
+      tempLink.rel = 'noopener noreferrer';
+      tempLink.style.display = 'none';
+      document.body.appendChild(tempLink);
+      tempLink.click();
+      setTimeout(function () { document.body.removeChild(tempLink); }, 100);
+      return;
+    }
+
+    // Toast fallback for post-async calls
+    var existing = document.getElementById('_wa_toast');
+    if (existing) existing.parentNode.removeChild(existing);
+
+    var toast = document.createElement('div');
+    toast.id = '_wa_toast';
+    toast.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);z-index:99999;background:#25D366;color:#fff;border-radius:14px;padding:13px 18px;font-size:1rem;font-weight:600;box-shadow:0 4px 20px rgba(0,0,0,0.35);display:flex;align-items:center;gap:10px;white-space:nowrap;max-width:90vw';
+
+    var link = document.createElement('a');
+    link.href = url;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    link.textContent = '📲 Send WhatsApp';
+    link.style.cssText = 'color:#fff;text-decoration:none;flex:1;';
+    link.addEventListener('click', function () {
+      setTimeout(function () { toast.parentNode && toast.parentNode.removeChild(toast); }, 300);
+    });
+
+    var closeBtn = document.createElement('button');
+    closeBtn.textContent = '✕';
+    closeBtn.setAttribute('aria-label', 'Dismiss');
+    closeBtn.style.cssText = 'background:none;border:none;color:#fff;font-size:1rem;cursor:pointer;padding:0;line-height:1;';
+    closeBtn.addEventListener('click', function () {
+      toast.parentNode && toast.parentNode.removeChild(toast);
+    });
+
+    toast.appendChild(link);
+    toast.appendChild(closeBtn);
+    document.body.appendChild(toast);
+    setTimeout(function () { toast.parentNode && toast.parentNode.removeChild(toast); }, 12000);
+  }
+
   // ─── isValidMobile(mobile) ───
   function isValidMobile(mobile) {
     return /^\d{10}$/.test(mobile);
@@ -179,7 +228,7 @@ const WhatsApp = (function() {
       var accepted = confirm('Send WhatsApp confirmation to ' + options.client.name + '?');
       if (accepted) {
         var url = buildWhatsAppURL(mobile, message);
-        window.open(url, '_blank');
+        openWhatsApp(url, false);
       }
     } catch (e) {
       console.error('WhatsApp offerConfirmation error:', e);
@@ -216,7 +265,7 @@ const WhatsApp = (function() {
 
       var message = processTemplate(template, variables);
       var url = buildWhatsAppURL(mobile, message);
-      window.open(url, '_blank');
+      openWhatsApp(url, true);
     } catch (e) {
       console.error('WhatsApp sendReminder error:', e);
     }

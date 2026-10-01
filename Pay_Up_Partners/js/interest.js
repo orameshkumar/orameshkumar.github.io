@@ -230,7 +230,9 @@ const InterestCollection = (function() {
 
         if (totalDue <= 0) continue;
 
-        // Apply unpaid filter
+        // Apply unpaid filter: when enabled, show only loans with NO interest
+        // payment in the current period (fully untouched this period). Loans that
+        // are partially paid but still owe a balance remain visible when unchecked.
         if (showUnpaidOnly && paidInCurrentPeriod > 0) continue;
 
         displayItems.push({
