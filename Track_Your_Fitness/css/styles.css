@@ -504,6 +504,12 @@ body { display: flex; flex-direction: column; max-width: 480px; margin: 0 auto; 
 .log-status.err { color: var(--danger); }
 .log-empty { font-size: 0.75rem; color: var(--text3); }
 
+/* ── Cloud Sync: conflict panel ── */
+.sync-conflicts { background: var(--danger-bg); border: 1px solid var(--danger); border-radius: var(--radius); padding: 10px 12px; margin-top: 12px; }
+.sync-conflicts-title { font-size: 0.8rem; font-weight: 600; color: var(--danger); margin-bottom: 6px; display: flex; align-items: center; justify-content: space-between; }
+.sync-conflict-entry { font-size: 0.75rem; padding: 4px 0; border-bottom: 1px solid var(--border); }
+.sync-conflict-entry:last-child { border-bottom: none; }
+
 /* ── Report table responsive ─────────────────────────── */
 .report-tab-panel { overflow-x: hidden; }
 .report-tab-panel .filter-bar { flex-wrap: wrap; }
