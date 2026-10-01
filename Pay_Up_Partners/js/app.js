@@ -3,6 +3,7 @@ var App = (function() {
 
   var currentScreen = 'collection-screen';
   var modulesInitialized = false;
+  var ACTIVE_SCREEN_KEY = 'pup_active_screen';
 
   async function initApp() {
     try {
@@ -105,6 +106,8 @@ var App = (function() {
     });
 
     currentScreen = screenId;
+    // Remember the active tab so a page reload returns to the same screen.
+    try { sessionStorage.setItem(ACTIVE_SCREEN_KEY, screenId); } catch (e) {}
 
     // Refresh data on screen switch
     refreshScreenData(screenId);
@@ -158,7 +161,13 @@ var App = (function() {
       });
     });
 
-    // Show the default screen (collection)
+    // Restore the last active screen after a reload; fall back to the default
+    // (collection) if nothing valid was saved.
+    var savedScreen = null;
+    try { savedScreen = sessionStorage.getItem(ACTIVE_SCREEN_KEY); } catch (e) {}
+    if (savedScreen && document.getElementById(savedScreen)) {
+      currentScreen = savedScreen;
+    }
     navigateToScreen(currentScreen);
   }
 
