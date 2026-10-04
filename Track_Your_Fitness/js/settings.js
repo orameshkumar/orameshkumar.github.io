@@ -184,8 +184,8 @@ const Settings = (function () {
     var msgEl         = document.getElementById('settings-save-msg');
     if (errorEl) errorEl.textContent = '';
 
+    // UPI ID is optional. Payment QR codes just won't be shown if it's blank.
     var upiVal = upiIdInput ? upiIdInput.value.trim() : '';
-    if (!upiVal)            { if (errorEl) errorEl.textContent = 'UPI ID is required.'; return; }
     if (upiVal.length > 45) { if (errorEl) errorEl.textContent = 'UPI ID must be 45 characters or less.'; return; }
 
     var appVal = appNameInput ? appNameInput.value.trim() : '';
