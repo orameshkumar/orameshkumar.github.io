@@ -278,6 +278,7 @@ const unsigned long POLL_INTERVAL     = 3000;   // override poll every 3 sec
 const unsigned long SCHEDULE_INTERVAL = 10000;  // schedule check every 10 sec
 const unsigned long SLOT_REFRESH      = 10000;  // slot refresh every 10 sec — picks up activation fast
 const unsigned long HEARTBEAT         = 300000; // heartbeat every 5 min
+const unsigned long HEARTBEAT_RETRY   = 30000;  // retry a failed/skipped heartbeat after 30 s (PWA flags stale at 11 min)
 
 // ── End-of-slot warning timing (non-blocking) ────────────────
 const unsigned long LED_BLINK_INTERVAL = 100;  // LED toggle period during a warning window (faster blink)
@@ -307,7 +308,14 @@ int nowSec()  { struct tm t; getLocalTime(&t); return t.tm_sec;  }
 // Days since the Unix epoch — unlike day-of-month (tm_mday), this never
 // wraps at month/year boundaries, so a straight != comparison across a
 // reboot is always correct regardless of how much time actually passed.
-int currentEpochDay() { return (int)(time(nullptr) / 86400L); }
+//
+// time(nullptr) is UTC seconds even after configTime(GMT_OFFSET_SEC, ...) —
+// the offset only affects localtime(). Dividing it directly made the "day"
+// change at 00:00 UTC (05:30 IST) instead of local midnight, so rollover ran
+// 5.5 h late and yesterday's slots stayed live until then. Add the local
+// offset first so this is the LOCAL calendar day number, which is also what
+// the PWA's localEpochDay() writes to /config/lastRolloverEpochDay.
+int currentEpochDay() { return (int)((time(nullptr) + GMT_OFFSET_SEC + DST_OFFSET_SEC) / 86400L); }
 int nowMins() { return nowH() * 60 + nowMn(); }
 int nowWeekday() { struct tm t; getLocalTime(&t); return t.tm_wday; } // 0=Sun..6=Sat
 
@@ -500,20 +508,52 @@ bool fbPatch(String path, String jsonValue) {
 }
 
 // ── Push status back to Firebase ─────────────────────────────
+// One char per room ('1' = light on), room 1 first — e.g. "1010". Lets the PWA
+// read every room's light state with ONE small GET of /status instead of one
+// GET per room every poll.
+String lightsString() {
+  String s;
+  for (int i = 0; i < roomCount; i++) s += (rooms[i].lightOn ? '1' : '0');
+  return s;
+}
+
+// Called when a room's state changes (and at boot). Keeps the per-room
+// /rooms/roomN/lightOn for older PWAs and adds the compact /status/lights.
+// The per-room "lastSeen" write that used to live here is gone: nothing reads
+// it (the board heartbeat is /status), and it doubled the writes.
 void pushStatus(int idx) {
   String base = "/rooms/room" + String(idx + 1);
   fbPut(base + "/lightOn",  rooms[idx].lightOn ? "true" : "false");
-  fbPut(base + "/lastSeen", "\"" + getTime() + "\"");
+  fbPut("/status/lights", "\"" + lightsString() + "\"");
 }
 
+// Controller-level heartbeat — ONE PATCH for the whole board (all rooms share
+// one ESP32, so health is board-wide). Previously this was 2 PUTs per room plus
+// the timestamp every 5 minutes.
+//   lastSeenEpoch — UTC seconds. Timezone-proof: the PWA compares it with its
+//                   own clock no matter where the viewer is.
+//   lastSeen      — "YYYY-MM-DD HH:MM:SS" board-local text, kept for older PWAs.
+//   lights        — see lightsString().
+// Returns false if the write failed or the clock isn't synced (an unsynced
+// clock would publish a 1970 timestamp and make a healthy board look dead).
+bool pushHeartbeat() {
+  if (!timeSynced) return false;
+  String body = "{\"lastSeen\":\"" + getDateStr() + " " + getTime() + "\"" +
+                ",\"lastSeenEpoch\":" + String((unsigned long)time(nullptr)) +
+                ",\"lights\":\"" + lightsString() + "\"}";
+  return fbPatch("/status", body);
+}
+
+// Boot: write every room's lightOn once so Firebase can't keep a stale value
+// from before a reboot, then the heartbeat.
 void pushAllStatus() {
-  for (int i = 0; i < roomCount; i++) { pushStatus(i); warningAwareDelay(150); }
-  // Controller-level heartbeat — a single "board last seen" timestamp for the
-  // whole profile (all rooms share one ESP32, so health is board-wide, not
-  // per-room). Full "YYYY-MM-DD HH:MM:SS" local time so the PWA can compute
-  // how long ago it was and flag the controller as not responding. Written to
-  // /status/lastSeen under this profile's namespace (via fbPut's prefix).
-  fbPut("/status/lastSeen", "\"" + getDateStr() + " " + getTime() + "\"");
+  for (int i = 0; i < roomCount; i++) {
+    fbPut("/rooms/room" + String(i + 1) + "/lightOn", rooms[i].lightOn ? "true" : "false");
+    warningAwareDelay(50);
+  }
+  // Start the heartbeat timer from boot: on success wait the full interval, on
+  // failure (e.g. NTP not up yet) loop() retries in HEARTBEAT_RETRY ms.
+  lastStatusPush = pushHeartbeat() ? millis() : millis() - (HEARTBEAT - HEARTBEAT_RETRY);
 }
 
 // ── Parse an integer field like "relayPin":26 — returns PIN_NONE if the
@@ -756,6 +796,27 @@ bool applyCanonicalSlotDelta(const String &roomId, const String &bucket,
     return true;
   }
   String raw = fbGet("/slotRecords/room" + String(ri + 1) + "/today/" + recordId);
+
+  // A slot we already hold: take only its STATE from the canonical record
+  // (activation / expiry / version). The record can be partial (activate.html
+  // writes just the activation fields when no full record exists) or stale
+  // (pushRoom edits times in /rooms without touching /slotRecords), and the
+  // old whole-slot replace then overwrote correct start/end/days with it.
+  if (existing >= 0 && raw != "error" && raw != "null" && raw.length() >= 5) {
+    if (raw.indexOf("\"deleted\":true") >= 0) {
+      for (int i = existing; i < rooms[ri].slotCount - 1; i++) rooms[ri].slots[i] = rooms[ri].slots[i + 1];
+      rooms[ri].slotCount--;
+    } else {
+      Slot &cur = rooms[ri].slots[existing];
+      cur.activated = raw.indexOf("\"activatedAt\":") >= 0 && raw.indexOf("\"activatedAt\":null") < 0;
+      cur.expired = raw.indexOf("\"expired\":true") >= 0;
+      extractRawField(raw, "slotTs").toCharArray(cur.slotTs, sizeof(cur.slotTs));
+      cur.version = extractRawField(raw, "version").toInt();
+    }
+    applyState(ri);
+    return true;
+  }
+
   Slot incoming = {};
   if (!parseOneCanonicalSlot(raw, incoming)) {
     Serial.printf("Sync V2: canonical slot unavailable room=%d id=%s; trying /rooms fallback\n",
@@ -773,24 +834,6 @@ bool applyCanonicalSlotDelta(const String &roomId, const String &bucket,
   mergeSlots(ri);
   applyState(ri);
   return true;
-}
-
-bool refreshAllSlotsFromCanonical() {
-  bool allOk = true;
-  for (int i = 0; i < roomCount; i++) {
-    String json = fbGet("/slotRecords/room" + String(i + 1) + "/today");
-    if (!validateSlotsJsonForRefresh(json)) {
-      Serial.printf("Sync V2: invalid canonical slot payload for room %d; preserving previous RAM state\n", i + 1);
-      allOk = false;
-      warningAwareDelay(100);
-      continue;
-    }
-    if (json == "null") json = "[]";
-    parseSlots(i, json);
-    applyState(i);
-    warningAwareDelay(100);
-  }
-  return allOk;
 }
 
 void refreshPersistentConfig() {
@@ -811,8 +854,15 @@ void refreshPersistentConfig() {
   Serial.println("Sync V2: runtime settings refreshed; GPIO assignments remain locked until reboot");
 }
 
+// A full refresh reads today's slots from /rooms/roomN/slots — the projection
+// the PWA (pushRoom/writeRoomSlots), activate.html and this firmware's own
+// rollover all keep current. It used to read /slotRecords/.../today, but that
+// store is only written for individual slot mutations (never by pushRoom),
+// never cleaned, and may hold partial records: an absent node was treated as
+// "no slots" (relays all OFF) and leftovers from earlier days were reloaded.
+// /slotRecords is now used ONLY for incremental activation deltas.
 bool fullSyncV2Refresh() {
-  if (!refreshAllSlotsFromCanonical()) return false;
+  if (!refreshAllSlotsFromRooms()) return false;
   long g, r;
   if (!loadSyncMeta(g, r)) return false;
   syncGeneration = g;
@@ -1277,6 +1327,81 @@ void updateEmergencyLight() {
   }
 }
 
+// ── Bounded JSON helpers ─────────────────────────────────────
+// Index of the bracket that closes the '{' or '[' at openIdx, skipping quoted
+// strings. -1 if the payload is truncated/unbalanced. Used so a per-room or
+// per-array parse can never read past its own object into the next room's data
+// (Firebase drops null fields, so "field missing" and "field of the NEXT room"
+// looked identical to a plain indexOf() on the rest of the string).
+int findMatchingClose(const String &json, int openIdx) {
+  if (openIdx < 0 || openIdx >= (int)json.length()) return -1;
+  char open = json[openIdx];
+  if (open != '{' && open != '[') return -1;
+  char close = (open == '{') ? '}' : ']';
+  int depth = 0;
+  bool inStr = false;
+  for (int i = openIdx; i < (int)json.length(); i++) {
+    char c = json[i];
+    if (inStr) {
+      if (c == '\\') i++;
+      else if (c == '"') inStr = false;
+      continue;
+    }
+    if (c == '"') inStr = true;
+    else if (c == open) depth++;
+    else if (c == close) { if (--depth == 0) return i; }
+  }
+  return -1;
+}
+
+// Firebase child key (array index or object key) of the slot whose "id" equals
+// slotId inside a /rooms/roomN/slots payload, or "" if absent. Firebase returns
+// a dense list as a JSON array and a sparse one as an object, so handle both.
+// The firmware's own slot array is compacted/merged in RAM, so its index is NOT
+// the Firebase key — writing by RAM index could flag the wrong slot.
+String findSlotFirebaseKey(const String &slotsJson, const char *slotId) {
+  if (!slotId || !slotId[0]) return "";
+  String needle = "\"id\":\"" + String(slotId) + "\"";
+  int n = slotsJson.length();
+  int i = 0;
+  while (i < n && isspace(slotsJson[i])) i++;
+  if (i >= n) return "";
+  bool isArray = (slotsJson[i] == '[');
+  if (!isArray && slotsJson[i] != '{') return "";
+  int pos = i + 1;
+  int arrayIdx = 0;
+  while (pos < n) {
+    while (pos < n && (isspace(slotsJson[pos]) || slotsJson[pos] == ',')) pos++;
+    if (pos >= n || slotsJson[pos] == ']' || slotsJson[pos] == '}') break;
+    String key;
+    if (isArray) {
+      key = String(arrayIdx);
+    } else {
+      if (slotsJson[pos] != '"') break;
+      int ke = slotsJson.indexOf('"', pos + 1);
+      if (ke < 0) break;
+      key = slotsJson.substring(pos + 1, ke);
+      pos = ke + 1;
+      while (pos < n && (isspace(slotsJson[pos]) || slotsJson[pos] == ':')) pos++;
+    }
+    arrayIdx++;
+    if (pos >= n) break;
+    char c = slotsJson[pos];
+    int end;
+    if (c == '{' || c == '[') {
+      end = findMatchingClose(slotsJson, pos);
+      if (end < 0) break;
+      if (c == '{' && slotsJson.substring(pos, end + 1).indexOf(needle) >= 0) return key;
+    } else {
+      // scalar or null — skip to its last character
+      end = pos;
+      while (end + 1 < n && slotsJson[end + 1] != ',' && slotsJson[end + 1] != '}' && slotsJson[end + 1] != ']') end++;
+    }
+    pos = end + 1;
+  }
+  return "";
+}
+
 // ── Read all rooms from Firebase — pins, overrides, names, slots ──
 // Only touches rooms[0..roomCount-1] — roomCount itself is fixed at boot
 // (see setup()) so a room added in the PWA mid-day won't suddenly get a
@@ -1293,14 +1418,29 @@ void readAllRooms() {
     String key = "\"room" + String(i + 1) + "\":{";
     int start = json.indexOf(key);
     if (start < 0) continue;
-    String roomJson = json.substring(start);
+    // Bound the parse to THIS room's own object. It used to be substring(start)
+    // — everything to the end of /rooms — so a field absent from this room
+    // (Firebase drops nulls: no ledPin, no override) was silently read from the
+    // next room instead.
+    int openBrace = start + key.length() - 1;
+    int closeBrace = findMatchingClose(json, openBrace);
+    if (closeBrace < 0) {
+      Serial.printf("readAllRooms: room %d payload truncated — keeping existing state\n", i + 1);
+      continue;
+    }
+    String roomJson = json.substring(openBrace, closeBrace + 1);
 
     // ── Pins — only overwrite relayPin if Firebase actually has a value;
     // never blank out an already-working pin because of one bad/short read.
     // ledPin's PIN_NONE is itself a valid, meaningful state, so always apply it.
-    int rp = parseIntField(roomJson, "relayPin");
-    if (rp >= 0) rooms[i].relayPin = rp;
-    rooms[i].ledPin = parseIntField(roomJson, "ledPin");
+    // GPIO numbers are boot-locked (pinMode was already run for the old ones),
+    // so this function — which also re-runs after every rollover — only assigns
+    // pins before setup() locks them.
+    if (!gpioAssignmentsLocked) {
+      int rp = parseIntField(roomJson, "relayPin");
+      if (rp >= 0) rooms[i].relayPin = rp;
+      rooms[i].ledPin = parseIntField(roomJson, "ledPin");
+    }
 
     // ── Override — strict parsing, never reset on bad value ──
     int ovIdx = roomJson.indexOf("\"override\":");
@@ -1327,10 +1467,12 @@ void readAllRooms() {
     // Slots — Firebase stores as nested object {"slots":{"0":{...},"1":{...}}}
     // Try array format first, then object format
     int slotIdx = roomJson.indexOf("\"slots\":[");
-    if (slotIdx >= 0) {
-      int as = slotIdx + 8;
-      int ae = roomJson.indexOf("]", as) + 1;
-      parseSlots(i, roomJson.substring(as, ae));
+    // The closing ']' must be matched by nesting: the first ']' is usually the
+    // end of a slot's own "days":[..] list, which truncated the slot array.
+    int slotsOpen = (slotIdx >= 0) ? slotIdx + 8 : -1;
+    int slotsClose = (slotsOpen >= 0) ? findMatchingClose(roomJson, slotsOpen) : -1;
+    if (slotsClose > slotsOpen) {
+      parseSlots(i, roomJson.substring(slotsOpen, slotsClose + 1));
     } else {
       // Firebase nested format — fetch directly for this room
       String slotJson = fbGet("/rooms/room" + String(i + 1) + "/slots");
@@ -1404,13 +1546,33 @@ void refreshSlotsOnly() {
   }
 }
 
-// ── Poll overrides every 5 seconds ───────────────────────────
+// ── Poll overrides ───────────────────────────────────────────
+// Reading every room's /override each POLL_INTERVAL cost one HTTPS request per
+// room every 3 s. The PWA now stamps a single /status/overrideSeq (server
+// timestamp; the heartbeat PATCH of /status leaves it alone) in the same write
+// as any override change, so the steady state is ONE tiny
+// read; the per-room scan only runs when that marker moves. A full scan still
+// runs every OVERRIDE_FULL_SCAN ms as a safety net (an older PWA build that
+// doesn't stamp the marker, or a missed read), and on every poll while the
+// marker has never been written at all — i.e. exactly the old behaviour for
+// deployments that haven't got the new PWA yet.
+String lastOverrideSeq = "";
+unsigned long lastOverrideFullScan = 0;
+const unsigned long OVERRIDE_FULL_SCAN = 30000;
+
 void pollOverrides() {
+  String seq = fbGet("/status/overrideSeq");
+  if (seq == "error" || seq == "") return;  // bad read — never change state on error
+  bool seqPresent = (seq != "null");
+  if (seqPresent && seq == lastOverrideSeq && millis() - lastOverrideFullScan < OVERRIDE_FULL_SCAN) {
+    return;  // nothing changed since the last complete scan
+  }
+  bool scanOk = true;
   for (int i = 0; i < roomCount; i++) {
     String val = fbGet("/rooms/room" + String(i + 1) + "/override");
 
     // Skip bad reads — NEVER change state on error
-    if (val == "error" || val == "") { warningAwareDelay(100); continue; }
+    if (val == "error" || val == "") { scanOk = false; warningAwareDelay(100); continue; }
 
     int newOvr;
     if      (val == "true"  || val == "1")  newOvr = 1;
@@ -1418,13 +1580,13 @@ void pollOverrides() {
     else if (val == "null"  || val == "-1") newOvr = -1;
     else {
       // Unknown value — skip, never change active override
-      warningAwareDelay(100); continue;
+      scanOk = false; warningAwareDelay(100); continue;
     }
 
     // Extra guard: if manual override is active and new value is auto (-1)
     // only accept if Firebase returned full "null" string — not a short bad read
     if (rooms[i].ovr != -1 && newOvr == -1 && val.length() < 4) {
-      warningAwareDelay(100); continue;
+      scanOk = false; warningAwareDelay(100); continue;
     }
 
     if (newOvr != rooms[i].ovr) {
@@ -1435,6 +1597,10 @@ void pollOverrides() {
     }
     warningAwareDelay(100);
   }
+  // Remember the marker only after a COMPLETE, clean scan — otherwise the next
+  // poll re-scans instead of trusting a marker whose change we never fully read.
+  lastOverrideFullScan = millis();
+  if (scanOk && seqPresent) lastOverrideSeq = seq;
 }
 
 // Extracts a quoted string field's value from a raw JSON object substring
@@ -1920,8 +2086,9 @@ void checkMidnight() {
 }
 
 // ── Mark slot as expired in Firebase ─────────────────────────
-// Writes ONLY the single field /rooms/roomN/slots/{slotIdx}/expired = true —
-// a targeted per-field write, NOT a full-array rewrite.
+// Writes ONLY the single field /rooms/roomN/slots/{firebaseKey}/expired = true —
+// a targeted per-field write, NOT a full-array rewrite. {firebaseKey} is
+// resolved from the slot's id (see the body); it is not the RAM index.
 //
 // The previous version fetched the whole /slots array, located the slot by a
 // start-time STRING match (first "s":"HH:MM" occurrence — no unique id), spliced
@@ -1938,6 +2105,19 @@ void markSlotExpired(int roomIdx, int slotIdx) {
   // tracks this per slot, so we don't need to fetch/parse the array to know it.
   if (rooms[roomIdx].slots[slotIdx].activated) return;
   String base = "/rooms/room" + String(roomIdx + 1);
+  // slotIdx is this firmware's RAM index. That array is compacted/merged and has
+  // deleted slots removed, so it is NOT the Firebase child key — writing to
+  // /slots/{slotIdx} could flag a different slot or create a stray child. Look
+  // the real key up by the slot's stable id (one small read, once per expiry).
+  // No id (very old data) or not found → skip the remote write; the caller has
+  // already latched expired locally, and the next full refresh reconciles.
+  const char *slotId = rooms[roomIdx].slots[slotIdx].id;
+  String slotsJson = (slotId[0] != '\0') ? fbGet(base + "/slots") : String("error");
+  String fbKey = (slotsJson == "error" || slotsJson == "null") ? String("") : findSlotFirebaseKey(slotsJson, slotId);
+  if (fbKey.length() == 0) {
+    Serial.printf("Room %d slot expiry not written: no matching Firebase slot id\n", roomIdx + 1);
+    return;
+  }
   // Marker before data — same fail-safe ordering as midnightRollover(), and
   // likewise not load-bearing for this firmware's own correctness (the
   // caller already latched rooms[roomIdx].slots[slotIdx].expired locally
@@ -1946,11 +2126,8 @@ void markSlotExpired(int roomIdx, int slotIdx) {
   String newMarker = String((unsigned long)time(nullptr));
   fbPut(base + "/slotsUpdatedAt", newMarker);
   lastSlotsMarker[roomIdx] = newMarker;
-  fbPut(base + "/slots/" + String(slotIdx) + "/expired", "true");
-  if (strlen(rooms[roomIdx].slots[slotIdx].id) > 0) {
-    fbPut("/slotRecords/room" + String(roomIdx + 1) + "/today/" +
-      String(rooms[roomIdx].slots[slotIdx].id) + "/expired", "true");
-  }
+  fbPut(base + "/slots/" + fbKey + "/expired", "true");
+  fbPut("/slotRecords/room" + String(roomIdx + 1) + "/today/" + String(slotId) + "/expired", "true");
   char startBuf[6], endBuf[6];
   snprintf(startBuf, 6, "%02d:%02d", rooms[roomIdx].slots[slotIdx].sh, rooms[roomIdx].slots[slotIdx].sm);
   snprintf(endBuf,   6, "%02d:%02d", rooms[roomIdx].slots[slotIdx].eh, rooms[roomIdx].slots[slotIdx].em);
@@ -2496,7 +2673,12 @@ void loop() {
   // Heartbeat every 5 minutes
   if (millis() - lastStatusPush > HEARTBEAT) {
     lastStatusPush = millis();
-    pushAllStatus();
+    // Only when WiFi is up (otherwise it just burns a 5 s timeout). A failed or
+    // skipped heartbeat (write error, NTP not synced yet) is retried in 30 s
+    // instead of waiting a full 5 min — the PWA marks the board stale at 11 min,
+    // so two silent misses used to be enough to trigger a false alarm.
+    bool hbOk = (WiFi.status() == WL_CONNECTED) && pushHeartbeat();
+    if (!hbOk) lastStatusPush = millis() - (HEARTBEAT - HEARTBEAT_RETRY);
   }
 
   // WiFi watchdog — reboots if disconnected too long
