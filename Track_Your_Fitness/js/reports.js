@@ -126,7 +126,7 @@ const Reports = (function () {
 
       var grand = payments.reduce(function (s, p) { return s + (p.amount || 0); }, 0);
       var html  = '<div class="history-summary">Grand total: <strong>₹' + grand.toFixed(2) + '</strong></div>';
-      html += '<table class="report-table"><thead><tr><th>Date</th><th>Monthly</th><th>Sessions</th><th>Total</th></tr></thead><tbody>';
+      html += '<table class="report-table"><thead><tr><th>Date</th><th>Monthly</th><th>Guest</th><th>Total</th></tr></thead><tbody>';
       dates.forEach(function (d) {
         var row = byDate[d];
         html += '<tr><td>' + fmtDate(d) + '</td><td>₹' + (row.monthly||0).toFixed(2) + '</td><td>₹' + (row.guest_play||0).toFixed(2) + '</td><td><strong>₹' + row.total.toFixed(2) + '</strong></td></tr>';
@@ -196,7 +196,7 @@ const Reports = (function () {
 
       var typeLabel = (selectedType && selectedType !== 'all') ? ' · ' + esc(selectedType) : '';
       var html  = '<div class="history-summary">Grand total' + typeLabel + ': <strong>₹' + totAll.toFixed(2) + '</strong></div>';
-      html += '<table class="report-table"><thead><tr><th>Member</th><th>Type</th><th>Monthly</th><th>Sessions</th><th>Total</th></tr></thead><tbody>';
+      html += '<table class="report-table"><thead><tr><th>Member</th><th>Type</th><th>Monthly</th><th>Guest</th><th>Total</th></tr></thead><tbody>';
       members.forEach(function (m) {
         var row = byMember[m.id] || { monthly: 0, guest_play: 0, total: 0 };
         html += '<tr><td>' + esc(m.name) + '</td><td>' + esc(m.memberType || 'Regular') + '</td><td>₹' + row.monthly.toFixed(2) + '</td><td>₹' + row.guest_play.toFixed(2) + '</td><td><strong>₹' + row.total.toFixed(2) + '</strong></td></tr>';
@@ -345,7 +345,7 @@ const Reports = (function () {
       html += '<div class="report-section-title">Collection breakdown</div>';
       html += '<table class="report-table"><thead><tr><th>Type</th><th>Amount</th></tr></thead><tbody>';
       html += '<tr><td>Monthly contributions</td><td>₹' + totalMonthly.toFixed(2) + '</td></tr>';
-      html += '<tr><td>session fees</td><td>₹' + totalGuest.toFixed(2) + '</td></tr>';
+      html += '<tr><td>Guest fees</td><td>₹' + totalGuest.toFixed(2) + '</td></tr>';
       html += '<tr><td><strong>Total</strong></td><td><strong>₹' + totalCollection.toFixed(2) + '</strong></td></tr>';
       html += '</tbody></table>';
 

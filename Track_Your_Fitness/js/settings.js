@@ -73,7 +73,7 @@ const Settings = (function () {
   // ─── Sync conflicts (optimistic concurrency: reject-and-flag) ───
   var _storeLabels = {
     members: 'Member', contributions: 'Contribution', payments: 'Payment',
-    expenses: 'Expense', guest_sessions: 'Session', monthly_fee_records: 'Fee record',
+    expenses: 'Expense', guest_sessions: 'Guest', monthly_fee_records: 'Fee record',
     attendance: 'Attendance'
   };
 
