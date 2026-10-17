@@ -133,21 +133,43 @@ class FirebaseSync {
     // ─── Task 6.1: saveMatch ──────────────────────────────────────────────────
 
     async saveMatch(record, eventId) {
-        if (!this.available) return;
         const eid = eventId || this.app?.eventManager?.getActiveEventId();
-        if (!eid) return;
+        if (!eid || !record || record.id == null) return;
+
+        const data = { ...record, lastModified: Date.now() };
+
+        // Firebase not ready (SDK missing, init failed, or still booting):
+        // queue the match so it is pushed to the DB on the next sync instead
+        // of being silently dropped. Guarantees every match end reaches the DB.
+        if (!this.available) {
+            this._enqueueMatch(eid, record, data);
+            this.setSyncStatus('offline');
+            return;
+        }
 
         try {
             this.setSyncStatus('syncing');
-            const data = { ...record, lastModified: Date.now() };
             await this.db.collection('events').doc(eid).collection('matches').doc(String(record.id)).set(data);
             this.setSyncStatus('synced');
         } catch (error) {
             console.error('[FirebaseSync] Failed to save match:', error);
-            this._retryQueue.push({ collectionPath: 'events/' + eid + '/matches', docId: String(record.id), data: { ...record, lastModified: Date.now() }, timestamp: Date.now() });
-            this._persistRetryQueue();
+            this._enqueueMatch(eid, record, data);
             this.setSyncStatus('offline');
         }
+    }
+
+    /**
+     * Add (or replace) a match write in the retry queue, keyed by its target
+     * doc path + ID so repeated saves of the same match don't pile up.
+     */
+    _enqueueMatch(eventId, record, data) {
+        const collectionPath = 'events/' + eventId + '/matches';
+        const docId = String(record.id);
+        this._retryQueue = this._retryQueue.filter(
+            e => !(e.collectionPath === collectionPath && e.docId === docId)
+        );
+        this._retryQueue.push({ collectionPath, docId, data, timestamp: Date.now() });
+        this._persistRetryQueue();
     }
 
     // ─── Task 6.2: savePlayerRegistry ─────────────────────────────────────────
@@ -396,6 +418,28 @@ class FirebaseSync {
             console.error('[FirebaseSync] Push player registry failed:', e);
         }
 
+        // Push members (keyed by member ID — never by index)
+        try {
+            const localMembers = this._getLocalMembers(eventId);
+            if (localMembers && localMembers.length > 0) {
+                const batchSize = 500;
+                for (let i = 0; i < localMembers.length; i += batchSize) {
+                    const batch = this.db.batch();
+                    const chunk = localMembers.slice(i, i + batchSize);
+                    for (const member of chunk) {
+                        if (!member || !member.id) continue;
+                        const docRef = this.db.collection('events').doc(eventId)
+                            .collection('members').doc(String(member.id));
+                        batch.set(docRef, { ...member, lastModified: Date.now() });
+                    }
+                    await batch.commit();
+                }
+            }
+            result.membersPushed = true;
+        } catch (e) {
+            console.error('[FirebaseSync] Push members failed:', e);
+        }
+
         return result;
     }
 
@@ -426,6 +470,14 @@ class FirebaseSync {
         const playerNamesKey = this.app?.eventManager?.getPlayerNamesKey() || 'badminton-player-names';
         localStorage.setItem(playerNamesKey, JSON.stringify(remoteData.players || []));
 
+        // Overwrite localStorage members (keyed by member ID in Firestore).
+        // Only overwrite when the remote actually has members, so a transient
+        // empty fetch never wipes locally-added members that haven't pushed yet.
+        if (Array.isArray(remoteData.members) && remoteData.members.length > 0) {
+            const membersKey = `badminton-members-${eventId}`;
+            localStorage.setItem(membersKey, JSON.stringify(remoteData.members));
+        }
+
         // Post-sync UI refresh
         if (this.app) {
             if (typeof this.app.loadMatchHistory === 'function') {
@@ -433,6 +485,14 @@ class FirebaseSync {
             }
             if (typeof this.app.loadPlayerNames === 'function') {
                 this.app.loadPlayerNames();
+            }
+            // Reload members for the active event so pickers / members page
+            // reflect what just came down from Firebase.
+            if (this.app.memberManager && typeof this.app.memberManager.onEventChanged === 'function') {
+                this.app.memberManager.onEventChanged();
+            }
+            if (typeof this.app.populateMemberPickers === 'function') {
+                this.app.populateMemberPickers();
             }
             if (typeof this.app.renderEventSelectors === 'function') {
                 this.app.renderEventSelectors();
@@ -462,7 +522,16 @@ class FirebaseSync {
         const activeDoc = await this.db.collection('events').doc(eid).collection('appData').doc('activeMatch').get();
         const activeMatch = activeDoc.exists ? activeDoc.data() : null;
 
-        return { matches, players, activeMatch };
+        // Fetch members collection (event-scoped, keyed by member ID)
+        const membersSnapshot = await this.db.collection('events').doc(eid).collection('members').get();
+        const members = [];
+        membersSnapshot.forEach(doc => {
+            const data = doc.data() || {};
+            // Ensure the member's ID is the Firestore doc ID (the canonical key).
+            members.push({ ...data, id: data.id || doc.id });
+        });
+
+        return { matches, players, activeMatch, members };
     }
 
     // ─── Helper Methods ───────────────────────────────────────────────────────
@@ -494,6 +563,17 @@ class FirebaseSync {
             return data ? JSON.parse(data) : null;
         } catch (e) {
             return null;
+        }
+    }
+
+    _getLocalMembers(eventId) {
+        try {
+            const eid = eventId || this.app?.eventManager?.getActiveEventId();
+            if (!eid) return [];
+            const data = localStorage.getItem(`badminton-members-${eid}`);
+            return data ? JSON.parse(data) : [];
+        } catch (e) {
+            return [];
         }
     }
 }

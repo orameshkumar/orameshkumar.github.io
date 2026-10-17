@@ -66,9 +66,19 @@ class EventManager {
                     // Merge: use remote events as source of truth for IDs/names
                     // but keep any local-only events that haven't synced yet
                     const merged = this._mergeEventLists(this.events, remoteEvents);
+
+                    // Migrate scoped data from any collapsed local IDs to the
+                    // canonical remote IDs BEFORE replacing the events list.
+                    this._applyMergeRemap(this._lastMergeRemap);
+
                     this.events = merged;
                     this._saveEvents();
                     this._initActiveEvent();
+
+                    // Push the de-duplicated list back so the remote no longer
+                    // carries any stale duplicate the local device introduced.
+                    await this._saveEventsToFirebase();
+
                     console.log('[EventManager] Synced events from Firebase:', merged.length, 'events');
                 }
             } else {
@@ -81,28 +91,108 @@ class EventManager {
     }
 
     /**
-     * Merge local and remote event lists.
+     * Merge local and remote event lists — strictly by event ID.
      * Remote is treated as canonical for existing IDs.
      * Local-only events (not in remote) are preserved.
+     *
+     * Also collapses duplicate "default" events that can be created
+     * independently on multiple devices (each with a different random ID)
+     * before the first sync. When a default event already exists on the
+     * remote, any local-only default is remapped onto the remote default's
+     * ID so the two don't both survive the merge as duplicates.
      */
     _mergeEventLists(local, remote) {
         const mergedMap = new Map();
 
-        // Add all remote events (canonical)
+        // Add all remote events first (canonical by ID)
         for (const event of remote) {
             if (event && event.id) {
                 mergedMap.set(event.id, event);
             }
         }
 
-        // Add local-only events (not present in remote)
-        for (const event of local) {
-            if (event && event.id && !mergedMap.has(event.id)) {
-                mergedMap.set(event.id, event);
+        // Identify the canonical (remote) default event, if any
+        const remoteDefault = remote.find(e => e && e.id && e.isDefault) || null;
+
+        // Build a lookup of remote event names (lowercased) -> id for
+        // collapsing local-only events that are clearly the same event
+        // but were created with a different ID before syncing.
+        const remoteNameToId = new Map();
+        for (const event of remote) {
+            if (event && event.id && typeof event.name === 'string') {
+                remoteNameToId.set(event.name.trim().toLowerCase(), event.id);
             }
         }
 
+        // Track which local id -> canonical id remaps occurred so callers
+        // can migrate event-scoped data keys.
+        this._lastMergeRemap = {};
+
+        for (const event of local) {
+            if (!event || !event.id) continue;
+
+            // Already present by ID (remote canonical wins) — skip.
+            if (mergedMap.has(event.id)) continue;
+
+            // Local-only default collapses onto the remote default's ID.
+            if (event.isDefault && remoteDefault && remoteDefault.id !== event.id) {
+                this._lastMergeRemap[event.id] = remoteDefault.id;
+                continue;
+            }
+
+            // Local-only event whose name matches an existing remote event
+            // collapses onto that remote event's ID (prevents name-dup events).
+            const nameKey = typeof event.name === 'string' ? event.name.trim().toLowerCase() : '';
+            if (nameKey && remoteNameToId.has(nameKey)) {
+                const canonicalId = remoteNameToId.get(nameKey);
+                if (canonicalId !== event.id) {
+                    this._lastMergeRemap[event.id] = canonicalId;
+                    continue;
+                }
+            }
+
+            // Genuinely local-only event — keep it.
+            mergedMap.set(event.id, event);
+        }
+
         return Array.from(mergedMap.values());
+    }
+
+    /**
+     * Re-point event-scoped localStorage keys and the active-event selection
+     * from an old (local) event ID to a canonical (remote) event ID.
+     * Called after _mergeEventLists collapses duplicate events by ID.
+     */
+    _applyMergeRemap(remap) {
+        if (!remap) return;
+        const scopedSuffixes = [
+            'badminton-match-history-',
+            'badminton-player-names-',
+            'badminton-active-match-',
+            'badminton-members-'
+        ];
+
+        for (const [oldId, newId] of Object.entries(remap)) {
+            if (!oldId || !newId || oldId === newId) continue;
+
+            for (const prefix of scopedSuffixes) {
+                const oldKey = `${prefix}${oldId}`;
+                const newKey = `${prefix}${newId}`;
+                const oldVal = localStorage.getItem(oldKey);
+                if (oldVal === null) continue;
+                // Only move data if the canonical key is empty, to avoid
+                // clobbering remote-sourced data for the canonical event.
+                if (localStorage.getItem(newKey) === null) {
+                    localStorage.setItem(newKey, oldVal);
+                }
+                localStorage.removeItem(oldKey);
+            }
+
+            // Re-point active selection if it referenced the old ID.
+            if (this.getActiveEventId() === oldId) {
+                localStorage.setItem('badminton-selected-event', newId);
+            }
+        }
     }
 
     /**

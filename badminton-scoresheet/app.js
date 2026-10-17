@@ -535,10 +535,12 @@ class BadmintonScoreSheet {
         const history = this.getMatchHistory();
         const totalErrors = this.match.allErrors ? this.match.allErrors.length : 0;
         const totalActions = this.match.allActions ? this.match.allActions.length : 0;
+        const activeEventId = this.eventManager.getActiveEventId();
         const record = {
             id: Date.now(),
             date: new Date().toISOString(),
-            eventId: this.eventManager.getActiveEventId(),
+            eventId: activeEventId,
+            eventName: this.eventManager.getActiveEvent()?.name || '',
             teamA: this.match.teamA,
             teamB: this.match.teamB,
             sets: this.match.sets.map(s => ({ scoreA: s.scoreA, scoreB: s.scoreB })),
@@ -546,13 +548,16 @@ class BadmintonScoreSheet {
             winner: this.match.winner,
             errors: totalErrors + totalActions,
             duration: this.getMatchDuration(),
-            allActions: this.match.allActions || []
+            // Full detail payload so the DB record is self-contained
+            allActions: this.match.allActions || [],
+            allErrors: this.match.allErrors || []
         };
         history.unshift(record);
         // Keep last 100 matches
         if (history.length > 100) history.pop();
         localStorage.setItem(this.eventManager.getMatchHistoryKey(), JSON.stringify(history));
-        this.sync?.saveMatch(record);
+        // Push result + details to the DB (queues on failure/offline)
+        this.sync?.saveMatch(record, activeEventId);
     }
 
     // --- Event Listeners ---
@@ -844,7 +849,10 @@ class BadmintonScoreSheet {
             winner: winner,
             errors: 0,
             duration: 'Recorded',
-            eventId: this.eventManager?.getActiveEventId()
+            allActions: [],
+            allErrors: [],
+            eventId: this.eventManager?.getActiveEventId(),
+            eventName: this.eventManager?.getActiveEvent()?.name || ''
         };
 
         const history = this.getMatchHistory();
@@ -852,7 +860,7 @@ class BadmintonScoreSheet {
         if (history.length > 100) history.pop();
         localStorage.setItem(this.eventManager.getMatchHistoryKey(), JSON.stringify(history));
 
-        this.sync?.saveMatch(record);
+        this.sync?.saveMatch(record, record.eventId);
 
         this.hideRecordMatchModal();
         alert(`Match recorded! ${record.teamA.name} ${scoreA} - ${scoreB} ${record.teamB.name}`);
