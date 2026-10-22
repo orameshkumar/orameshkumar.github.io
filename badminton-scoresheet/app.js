@@ -2137,11 +2137,19 @@ class BadmintonScoreSheet {
     }
 
     printLeaderboard() {
-        const content = document.getElementById('leaderboard-content').innerHTML;
+        const rankingContent = document.getElementById('leaderboard-content').innerHTML;
+        const perfEl = document.getElementById('leaderboard-performance');
+        const perfContent = perfEl ? perfEl.innerHTML : '';
         const eventName = this.eventManager?.getActiveEvent()?.name || 'Leaderboard';
         const fromDate = document.getElementById('leaderboard-from').value;
         const toDate = document.getElementById('leaderboard-to').value;
         const dateRange = (fromDate || toDate) ? `${fromDate || 'start'} to ${toDate || 'now'}` : 'All time';
+
+        // Only render the performance block if there's actual content to show.
+        const perfSection = perfContent.trim()
+            ? `<h2 class="section-title">📊 Player Performance</h2>
+               <div class="perf-print-block">${perfContent}</div>`
+            : '';
 
         const printWindow = window.open('', '_blank');
         printWindow.document.write(`<!DOCTYPE html>
@@ -2149,18 +2157,40 @@ class BadmintonScoreSheet {
 <style>
 body { font-family: 'Segoe UI', sans-serif; padding: 20px; color: #333; }
 h1 { font-size: 1.4rem; margin-bottom: 4px; }
+h2.section-title { font-size: 1.1rem; margin: 24px 0 10px; page-break-after: avoid; break-after: avoid; }
 .subtitle { font-size: 0.85rem; color: #666; margin-bottom: 16px; }
-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+
+table { width: 100%; border-collapse: collapse; font-size: 0.85rem; margin-bottom: 8px; }
 th, td { padding: 8px 10px; border-bottom: 1px solid #ddd; text-align: center; }
 th { background: #f5f5f5; font-weight: 600; font-size: 0.8rem; }
-td:nth-child(2) { text-align: left; }
-th:nth-child(2) { text-align: left; }
+/* Ranking table: left-align the player-name column */
+.ranking-block td:nth-child(2), .ranking-block th:nth-child(2) { text-align: left; }
 tr:nth-child(even) { background: #fafafa; }
-@media print { body { padding: 0; } }
+
+/* Keep rows intact across page breaks and repeat headers on each page */
+thead { display: table-header-group; }
+tr, td, th { page-break-inside: avoid; break-inside: avoid; }
+
+/* Performance table: vertical headers + color coding (mirrors on-screen) */
+.perf-table { table-layout: auto; }
+.perf-player-header, .perf-player-name { text-align: left; white-space: nowrap; }
+.perf-vertical { display: inline-block; writing-mode: vertical-rl; transform: rotate(180deg); white-space: nowrap; }
+.perf-col-positive, .perf-cell-positive { background: #e8f5e9 !important; }
+.perf-col-negative, .perf-cell-negative { background: #ffebee !important; }
+.perf-col-total, .perf-cell-total { font-weight: 700; }
+.perf-summary-row td { border-top: 2px solid #999; font-weight: 700; }
+.perf-table-wrapper { overflow: visible; }
+
+@media print {
+  body { padding: 0; }
+  /* Preserve background colors of performance cells when printing */
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
 </style></head><body>
 <h1>🏸 ${eventName} - Player Leaderboard</h1>
 <p class="subtitle">Period: ${dateRange} | Printed: ${new Date().toLocaleDateString()}</p>
-${content}
+<div class="ranking-block">${rankingContent}</div>
+${perfSection}
 </body></html>`);
         printWindow.document.close();
         printWindow.focus();
