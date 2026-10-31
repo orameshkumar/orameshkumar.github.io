@@ -362,7 +362,70 @@ export const UI = {
     });
   },
 
+  renderStatement(st) {
+    $('#report-output').hidden = true;
+    $('#bs-output').hidden = true;
+    const out = $('#stmt-output');
+    out.hidden = false;
+    $('#stmt-heading').textContent = st.heading;
+    $('#stmt-basis').textContent = st.useTotal
+      ? 'Amounts include GST. GST column shows the GST portion.'
+      : 'Amounts are before GST. GST column shows the GST on each entry.';
+
+    const tbody = $('#stmt-rows');
+    const foot = $('#stmt-foot');
+    tbody.innerHTML = '';
+    foot.innerHTML = '';
+    if (!st.groups.length) {
+      tbody.innerHTML = '<tr><td colspan="7" class="empty-note">No entries in this range.</td></tr>';
+    }
+
+    const money = (v) => (v ? formatMoney(v) : '');
+    for (const g of st.groups) {
+      const head = document.createElement('tr');
+      head.className = 'stmt-acct';
+      head.innerHTML = `<td colspan="7">${escapeHtml(g.name)}</td>`;
+      tbody.appendChild(head);
+
+      for (const r of g.rows) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${escapeHtml(formatDateTime(r.date))}</td>
+          <td>${escapeHtml(r.category)}</td>
+          <td>${escapeHtml(r.notes)}</td>
+          <td class="pos">${money(r.income)}</td>
+          <td class="neg">${money(r.expense)}</td>
+          <td>${money(r.gst)}</td>
+          <td>${escapeHtml(r.enteredBy)}</td>`;
+        tbody.appendChild(tr);
+      }
+
+      const sub = document.createElement('tr');
+      sub.className = 'stmt-sub';
+      sub.innerHTML = `
+        <td colspan="3">Subtotal - ${escapeHtml(g.name)} (net ${formatMoney(g.net)})</td>
+        <td class="pos">${formatMoney(g.income)}</td>
+        <td class="neg">${formatMoney(g.expense)}</td>
+        <td>${formatMoney(g.gst)}</td>
+        <td></td>`;
+      tbody.appendChild(sub);
+    }
+
+    if (st.groups.length) {
+      foot.innerHTML = `
+        <tr>
+          <td colspan="3">Grand total (net ${formatMoney(st.net)})</td>
+          <td class="pos">${formatMoney(st.income)}</td>
+          <td class="neg">${formatMoney(st.expense)}</td>
+          <td>${formatMoney(st.gst)}</td>
+          <td></td>
+        </tr>`;
+    }
+    out.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  },
+
   renderReport(report) {
+    $('#stmt-output').hidden = true;
     $('#bs-output').hidden = true;
     const out = $('#report-output');
     out.hidden = false;
@@ -385,6 +448,7 @@ export const UI = {
 
   renderBalanceSheet(bs) {
     $('#report-output').hidden = true;
+    $('#stmt-output').hidden = true;
     const out = $('#bs-output');
     out.hidden = false;
     $('#bs-heading').textContent = bs.heading;

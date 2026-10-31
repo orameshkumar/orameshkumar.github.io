@@ -91,13 +91,13 @@ service cloud.firestore {
 }
 ```
 
-**Storage** (`Storage → Rules`) — a user can only write photo proofs under their own folder; any signed-in user can read them:
+**Storage** (`Storage → Rules`) — the app stores each entry's attachment bundle at `attachments/{uid}/{entryId}.zip`. A user can only write under their own `{uid}` folder; any signed-in user can read (shared ledger). These rules must match the upload path in `js/storage.js` (`attachments/${uid}/${entryId}.zip`) or uploads **and** reads will be denied. The repo ships these in `storage.rules`:
 
 ```
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
-    match /proofs/{uid}/{file} {
+    match /attachments/{uid}/{file=**} {
       allow read: if request.auth != null;
       allow write: if request.auth != null && request.auth.uid == uid;
     }
@@ -105,7 +105,31 @@ service firebase.storage {
 }
 ```
 
+> If you previously used the `proofs/{uid}/{file}` rule, note the code now writes to `attachments/`, so that old rule no longer covers it.
+
 > Adjust the read scope if you want each user to see only their own data instead of a shared ledger.
+
+### 3b. Storage CORS (required when the app is hosted on a different origin)
+
+When the app is served from a domain other than Firebase Hosting (e.g. GitHub Pages at `https://<user>.github.io`), the browser treats uploads to `firebasestorage.googleapis.com` as cross-origin. Without a CORS policy on the bucket, the preflight is blocked and **attachment uploads fail** with:
+
+```
+Access to XMLHttpRequest ... has been blocked by CORS policy
+```
+
+Apply the policy in `cors.json` (edit the `origin` list to match your host) using the Google Cloud SDK or Cloud Shell:
+
+```bash
+gcloud storage buckets update gs://expensetracker-f3e13.firebasestorage.app --cors-file=cors.json
+```
+
+If that bucket name isn't found, try the legacy name `gs://expensetracker-f3e13.appspot.com`. Verify with:
+
+```bash
+gcloud storage buckets describe gs://expensetracker-f3e13.firebasestorage.app --format="default(cors_config)"
+```
+
+CORS changes take effect within about a minute. This is a one-time, server-side setup — no app code change can substitute for it.
 
 ### 4. Run it
 

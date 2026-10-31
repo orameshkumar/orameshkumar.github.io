@@ -210,6 +210,88 @@ export const Reports = {
     };
   },
 
+  /**
+   * Account-wise detailed statement: every entry in the date range grouped by
+   * account head (oldest first), with per-account subtotals and grand totals.
+   * Income and expense are separate columns; GST is the GST portion of each
+   * entry. Amounts are base unless opts.useTotal (GST-inclusive).
+   *
+   * @param opts { accountId (optional filter), useTotal }
+   */
+  accountStatement(entries, accounts, startDate, endDate, opts = {}) {
+    const useTotal = !!opts.useTotal;
+    const acctNames = accountNameMap(accounts);
+    const { start, end } = rangeBounds(startDate, endDate);
+    let filtered = inRange(entries, start, end);
+    if (opts.accountId) filtered = filtered.filter((e) => e.accountId === opts.accountId);
+    const val = (e) => (useTotal ? num(e.totalAmount || e.amount) : num(e.amount));
+
+    const groups = new Map();
+    for (const e of filtered) {
+      const name = acctNames[e.accountId] || 'Unassigned';
+      if (!groups.has(name)) groups.set(name, { name, rows: [], income: 0, expense: 0, gst: 0 });
+      const g = groups.get(name);
+      const isIncome = e.type === 'income';
+      const amount = val(e);
+      g.rows.push({
+        date: e.date,
+        category: e.category || '',
+        notes: e.description || '',
+        income: isIncome ? amount : 0,
+        expense: isIncome ? 0 : amount,
+        gst: num(e.gstAmount),
+        enteredBy: (e.createdBy && (e.createdBy.name || e.createdBy.email)) || ''
+      });
+      if (isIncome) g.income += amount; else g.expense += amount;
+      g.gst += num(e.gstAmount);
+    }
+
+    const list = [...groups.values()].sort((a, b) => {
+      if (a.name === 'Unassigned') return 1;
+      if (b.name === 'Unassigned') return -1;
+      return a.name.localeCompare(b.name);
+    });
+    list.forEach((g) => {
+      g.rows.sort((a, b) => String(a.date).localeCompare(String(b.date)));
+      g.net = g.income - g.expense;
+    });
+
+    const income = list.reduce((s, g) => s + g.income, 0);
+    const expense = list.reduce((s, g) => s + g.expense, 0);
+    const gst = list.reduce((s, g) => s + g.gst, 0);
+    const filterName = opts.accountId ? ` · ${acctNames[opts.accountId] || 'account'}` : '';
+    return {
+      heading: `Account-wise detail - ${startDate} to ${endDate}${filterName}`,
+      useTotal,
+      groups: list,
+      income,
+      expense,
+      net: income - expense,
+      gst,
+      count: filtered.length
+    };
+  },
+
+  /** CSV for an account-wise statement (subtotal row per account + grand total). */
+  accountStatementToCsv(st) {
+    const header = ['Account', 'Date', 'Category', 'Notes', 'Income', 'Expense', 'GST', 'Entered by'];
+    const lines = [header];
+    const money = (v) => csvEscape(num(v).toFixed(2));
+    for (const g of st.groups) {
+      for (const r of g.rows) {
+        lines.push([
+          csvEscape(g.name), csvEscape(formatDateTime(r.date)), csvEscape(r.category), csvEscape(r.notes),
+          r.income ? money(r.income) : '', r.expense ? money(r.expense) : '', money(r.gst), csvEscape(r.enteredBy)
+        ]);
+      }
+      lines.push([csvEscape(`Subtotal - ${g.name}`), '', '', '', money(g.income), money(g.expense), money(g.gst), '']);
+      lines.push([]);
+    }
+    lines.push(['GRAND TOTAL', '', '', '', money(st.income), money(st.expense), money(st.gst), '']);
+    lines.push(['Net (income - expense)', '', '', '', money(st.net)]);
+    return lines.map((r) => r.join(',')).join('\r\n');
+  },
+
   /** CSV for a monthly/range report. */
   toCsv(report) {
     const header = ['Date', 'Type', 'Account', 'Category', 'Description', 'Amount', 'GST', 'Total', 'RecordedBy', 'HasPhoto'];

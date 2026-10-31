@@ -74,16 +74,18 @@ export async function compressImage(file, opts = {}) {
   let edge = opts.maxDimension || ATTACH_LIMITS.MAX_DIMENSION;
   let best = null;
 
-  for (let attempt = 0; attempt < 5; attempt++) {
+  // A phone photo is ~12MP; encoding it at full resolution 25 times froze the
+  // main thread for seconds. Downscale to `edge` up front (once per size) and
+  // sweep just a few quality steps. Two size passes are plenty in practice.
+  for (let attempt = 0; attempt < 2; attempt++) {
     const canvas = drawScaled(img, edge);
-    // Sweep quality from 0.7 down to 0.3.
-    for (let q = 0.7; q >= 0.3; q -= 0.1) {
+    for (const q of [0.6, 0.45, 0.35]) {
       const blob = await canvasToBlob(canvas, q);
       if (!best || blob.size < best.size) best = blob;
       if (blob.size <= target) return blob;
     }
     // Still too big at this size: shrink the longest edge and try again.
-    edge = Math.round(edge * 0.8);
+    edge = Math.round(edge * 0.75);
     if (edge < 300) break;
   }
 
@@ -121,7 +123,10 @@ export const AttachmentStore = {
     for (const file of files) {
       try {
         if (file.type && file.type.startsWith('image/')) {
-          const blob = await compressImage(file);
+          // The UI already compressed these to the target size during
+          // crop/selection. Re-compressing here just burns CPU and freezes
+          // the main thread again, so reuse the bytes as-is when flagged.
+          const blob = file._compressed ? file : await compressImage(file);
           zipFiles.push({ name: `attachment-${String(idx).padStart(2, '0')}.jpg`, data: await blobToUint8(blob) });
         } else {
           const safe = (file.name || `file-${idx}`).replace(/[^\w.\-]+/g, '_');
@@ -156,20 +161,46 @@ export const AttachmentStore = {
    * Download and unzip an entry's attachment bundle into displayable items.
    * @returns {Promise<Array<{name:string, data:Uint8Array, blob:Blob}>>}
    */
-  async fetchAttachments(existingPath) {
-    if (!existingPath) return [];
-    try {
-      const bytes = await getBytes(ref(storage, existingPath));
-      const entries = readZip(bytes);
-      return entries.map((e) => ({
-        name: e.name,
-        data: e.data,
-        blob: new Blob([e.data], { type: guessType(e.name) })
-      }));
-    } catch (e) {
-      console.warn('Could not read existing attachment bundle:', e && e.message);
-      return [];
+  async fetchAttachments(existingPath, downloadUrl) {
+    if (!existingPath && !downloadUrl) return [];
+
+    let bytes = null;
+    let primaryErr = null;
+
+    // Preferred: SDK getBytes (uses the Storage REST endpoint). Needs the
+    // bucket CORS policy to allow this origin.
+    if (existingPath) {
+      try {
+        bytes = await getBytes(ref(storage, existingPath));
+      } catch (e) {
+        primaryErr = e;
+        console.warn('getBytes failed, will try download URL:', e && e.message);
+      }
     }
+
+    // Fallback: fetch the tokenized download URL saved on the entry. This is a
+    // plain cross-origin GET of the same object; it still needs CORS but takes
+    // a different code path and is what the list-view 📎 link already uses.
+    if (!bytes && downloadUrl) {
+      try {
+        const res = await fetch(downloadUrl);
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        bytes = new Uint8Array(await res.arrayBuffer());
+      } catch (e) {
+        console.warn('Download-URL fetch failed:', e && e.message);
+        // Surface the original SDK error if we had one; it's usually clearer.
+        throw primaryErr || e;
+      }
+    }
+
+    if (!bytes) throw (primaryErr || new Error('Could not download attachment bundle.'));
+
+    const entries = readZip(bytes);
+    return entries.map((e) => ({
+      name: e.name,
+      data: e.data,
+      blob: new Blob([e.data], { type: guessType(e.name) })
+    }));
   },
 
   /**
@@ -183,7 +214,12 @@ export const AttachmentStore = {
    * @param {File[]} newFiles
    */
   async rebuildZip(uid, entryId, keptEntries, newFiles) {
-    const kept = (keptEntries || []).map((k) => ({ name: k.name, data: k.data }));
+    // Drop any kept entry whose bytes failed to load (e.g. the existing-bundle
+    // fetch errored). Zipping an entry with undefined data would throw and
+    // abort the whole rebuild, silently losing the attachment the user added.
+    const kept = (keptEntries || [])
+      .filter((k) => k && k.data && k.data.length)
+      .map((k) => ({ name: k.name, data: k.data }));
     const added = await this._toZipEntries(newFiles || [], kept.length + 1);
     const all = kept.concat(added);
     if (!all.length) return null;

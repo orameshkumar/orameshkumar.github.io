@@ -29,10 +29,12 @@ const state = {
   editItems: [],         // unified attachment list for the entry under edit:
                          //   {kind:'existing', name, data, blob} | {kind:'new', name, file, sizeLabel}
   editAttachChanged: false,
+  editHadAttachmentAtOpen: false, // did the entry already have attachmentPath when Edit opened?
   editType: 'expense',
   entryType: 'expense',
   lastReport: null,
   lastBalanceSheet: null,
+  lastStatement: null,
   signupMode: false
 };
 
@@ -148,6 +150,21 @@ async function loadAndWire() {
 
   UI.setSyncStatus(navigator.onLine);
 
+  // Surface the outcome of background attachment uploads (from Add or Edit),
+  // and refresh the list so the 📎 tag appears once the upload lands.
+  Entries.onAttachmentResult(async (info) => {
+    if (info.ok) {
+      state.entries = await Entries.getAllLocal();
+      renderEntries();
+      renderHistory();
+      if (info.count > 0) {
+        UI.toast(`Attachment saved (${info.count} file${info.count === 1 ? '' : 's'}).`, 'success');
+      }
+    } else {
+      UI.toast('Attachment upload failed: ' + info.error, 'error', 5000);
+    }
+  });
+
   // Live subscriptions.
   Accounts.subscribe(
     (list) => {
@@ -246,6 +263,7 @@ async function processIncoming(fileList) {
       const name = (original.name || 'photo').replace(/\.[^.]+$/, '') + '.jpg';
       const file = new File([blob], name, { type: 'image/jpeg' });
       file._sizeLabel = formatKb(blob.size);
+      file._compressed = true; // already at target size; skip re-compress on upload
       state.attachments.push(file);
       renderAttachmentPreview();
     } catch (e) {
@@ -295,6 +313,7 @@ function wireEditModal() {
 async function openEdit(entry) {
   state.editItems = [];
   state.editAttachChanged = false;
+  state.editHadAttachmentAtOpen = !!entry.attachmentPath;
   state.editType = entry.type;
   UI.openEditModal(entry, dateGroupKey, isoToTimeInput);
   renderEditAttachmentPreview();
@@ -307,7 +326,7 @@ async function openEdit(entry) {
       return;
     }
     try {
-      const files = await AttachmentStore.fetchAttachments(entry.attachmentPath);
+      const files = await AttachmentStore.fetchAttachments(entry.attachmentPath, entry.attachmentUrl);
       // Only add if the modal is still showing this same entry.
       if (UI.$('#edit-id').value !== entry.id) return;
       for (const f of files) {
@@ -315,7 +334,11 @@ async function openEdit(entry) {
       }
       renderEditAttachmentPreview();
     } catch (e) {
-      UI.$('#edit-attach-existing').textContent = 'Could not load existing attachments.';
+      // Make the real reason visible instead of a generic message - this is
+      // almost always a Storage CORS or rules problem on the bucket.
+      const msg = (e && e.message) || 'unknown error';
+      UI.$('#edit-attach-existing').textContent = 'Could not load existing attachments: ' + msg;
+      console.warn('Edit attachment load failed:', e);
     }
   }
 }
@@ -339,6 +362,7 @@ async function processEditIncoming(fileList) {
       const blob = await compressImage(source);
       const name = (original.name || 'photo').replace(/\.[^.]+$/, '') + '.jpg';
       const f = new File([blob], name, { type: 'image/jpeg' });
+      f._compressed = true; // already at target size; skip re-compress on upload
       state.editItems.push({ kind: 'new', name, file: f, sizeLabel: formatKb(blob.size) });
       state.editAttachChanged = true;
       renderEditAttachmentPreview();
@@ -387,13 +411,14 @@ async function handleSaveEdit(e) {
   const hasNew = state.editItems.some((x) => x.kind === 'new');
   const attachments = {
     changed: state.editAttachChanged,
+    hadAttachmentAtOpen: state.editHadAttachmentAtOpen,
     kept: state.editItems.filter((x) => x.kind === 'existing').map((x) => ({ name: x.name, data: x.data })),
     added: state.editItems.filter((x) => x.kind === 'new').map((x) => x.file)
   };
 
   const saveBtn = UI.$('#edit-save');
   saveBtn.disabled = true;
-  saveBtn.textContent = hasNew ? 'Uploading…' : 'Saving…';
+  saveBtn.textContent = 'Saving…';
   try {
     await Entries.edit(id, patch, attachments);
     state.editItems = [];
@@ -403,7 +428,11 @@ async function handleSaveEdit(e) {
     renderEntries();
     renderHistory();
     renderAccounts();
-    UI.toast('Transaction updated.', 'success');
+    if (hasNew) {
+      UI.toast('Transaction updated. Attachment is uploading in the background.', 'success');
+    } else {
+      UI.toast('Transaction updated.', 'success');
+    }
   } catch (err) {
     fail(err && err.message);
   } finally {
@@ -542,6 +571,36 @@ function wireAppControls() {
     UI.toast('Report exported.', 'success');
   });
 
+  // Print buttons on every report output. Only one output is visible at a
+  // time; the print stylesheet hides everything else and un-clips the table
+  // so the full report prints across as many pages as it needs.
+  document.querySelectorAll('[data-print]').forEach((btn) =>
+    btn.addEventListener('click', () => {
+      const out = UI.$(btn.dataset.print);
+      if (!out) return;
+      out.dataset.printed = 'Printed ' + new Date().toLocaleString('en-IN');
+      window.print();
+    })
+  );
+
+  // Account-wise detailed report
+  UI.$('#stmt-start').value = firstOfMonth();
+  UI.$('#stmt-end').value = todayDateInput();
+  UI.$('#run-statement').addEventListener('click', () => {
+    const start = UI.$('#stmt-start').value;
+    const end = UI.$('#stmt-end').value;
+    if (!start || !end) return UI.toast('Pick both start and end dates.', 'error');
+    if (start > end) return UI.toast('Start date must be before end date.', 'error');
+    state.lastStatement = Reports.accountStatement(state.entries, state.accounts, start, end, reportOpts());
+    UI.renderStatement(state.lastStatement);
+  });
+  UI.$('#stmt-export').addEventListener('click', () => {
+    if (!state.lastStatement) return;
+    const csv = Reports.accountStatementToCsv(state.lastStatement);
+    downloadFile(`account-detail-${todayDateInput()}.csv`, csv, 'text/csv');
+    UI.toast('Detailed report exported.', 'success');
+  });
+
   // Balance sheet
   UI.$('#run-balance-sheet').addEventListener('click', () => {
     const start = UI.$('#bs-start').value;
@@ -607,9 +666,10 @@ async function handleAddEntry(e) {
 
   const dateIso = dateTimeToIso(dateStr, timeStr);
 
+  const hadAttachments = state.attachments.length > 0;
   const submit = UI.$('#entry-submit');
   submit.disabled = true;
-  submit.textContent = state.attachments.length ? 'Uploading…' : 'Saving…';
+  submit.textContent = 'Saving…';
 
   try {
     await Entries.create(
@@ -633,7 +693,13 @@ async function handleAddEntry(e) {
     renderHistory();
     renderAccounts();
 
-    UI.toast(navigator.onLine ? 'Entry saved & synced.' : 'Saved offline - will sync later.', 'success');
+    if (!navigator.onLine) {
+      UI.toast('Saved offline - will sync later.', 'success');
+    } else if (hadAttachments) {
+      UI.toast('Entry saved. Photo is uploading in the background.', 'success');
+    } else {
+      UI.toast('Entry saved & synced.', 'success');
+    }
     UI.switchTab('list');
   } catch (err) {
     fail('Could not save: ' + (err && err.message));

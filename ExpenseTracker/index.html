@@ -301,6 +301,22 @@
           <button id="run-balance-sheet" class="btn btn-primary btn-block">Generate balance sheet</button>
         </div>
 
+        <div class="card">
+          <h2>Account-wise detailed report</h2>
+          <p class="hint">Every entry grouped by account head, with separate Income / Expense columns, GST, notes, category and who entered it. Subtotal per account. Honors the account filter above.</p>
+          <div class="field-row">
+            <label class="field">
+              <span>Start date</span>
+              <input type="date" id="stmt-start" />
+            </label>
+            <label class="field">
+              <span>End date</span>
+              <input type="date" id="stmt-end" />
+            </label>
+          </div>
+          <button id="run-statement" class="btn btn-primary btn-block">Generate detailed report</button>
+        </div>
+
         <!-- Report output -->
         <div id="report-output" class="report-output" hidden>
           <div class="card report-summary">
@@ -310,7 +326,10 @@
             <div class="stat"><span>Net</span><strong id="report-net">₹0.00</strong></div>
             <div class="stat"><span>GST</span><strong id="report-gst">₹0.00</strong></div>
             <div class="stat"><span>Entries</span><strong id="report-count">0</strong></div>
-            <button id="report-export" class="btn btn-ghost btn-sm">Export CSV</button>
+            <div class="report-actions no-print">
+              <button id="report-export" class="btn btn-ghost btn-sm">Export CSV</button>
+              <button type="button" class="btn btn-ghost btn-sm" data-print="#report-output">Print</button>
+            </div>
           </div>
           <div class="card">
             <h4>By account head</h4>
@@ -323,6 +342,27 @@
           <div class="card">
             <h4>By person</h4>
             <div id="report-by-person" class="report-breakdown"></div>
+          </div>
+        </div>
+
+        <!-- Account-wise detailed report output -->
+        <div id="stmt-output" class="report-output" hidden>
+          <div class="card">
+            <h3 id="stmt-heading">Account-wise detail</h3>
+            <p id="stmt-basis" class="hint"></p>
+            <div class="bs-table-wrap">
+              <table class="bs-table stmt-table">
+                <thead>
+                  <tr><th>Date</th><th>Category</th><th>Notes</th><th>Income</th><th>Expense</th><th>GST</th><th>Entered by</th></tr>
+                </thead>
+                <tbody id="stmt-rows"></tbody>
+                <tfoot id="stmt-foot"></tfoot>
+              </table>
+            </div>
+            <div class="report-actions no-print">
+              <button id="stmt-export" class="btn btn-ghost btn-sm">Export CSV</button>
+              <button type="button" class="btn btn-ghost btn-sm" data-print="#stmt-output">Print</button>
+            </div>
           </div>
         </div>
 
@@ -352,7 +392,10 @@
               <div class="stat"><span>GST paid</span><strong id="bs-gst-paid">₹0.00</strong></div>
               <div class="stat"><span>Net GST</span><strong id="bs-gst-net">₹0.00</strong></div>
             </div>
-            <button id="bs-export" class="btn btn-ghost btn-sm">Export CSV</button>
+            <div class="report-actions no-print">
+              <button id="bs-export" class="btn btn-ghost btn-sm">Export CSV</button>
+              <button type="button" class="btn btn-ghost btn-sm" data-print="#bs-output">Print</button>
+            </div>
           </div>
         </div>
       </section>
