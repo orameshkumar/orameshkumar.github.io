@@ -6,6 +6,24 @@
  *             LittleFS (bundled with modern ESP32 board packages),
  *             WiFi, HTTPClient, WiFiClientSecure (all built-in)
  *
+ *  v6.12 — Emergency light decoupled from rollover / reboot / self-heal give-up:
+ *  - midnightRollover() snapshots each room's lightOn and the emergency timer/latch
+ *    around its applyAllStates(). If no room actually changed state, the timer and
+ *    latch are restored, so a rollover can never re-arm (re-pulse) the emergency
+ *    light. Only a real room ON->OFF transition re-arms it.
+ *  - The timed-out latch is persisted (/emlatch) and restored after a software /
+ *    watchdog / panic reset, so a reboot during standby no longer relights the
+ *    emergency light. A power-on or brownout reset (real outage) still relights it.
+ *    The reset reason is logged at boot.
+ *  - Root cause of the marker-vs-data desync fixed: when the rollover baseline is
+ *    unknown (lastRolloverDay == -1: first boot after a reflash / wiped config) the
+ *    board no longer just adopts "today" — if a room's today bucket holds a
+ *    past-dated one-time slot it runs a real rollover first (throttled retry).
+ *  - Self-heal is now DETECT-ONLY (detectStaleSlots()): it never forces a rollover.
+ *    A marker=today / stale-slot-date mismatch is reported in the heartbeat as
+ *    /status/staleSlots (bool) + /status/staleRooms (bitmask, bit0 = room1) so the
+ *    PWA can warn and the admin can run "Force slot rollover" deliberately.
+ *
  *  v6.11 — Rollover self-heal: cap to ONE attempt per calendar day.
  *  - The v6.10 self-heal re-fired midnightRollover() every SELF_HEAL_MIN_INTERVAL
  *    while a stale-date condition persisted. Each forced rollover runs
@@ -85,13 +103,15 @@
 #include <FS.h>
 #include <LittleFS.h>
 #include <new>        // std::nothrow for the TLS client fallback allocation
+#include <esp_system.h> // esp_reset_reason() — boot-time reset-cause logging + emergency latch restore
 
 
 // Forward declarations used by Sync V2.
 void applyRelayWiringConfig();
 void applyEmergencyPinConfig();
 void applyEmergencyTimeoutConfig();
-void selfHealRollover();
+void detectStaleSlots();
+int  staleRoomMask();
 void applyBeeperPinConfig();
 void applyWarnMinutesConfig();
 void applyBeepConfig();
@@ -183,6 +203,12 @@ unsigned long emergencyOnSince = 0; // millis() when the light last turned ON
 // sitting still validated-but-unchanged. See setEmergencyLightState() below.
 bool emergencyLatchedOff  = false;  // timed out, held off until room activity rearms it
 bool emergencyOutputOn    = false;  // software ownership state; only command function changes GPIO  // true = timed out, held off until re-arm
+// The latch is mirrored to LittleFS so a software/watchdog/panic reboot during a
+// long standby doesn't forget it and relight the emergency light for another full
+// timeout. emergencyLatchPersisted tracks whether the file currently exists, so
+// the file is only written on the latch edge and only erased on a real re-arm.
+const char *EMERGENCY_LATCH_PATH = "/emlatch";
+bool emergencyLatchPersisted = false;
 
 // ── End-of-slot warning — shared beeper + per-room LED blink ──
 // A single controller-wide beeper (not per-room) sounds a short burst when
@@ -336,17 +362,14 @@ int lastRolloverDay = -1;
 // so a device that is alive + time-synced self-heals by forcing a real rollover
 // instead of showing yesterday's stale slots all day.
 char roomSlotsDate[MAX_ROOMS][11] = {{0}};   // "YYYY-MM-DD" per room, or ""
-unsigned long lastSelfHealAttempt = 0;       // throttle: millis() of last forced heal
-const unsigned long SELF_HEAL_MIN_INTERVAL = 300000UL; // >= 5 min between forced heals
-// Epoch-day of the last self-heal ATTEMPT. The self-heal forces at most ONE
-// midnightRollover per calendar day: if that single attempt doesn't clear the
-// stale-date condition, it must NOT keep re-firing every SELF_HEAL_MIN_INTERVAL
-// for the rest of the day. Repeated forced rollovers each run applyAllStates()
-// -> updateEmergencyLight(), which was re-pulsing the emergency light overnight
-// (ON for the 5-min timeout, OFF, then ON again on the next heal). One attempt
-// per day is enough to recover a genuine desync; the real midnight rollover
-// (checkMidnight) handles the normal day boundary and resets this.
-int lastSelfHealDay = -1;
+// Detect-only stale-slot report (see detectStaleSlots()): published in the
+// heartbeat as /status/staleSlots + /status/staleRooms. Never triggers a rollover.
+bool staleSlotsDetected = false;  // marker says "today" but a today bucket is past-dated
+int  staleRoomsMask     = 0;      // bit i = room i+1 is stale
+// Shared throttle for EVERY rollover attempt (midnight, boot catch-up, baseline
+// cleanup) — see tryRollover(). A failed rollover is retried at most this often.
+const unsigned long ROLLOVER_RETRY_MS = 60000UL;
+unsigned long lastRolloverTry = 0; // 0 = no attempt pending throttle
 
 // ── Firebase Sync V2 cursor (persisted in CONFIG_PATH) ─────────
 long syncGeneration = 0;     // YYYYMMDD daily generation
@@ -676,7 +699,9 @@ bool pushHeartbeat() {
   if (!timeSynced) return false;
   String body = "{\"lastSeen\":\"" + getDateStr() + " " + getTime() + "\"" +
                 ",\"lastSeenEpoch\":" + String((unsigned long)time(nullptr)) +
-                ",\"lights\":\"" + lightsString() + "\"}";
+                ",\"lights\":\"" + lightsString() + "\"" +
+                ",\"staleSlots\":" + String(staleSlotsDetected ? "true" : "false") +
+                ",\"staleRooms\":" + String(staleRoomsMask) + "}";
   return fbPatch("/status", body);
 }
 
@@ -1433,6 +1458,21 @@ void setEmergencyLightState(bool on) {
   Serial.printf("[%s] Emergency light -> %s\n", getTime().c_str(), on ? "ON" : "OFF");
 }
 
+// Persist / clear the timed-out latch so it survives a non-power reboot.
+void saveEmergencyLatch() {
+  if (emergencyLatchPersisted) return;
+  File f = LittleFS.open(EMERGENCY_LATCH_PATH, "w");
+  if (!f) return;
+  f.print("1");
+  f.close();
+  emergencyLatchPersisted = true;
+}
+void clearEmergencyLatch() {
+  if (!emergencyLatchPersisted) return;
+  LittleFS.remove(EMERGENCY_LATCH_PATH);
+  emergencyLatchPersisted = false;
+}
+
 // Recomputed after every room state change (called from setRelay(), the
 // single funnel every schedule/override/activation change already goes
 // through) — ON only when every known room is currently OFF.
@@ -1449,6 +1489,7 @@ void updateEmergencyLight() {
     setEmergencyLightState(false);
     emergencyOnSince = 0;
     emergencyLatchedOff = false;
+    clearEmergencyLatch();
     return;
   }
 
@@ -1472,6 +1513,7 @@ void updateEmergencyLight() {
   // Still within the allowed window → on; past it → latch off.
   if (millis() - emergencyOnSince >= (unsigned long)emergencyTimeoutMin * 60000UL) {
     emergencyLatchedOff = true;
+    saveEmergencyLatch();
     setEmergencyLightState(false);
     Serial.printf("[%s] Emergency light auto-off after %d min standby\n", getTime().c_str(), emergencyTimeoutMin);
   } else {
@@ -1798,9 +1840,15 @@ String extractRawField(const String &json, const String &field) {
 // null) — a rollover relabels an existing occurrence from "tomorrow" to
 // "today", it isn't a new booking, so an activation already granted for it
 // shouldn't be undone just because the calendar date changed under it.
+// requireDate ("" = no date filter): when non-empty, only an instance stamped with exactly
+// that date can match. Used when scanning the CURRENT today bucket on a rollover
+// retry — an instance dated today was built by an earlier pass of this same
+// rollover, whereas one dated yesterday is a leftover whose activation must NOT
+// carry over.
 bool findActivatedRecurringInstance(const String &bucketJson, const String &defId,
                                      const String &sStr, const String &eStr,
-                                     String &outActivatedAtRaw, String &outActivatedBy) {
+                                     String &outActivatedAtRaw, String &outActivatedBy,
+                                     const String &requireDate) {
   if (bucketJson == "null" || bucketJson == "" || bucketJson == "error" || bucketJson.length() < 5) return false;
   int pos = 0;
   while (pos < (int)bucketJson.length()) {
@@ -1814,6 +1862,7 @@ bool findActivatedRecurringInstance(const String &bucketJson, const String &defI
     pos = objEnd + 1;
 
     if (obj.indexOf("\"recurring\":true") < 0) continue; // one-time slot — not what we're matching
+    if (requireDate.length() > 0 && extractStringField(obj, "date") != requireDate) continue;
 
     String objDefId = extractStringField(obj, "defId");
     bool matched = (defId.length() > 0 && objDefId == defId) ||
@@ -2018,6 +2067,9 @@ bool midnightRollover() {
 
     // Read tomorrow's one-time slots from Firebase
     String tomorrowJson = fbGet(base + "/slotsT");
+    // The CURRENT today bucket, read only so a retry of a half-finished rollover
+    // can keep activations granted since the earlier pass (see the recurring loop).
+    String existingTodayJson = fbGet(base + "/slots");
 
     // ── Build new TODAY ───────────────────────────────────────
     // Keep today's recurring slots + add tomorrow's one-time slots
@@ -2041,7 +2093,15 @@ bool midnightRollover() {
       snprintf(sBuf, 6, "%02d:%02d", def.sh, def.sm);
       snprintf(eBuf, 6, "%02d:%02d", def.eh, def.em);
       String overrideAt = "", overrideBy = "";
-      findActivatedRecurringInstance(tomorrowJson, String(def.defId), String(sBuf), String(eBuf), overrideAt, overrideBy);
+      // 1) An instance already built for TODAY by an earlier (failed/partial)
+      //    pass of this rollover keeps whatever activation it has gained since —
+      //    otherwise every retry would reset it. Date-filtered so yesterday's
+      //    leftovers (a normal midnight) never carry over.
+      // 2) Otherwise the lookahead activation from the pre-rollover tomorrow bucket.
+      if (!findActivatedRecurringInstance(existingTodayJson, String(def.defId), String(sBuf), String(eBuf),
+                                          overrideAt, overrideBy, getDateStr())) {
+        findActivatedRecurringInstance(tomorrowJson, String(def.defId), String(sBuf), String(eBuf), overrideAt, overrideBy, "");
+      }
       newTodayJson += buildDefSlotJson(i, k, getDateStr(), overrideAt, overrideBy);
       first = false;
     }
@@ -2167,7 +2227,25 @@ bool midnightRollover() {
   // LED from the fresh relay state. All no-ops when the feature is disabled.
   for (int i = 0; i < roomCount; i++) { rooms[i].warning = false; rooms[i].ledBlinkOn = false; }
   warningEpisodeActive = false;
+  // Re-drive relays WITHOUT letting the rollover re-arm the emergency light.
+  // Snapshot each room's state and the emergency timer/latch; if no room actually
+  // changed, restore them — only a real room ON->OFF transition may re-arm.
+  bool prevOn[MAX_ROOMS];
+  int snapCount = (roomCount < MAX_ROOMS) ? roomCount : MAX_ROOMS;
+  for (int i = 0; i < snapCount; i++) prevOn[i] = rooms[i].lightOn;
+  unsigned long savedOnSince = emergencyOnSince;
+  bool savedLatched = emergencyLatchedOff;
   applyAllStates();
+  bool roomChanged = (roomCount != snapCount);
+  for (int i = 0; i < snapCount && !roomChanged; i++) {
+    if (rooms[i].lightOn != prevOn[i]) roomChanged = true;
+  }
+  if (!roomChanged) {
+    emergencyOnSince = savedOnSince;
+    emergencyLatchedOff = savedLatched;
+    if (emergencyLatchedOff) saveEmergencyLatch(); // a transient re-arm may have erased it
+    updateEmergencyLight(); // resync the output with the restored timer/latch
+  }
 
   // Record that today's transition is now handled — this is what lets
   // setup() detect a *missed* rollover after a reboot, so update it however
@@ -2193,6 +2271,22 @@ bool midnightRollover() {
   return true;
 }
 
+// ── Throttled rollover attempt ────────────────────────────────
+// Single entry point for every caller (checkMidnight, boot/NTP catch-up, baseline
+// cleanup). checkMidnight() runs on the 10 s schedule tick, and a failed rollover
+// leaves lastRolloverDay unadvanced — without this gate it would be retried every
+// tick, each attempt blocking the loop on many 5 s HTTPS timeouts (starving
+// checkSchedules()) and rewriting every room. Skips while WiFi is down (nothing
+// useful can be written) and spaces real attempts ROLLOVER_RETRY_MS apart.
+bool tryRollover() {
+  if (WiFi.status() != WL_CONNECTED) return false;
+  if (lastRolloverTry != 0 && millis() - lastRolloverTry < ROLLOVER_RETRY_MS) return false;
+  lastRolloverTry = millis();
+  bool ok = midnightRollover();
+  if (ok) lastRolloverTry = 0; // success — tomorrow's rollover starts unthrottled
+  return ok;
+}
+
 // ── Adopt a rollover the PWA already forced today ─────────────
 // The PWA's Settings → "Force slot rollover now" button applies the same
 // rule as midnightRollover() and writes this same Firebase marker
@@ -2213,19 +2307,52 @@ bool syncRolloverMarkerFromFirebase(int todayEpochDay) {
   return false;
 }
 
+// ── Stale-slot detection (shared by baseline adoption + detect-only report) ──
+// Bitmask of rooms whose today bucket holds a strictly-past one-time slot date.
+// ZERO extra Firebase reads: roomSlotsDate[] is stamped by parseSlots() from slots
+// the firmware already reads. "" (unknown / recurring-only / empty bucket) and
+// today's date are never stale — avoids false positives. 0 when time isn't synced.
+int staleRoomMask() {
+  if (!timeSynced) return 0;
+  String todayStr = getDateStr();
+  int mask = 0;
+  for (int i = 0; i < roomCount && i < MAX_ROOMS; i++) {
+    const char *d = roomSlotsDate[i];
+    if (d[0] != '\0' && strcmp(d, todayStr.c_str()) < 0) mask |= (1 << i);
+  }
+  return mask;
+}
+
+// Root-cause fix for the marker-vs-data desync. With no baseline (lastRolloverDay
+// == -1: first boot after a reflash, wiped LittleFS config, or firmware that
+// predates the field) the board used to just adopt "today" and never clean up, so
+// any stale one-time slots left in the buckets stayed there all day. Now: if a
+// room's today bucket holds a past-dated one-time slot, run the real rollover
+// first (it keeps slots dated today, drops stale ones). On failure the marker stays
+// -1 so the next tick retries, throttled so a failing run can't storm Firebase.
+// With nothing stale, adopt today as before. Safe to call from boot or loop().
+void adoptBaselineOrRollover(int todayEpochDay) {
+  if (staleRoomMask() != 0) {
+    Serial.println("No rollover baseline and a today bucket holds a past-dated slot — running rollover to clean up");
+    tryRollover(); // throttled; on success sets lastRolloverDay + saveConfig() itself
+    return;
+  }
+  lastRolloverDay = todayEpochDay; // nothing stale — just record the baseline
+  saveConfig();
+}
+
 // ── Check if date changed — called every minute ───────────────
 // Uses the same persisted lastRolloverDay/currentEpochDay() marker as the
 // boot-time catch-up in setup() — one shared, retry-safe source of truth.
-// If midnightRollover() fails (e.g. WiFi down right at midnight), the
-// marker is deliberately left unadvanced, so this keeps retrying every
-// minute until it actually succeeds instead of silently skipping that
-// day's rollover until the next reboot.
+// If the rollover fails (e.g. WiFi down right at midnight), the marker is
+// deliberately left unadvanced, so this keeps retrying (throttled to once per
+// ROLLOVER_RETRY_MS by tryRollover()) until it actually succeeds instead of
+// silently skipping that day's rollover until the next reboot.
 void checkMidnight() {
   if (!timeSynced) return; // an unsynced clock's epoch day is meaningless
   int todayEpochDay = currentEpochDay();
   if (lastRolloverDay == -1) {
-    lastRolloverDay = todayEpochDay; // first run ever — nothing to catch up on
-    saveConfig();
+    adoptBaselineOrRollover(todayEpochDay);
     return;
   }
   if (todayEpochDay != lastRolloverDay) {
@@ -2233,7 +2360,7 @@ void checkMidnight() {
       Serial.println("Rollover already done today via PWA — syncing marker");
       return;
     }
-    midnightRollover();
+    tryRollover();
   }
 }
 
@@ -2246,49 +2373,28 @@ void checkMidnight() {
 // rebuilt). Left alone this shows yesterday's stale slots all day and, since
 // they're expired/unactivated, no room turns on.
 //
-// Detection is ZERO extra Firebase reads: it compares today's date against
-// roomSlotsDate[], which parseSlots() already stamped from slots the firmware
-// reads on its normal sync cycle. A heal forces one real midnightRollover(),
-// throttled to at most once per SELF_HEAL_MIN_INTERVAL so a persistently-failing
-// heal can't storm. Guarded so it ONLY runs in the genuine desync state:
-//   - time is synced (otherwise "today" is meaningless),
-//   - the marker already claims today (the pure "marker behind" case is
-//     checkMidnight()'s job, not this),
-//   - at least one room's today bucket carries a strictly-past date.
-void selfHealRollover() {
-  if (!timeSynced) return;
-  int todayEpochDay = currentEpochDay();
-  if (lastRolloverDay != todayEpochDay) return;   // not a desync — checkMidnight handles "behind"
-  // ONE self-heal attempt per calendar day. Without this, a stale-date
-  // condition that a forced rollover can't clear made the self-heal re-fire
-  // every SELF_HEAL_MIN_INTERVAL all day/night; each forced midnightRollover()
-  // runs applyAllStates() -> updateEmergencyLight(), which re-pulsed the
-  // emergency light (ON for the timeout, OFF, ON again next heal) overnight
-  // when no slots were active. One attempt is enough to recover a genuine
-  // desync; the normal midnight rollover resets lastSelfHealDay for the new day.
-  if (lastSelfHealDay == todayEpochDay) return;
-  if (millis() - lastSelfHealAttempt < SELF_HEAL_MIN_INTERVAL && lastSelfHealAttempt != 0) return;
-
-  String todayStr = getDateStr();
-  bool stale = false;
-  for (int i = 0; i < roomCount && i < MAX_ROOMS; i++) {
-    const char *d = roomSlotsDate[i];
-    // A real, strictly-past date is the only trigger. "" (unknown / recurring-
-    // only / empty bucket) and today's date never heal — avoids false positives.
-    if (d[0] != '\0' && strcmp(d, todayStr.c_str()) < 0) { stale = true; break; }
-  }
-  if (!stale) return;
-
-  lastSelfHealDay = todayEpochDay;   // mark attempted today — don't loop if it can't clear
-  lastSelfHealAttempt = millis();
-  Serial.printf("[%s] Rollover self-heal: today bucket holds a stale-dated slot but marker=today — forcing rollover\n",
-    getTime().c_str());
-  // Force the real transform. midnightRollover() rebuilds today from recurring
-  // defs + keeps only today-dated one-time slots (so the stale ones are dropped)
-  // + promotes tomorrow (a no-op if already promoted), then re-reads rooms and
-  // re-drives relays. On success it advances the marker and re-stamps
-  // roomSlotsDate[] via the readAllRooms() it calls, clearing the stale state.
-  midnightRollover();
+// DETECT-ONLY (v6.12). It no longer forces a rollover: a mid-day rollover resets
+// activations on today's recurring slots, promotes tomorrow's bookings into today
+// and blocks the loop for minutes. Instead it flags the state in the heartbeat
+// (/status/staleSlots, /status/staleRooms) so the PWA warns the admin, who can run
+// "Force slot rollover" deliberately. The cause of the desync itself is fixed at
+// source (baseline adoption above; the PWA no longer writes the marker after a
+// partial push).
+//
+// Detection is ZERO extra Firebase reads (see staleRoomMask()). Only reported
+// when time is synced and the marker already claims today — the pure "marker
+// behind" case is checkMidnight()'s job.
+void detectStaleSlots() {
+  int mask = 0;
+  if (timeSynced && lastRolloverDay == currentEpochDay()) mask = staleRoomMask();
+  bool stale = (mask != 0);
+  if (mask == staleRoomsMask && stale == staleSlotsDetected) return;
+  staleRoomsMask = mask;
+  staleSlotsDetected = stale;
+  Serial.printf("[%s] Stale-slot check: %s (room mask 0x%X)\n", getTime().c_str(),
+    stale ? "today bucket holds a past-dated slot but marker=today — reporting in heartbeat" : "clear", mask);
+  // Publish the change promptly instead of waiting out the 5-minute heartbeat.
+  lastStatusPush = millis() - HEARTBEAT - 1;
 }
 
 // ── Mark slot as expired in Firebase ─────────────────────────
@@ -2674,7 +2780,24 @@ void setup() {
   bool forceSetup = shouldForceConfigPortal();
   if (forceSetup) Serial.println("Forcing setup portal (BOOT held 3s)");
 
-  loadConfig(); // pre-fills firebaseUrl from a previous setup, if any
+  loadConfig(); // pre-fills firebaseUrl from a previous setup, if any (also mounts LittleFS)
+
+  // Log why we booted, and restore the emergency-light timeout latch after a
+  // software/watchdog/panic reset so a mid-standby reboot doesn't relight it for a
+  // fresh timeout. A power-on or brownout reset is a real outage — start clean so
+  // the emergency light comes on as usual, and drop any stale latch file.
+  esp_reset_reason_t rr = esp_reset_reason();
+  Serial.printf("Reset reason: %d (1=power-on 3=software 4=panic 5/6/7=watchdog 15=brownout)\n", (int)rr);
+  emergencyLatchPersisted = LittleFS.exists(EMERGENCY_LATCH_PATH);
+  if (emergencyLatchPersisted) {
+    if (rr == ESP_RST_POWERON || rr == ESP_RST_BROWNOUT) {
+      clearEmergencyLatch();
+    } else {
+      emergencyLatchedOff = true;
+      emergencyOnSince = millis();
+      Serial.println("Emergency light timeout latch restored after reboot");
+    }
+  }
 
   runConfigPortal(forceSetup);
 
@@ -2810,11 +2933,10 @@ void setup() {
 void catchUpMissedRollover() {
   int todayEpochDay = currentEpochDay();
   if (lastRolloverDay == -1) {
-    // No baseline yet (first boot on this firmware, or ever) — nothing to
-    // catch up on, just record today so future checks have something to
-    // compare against.
-    lastRolloverDay = todayEpochDay;
-    saveConfig();
+    // No baseline yet (first boot on this firmware, or ever). Record today so
+    // future checks have something to compare against — but clean up first if a
+    // room's today bucket holds a past-dated slot (see adoptBaselineOrRollover()).
+    adoptBaselineOrRollover(todayEpochDay);
     return;
   }
   if (todayEpochDay != lastRolloverDay) {
@@ -2822,7 +2944,7 @@ void catchUpMissedRollover() {
       Serial.println("Rollover already done today via PWA — syncing marker");
     } else {
       Serial.println("Missed rollover while offline — catching up now");
-      midnightRollover(); // updates lastRolloverDay + saveConfig() itself
+      tryRollover(); // throttled; updates lastRolloverDay + saveConfig() itself
     }
   }
 }
@@ -2860,7 +2982,7 @@ void loop() {
     checkSchedules();
     checkEndOfSlotWarnings(); // update per-room warning flags, fire beeper burst on entry
     checkMidnight();  // detect date change → rollover slots
-    selfHealRollover(); // detect a marker-vs-data desync and force a rollover
+    detectStaleSlots(); // detect-only: report a marker-vs-data desync in the heartbeat
   }
 
   // Non-blocking end-of-slot warning outputs — run every iteration so the
