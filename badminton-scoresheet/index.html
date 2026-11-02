@@ -419,11 +419,34 @@
         </div>
     </div>
 
+    <!-- Share Event Leaderboard Modal -->
+    <div id="share-modal" class="qr-modal hidden">
+        <div class="qr-modal-content">
+            <h3>🔗 Share Leaderboard</h3>
+            <p id="share-event-name" style="font-weight:600;"></p>
+            <p id="share-warning" class="hidden" style="color:var(--text-muted); font-size:0.85rem;">Offline: connect to the internet to enable or update sharing.</p>
+            <div id="share-off">
+                <p>Create a public view-only link and QR code for this event's leaderboard. Anyone with the link can view it without logging in.</p>
+                <button class="btn btn-primary btn-sm" id="btn-enable-share">Enable Sharing</button>
+            </div>
+            <div id="share-on" class="hidden">
+                <p>Scan to view the live leaderboard:</p>
+                <canvas id="share-qr-canvas"></canvas>
+                <p class="qr-url" id="share-url-text"></p>
+                <button class="btn btn-secondary btn-sm" id="btn-copy-share">📋 Copy Link</button>
+                <button class="btn btn-error btn-sm" id="btn-disable-share">Stop Sharing</button>
+            </div>
+            <button class="btn btn-secondary btn-sm" id="btn-close-share" style="margin-top:12px;">Close</button>
+        </div>
+    </div>
+
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
     <script src="qrcode-lib.js"></script>
+    <script src="leaderboard-core.js"></script>
     <script src="event-manager.js"></script>
     <script src="member-manager.js"></script>
+    <script src="firebase-config.js"></script>
     <script src="firebase-sync.js"></script>
     <script src="app.js"></script>
 </body>

@@ -1,0 +1,46 @@
+rules_version = '2';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SPARK Badminton Score Sheet - Firestore security rules (REVIEW BEFORE DEPLOY)
+//
+// publicEvents/{token}: the sanitised, view-only leaderboard snapshot behind
+// the shared QR link (view.html?t=<token>).
+//   - get   : anyone who knows the (128-bit random) token can read it.
+//   - list  : DENIED, so tokens cannot be enumerated.
+//   - write : shape/size-validated. The app has no sign-in today, so writes
+//             cannot be tied to a user; see "Hardening" below.
+//
+// Everything else below mirrors the app's current behaviour (open
+// read/write, no sign-in). Replace it with your existing rules if they differ,
+// and do NOT deploy this file without checking what is live first:
+//   firebase deploy --only firestore:rules
+//
+// Hardening (recommended next step): enable Firebase Anonymous Auth in the app
+// and change the `write` rules to `request.auth != null`.
+// ─────────────────────────────────────────────────────────────────────────────
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    match /publicEvents/{token} {
+      allow get: if true;
+      allow list: if false;
+      allow create, update: if token.matches('[A-Za-z0-9_-]{8,128}')
+        && request.resource.data.keys().hasOnly(
+             ['version', 'eventName', 'updatedAt', 'matchCount',
+              'leaderboard', 'performance', 'recentMatches'])
+        && request.resource.data.eventName is string
+        && request.resource.data.eventName.size() <= 100
+        && request.resource.data.leaderboard is list
+        && request.resource.data.leaderboard.size() <= 200;
+      allow delete: if true;
+    }
+
+    // Existing app data (unchanged behaviour - tighten with Anonymous Auth)
+    match /events/{eventId}/{document=**} {
+      allow read, write: if true;
+    }
+    match /appConfig/{doc} {
+      allow read, write: if true;
+    }
+  }
+}

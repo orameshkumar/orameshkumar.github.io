@@ -1794,6 +1794,11 @@ h3 {
     border-color: var(--accent-primary);
 }
 
+.event-card-actions .btn-share-event.is-shared {
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 0 1px var(--accent-primary);
+}
+
 .event-card-actions .btn-delete-event:hover {
     border-color: var(--accent-error);
     color: var(--accent-error);

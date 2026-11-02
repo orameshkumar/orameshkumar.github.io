@@ -111,6 +111,7 @@ class BadmintonScoreSheet {
                     <span class="event-card-date">Created: ${date} ${badge}</span>
                 </div>
                 <div class="event-card-actions">
+                    <button class="btn-share-event ${event.shareToken ? 'is-shared' : ''}" data-id="${event.id}" title="${event.shareToken ? 'Shared - view link / QR' : 'Share leaderboard'}">🔗</button>
                     <button class="btn-members-event" data-id="${event.id}" title="Members">👥</button>
                     <button class="btn-rename-event" data-id="${event.id}" title="Rename">✏️</button>
                     <button class="btn-delete-event" data-id="${event.id}" title="Delete">🗑️</button>
@@ -143,6 +144,10 @@ class BadmintonScoreSheet {
                     } catch(err) { alert(err.message); }
                 }
             });
+        });
+
+        container.querySelectorAll('.btn-share-event').forEach(btn => {
+            btn.addEventListener('click', (e) => this.showShareModal(e.currentTarget.dataset.id));
         });
 
         // Members button handler
@@ -665,6 +670,10 @@ class BadmintonScoreSheet {
         document.getElementById('btn-show-leaderboard').addEventListener('click', () => this.showLeaderboard());
         document.getElementById('btn-show-qr').addEventListener('click', () => this.showQRModal());
         document.getElementById('btn-close-qr').addEventListener('click', () => this.hideQRModal());
+        document.getElementById('btn-close-share').addEventListener('click', () => this.hideShareModal());
+        document.getElementById('btn-enable-share').addEventListener('click', () => this.enableShare());
+        document.getElementById('btn-disable-share').addEventListener('click', () => this.disableShare());
+        document.getElementById('btn-copy-share').addEventListener('click', () => this.copyShareUrl());
 
         // Manual Sync button
         const btnManualSync = document.getElementById('btn-manual-sync');
@@ -1821,6 +1830,7 @@ class BadmintonScoreSheet {
                 .catch(e => console.warn('[App] Failed to delete match from Firebase:', e));
         }
 
+        this.sync?.schedulePublish(eventId);
         this.renderHistoryPage();
     }
 
@@ -1846,6 +1856,7 @@ class BadmintonScoreSheet {
             }
 
             localStorage.removeItem(this.eventManager.getMatchHistoryKey());
+            this.sync?.schedulePublish(eventId);
             this.renderHistoryPage();
         }
     }
@@ -1907,6 +1918,7 @@ class BadmintonScoreSheet {
                 // Sort by date descending
                 history.sort((a, b) => new Date(b.date) - new Date(a.date));
                 localStorage.setItem(this.eventManager.getMatchHistoryKey(), JSON.stringify(history));
+                this.sync?.schedulePublish();
                 this.renderHistoryPage();
                 alert(`Imported ${added} new match(es). ${imported.length - added} duplicate(s) skipped.`);
             } catch (err) {
@@ -2234,8 +2246,79 @@ ${perfSection}
         document.getElementById('qr-modal').classList.add('hidden');
     }
 
-    generateQRCode(text) {
-        const canvas = document.getElementById('qr-canvas');
+    // --- Public Leaderboard Share ---
+    getShareUrl(token) {
+        return new URL(`view.html?t=${encodeURIComponent(token)}`, window.location.href).href;
+    }
+
+    showShareModal(eventId) {
+        const event = this.eventManager.getEventById(eventId);
+        if (!event) return;
+        this._shareEventId = eventId;
+
+        document.getElementById('share-event-name').textContent = event.name;
+        const off = document.getElementById('share-off');
+        const on = document.getElementById('share-on');
+        const warn = document.getElementById('share-warning');
+        warn.classList.toggle('hidden', !!this.sync?.available);
+
+        if (event.shareToken) {
+            const url = this.getShareUrl(event.shareToken);
+            document.getElementById('share-url-text').textContent = url;
+            this.generateQRCode(url, 'share-qr-canvas');
+            off.classList.add('hidden');
+            on.classList.remove('hidden');
+            // Make sure the viewer has up-to-date data when the link is opened
+            this.sync?.publishPublicSummary(eventId);
+        } else {
+            on.classList.add('hidden');
+            off.classList.remove('hidden');
+        }
+        document.getElementById('share-modal').classList.remove('hidden');
+    }
+
+    hideShareModal() {
+        document.getElementById('share-modal').classList.add('hidden');
+        this._shareEventId = null;
+    }
+
+    async enableShare() {
+        const id = this._shareEventId;
+        if (!id) return;
+        if (!this.sync?.available) {
+            alert('Sharing needs an online connection to the cloud. Please try again when online.');
+            return;
+        }
+        this.eventManager.enableSharing(id);
+        await this.sync.publishPublicSummary(id);
+        this.renderEventsPage();
+        this.showShareModal(id);
+    }
+
+    async disableShare() {
+        const id = this._shareEventId;
+        if (!id) return;
+        if (!confirm('Stop sharing? The existing link and QR code will stop working.')) return;
+        const token = this.eventManager.disableSharing(id);
+        if (token) await this.sync?.unpublishPublicSummary(token);
+        this.renderEventsPage();
+        this.showShareModal(id);
+    }
+
+    async copyShareUrl() {
+        const url = document.getElementById('share-url-text').textContent;
+        const btn = document.getElementById('btn-copy-share');
+        try {
+            await navigator.clipboard.writeText(url);
+            btn.textContent = '✅ Copied';
+        } catch (e) {
+            window.prompt('Copy this link:', url);
+        }
+        setTimeout(() => { btn.textContent = '📋 Copy Link'; }, 1500);
+    }
+
+    generateQRCode(text, canvasId = 'qr-canvas') {
+        const canvas = document.getElementById(canvasId);
         const size = 200;
         canvas.width = size;
         canvas.height = size;

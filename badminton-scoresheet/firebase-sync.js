@@ -7,14 +7,7 @@
  * Firebase is the single source of truth after each sync operation.
  */
 
-const firebaseConfig = {
-    apiKey: "AIzaSyD4cbWMOg3yWNHiFW-yCMb5qJUjtSYGGbk",
-    authDomain: "badmintonscoresheet.firebaseapp.com",
-    projectId: "badmintonscoresheet",
-    storageBucket: "badmintonscoresheet.firebasestorage.app",
-    messagingSenderId: "316471666113",
-    appId: "1:316471666113:web:7e6907ae7e802efb44fb40"
-};
+// firebaseConfig is defined in firebase-config.js (loaded before this file)
 
 class FirebaseSync {
     constructor(app) {
@@ -138,6 +131,9 @@ class FirebaseSync {
 
         const data = { ...record, lastModified: Date.now() };
 
+        // Refresh the public leaderboard snapshot (no-op unless event is shared)
+        this.schedulePublish(eid);
+
         // Firebase not ready (SDK missing, init failed, or still booting):
         // queue the match so it is pushed to the DB on the next sync instead
         // of being silently dropped. Guarantees every match end reaches the DB.
@@ -248,6 +244,57 @@ class FirebaseSync {
         }
     }
 
+    // ─── Public Leaderboard Snapshot ──────────────────────────────────────────
+
+    /**
+     * Debounced publish for an event. Safe to call after any history change;
+     * a no-op unless the event is shared.
+     */
+    schedulePublish(eventId) {
+        const eid = eventId || this.app?.eventManager?.getActiveEventId();
+        if (!eid || !this.available) return;
+        this._publishTimers = this._publishTimers || {};
+        clearTimeout(this._publishTimers[eid]);
+        this._publishTimers[eid] = setTimeout(() => {
+            delete this._publishTimers[eid];
+            this.publishPublicSummary(eid);
+        }, 1500);
+    }
+
+    /**
+     * Writes a sanitised leaderboard snapshot to publicEvents/{shareToken}.
+     * @returns {Promise<boolean>} true if written
+     */
+    async publishPublicSummary(eventId) {
+        if (!this.available || typeof LeaderboardCore === 'undefined') return false;
+        const em = this.app?.eventManager;
+        const event = em?.getEventById(eventId);
+        if (!event || !event.shareToken) return false;
+
+        try {
+            const key = em.getMatchHistoryKey(eventId);
+            const raw = localStorage.getItem(key);
+            const history = raw ? JSON.parse(raw) : [];
+            const summary = LeaderboardCore.buildPublicSummary(event, history);
+            await this.db.collection('publicEvents').doc(event.shareToken).set(summary);
+            return true;
+        } catch (error) {
+            console.warn('[FirebaseSync] Failed to publish public summary:', error);
+            return false;
+        }
+    }
+
+    async unpublishPublicSummary(token) {
+        if (!this.available || !token) return false;
+        try {
+            await this.db.collection('publicEvents').doc(token).delete();
+            return true;
+        } catch (error) {
+            console.warn('[FirebaseSync] Failed to unpublish public summary:', error);
+            return false;
+        }
+    }
+
     // ─── Member Sync Methods ──────────────────────────────────────────────────
 
     async saveMember(eventId, member) {
@@ -345,6 +392,7 @@ class FirebaseSync {
 
             await this._pushPhase(eid);
             await this._pullPhase(eid);
+            this.schedulePublish(eid);
             this.setSyncStatus('synced');
         } catch (error) {
             console.error('[FirebaseSync] pushFirstSync failed:', error);

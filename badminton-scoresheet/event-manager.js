@@ -19,6 +19,15 @@ function generateEventId() {
     return `evt_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 }
 
+/**
+ * 128-bit random token (32 hex chars) used as the public leaderboard link ID.
+ */
+function generateShareToken() {
+    const bytes = new Uint8Array(16);
+    crypto.getRandomValues(bytes);
+    return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+}
+
 // ─── EventManager Class ──────────────────────────────────────────────────────
 
 class EventManager {
@@ -301,6 +310,43 @@ class EventManager {
         this._saveEvents();
         this._saveEventsToFirebase();
         this._notifyApp();
+    }
+
+    // ─── Public Leaderboard Sharing ─────────────────────────────────────────
+
+    /**
+     * Turns on public sharing for an event by giving it an unguessable token.
+     * Idempotent: an already-shared event keeps its existing token.
+     * @param {string} eventId
+     * @returns {string} The share token
+     */
+    enableSharing(eventId) {
+        const event = this.events.find(e => e.id === eventId);
+        if (!event) throw new Error(`Event not found: ${eventId}`);
+        if (!event.shareToken) {
+            event.shareToken = generateShareToken();
+            this._saveEvents();
+            this._saveEventsToFirebase();
+        }
+        return event.shareToken;
+    }
+
+    /**
+     * Turns off public sharing. Returns the revoked token (or null) so the
+     * caller can delete the published snapshot.
+     * @param {string} eventId
+     * @returns {string|null}
+     */
+    disableSharing(eventId) {
+        const event = this.events.find(e => e.id === eventId);
+        if (!event) throw new Error(`Event not found: ${eventId}`);
+        const token = event.shareToken || null;
+        if (token) {
+            delete event.shareToken;
+            this._saveEvents();
+            this._saveEventsToFirebase();
+        }
+        return token;
     }
 
     // ─── Task 1.3: Active Event Selection ───────────────────────────────────

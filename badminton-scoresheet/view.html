@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex, nofollow">
+    <title>SPARK Leaderboard</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="icon" type="image/svg+xml" href="icons/app-icon-2.svg">
+    <meta name="theme-color" content="#64ffda">
+    <style>
+        .viewer { max-width: 900px; margin: 0 auto; padding: 16px; }
+        .viewer-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 4px; }
+        .viewer-header h1 { font-size: 1.3rem; margin: 0; }
+        .viewer-meta { color: var(--text-muted); font-size: 0.85rem; margin-bottom: 16px; }
+        .viewer-live { display: inline-flex; align-items: center; gap: 6px; }
+        .viewer-live::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--accent-error); }
+        .viewer-live.on::before { background: var(--color-positive); }
+        .viewer-status { text-align: center; color: var(--text-muted); padding: 48px 16px; }
+        .viewer table { width: 100%; }
+        .viewer h3 { margin-top: 24px; }
+        .recent-match { padding: 10px 12px; border: 1px solid var(--border-color); border-radius: 8px; margin-bottom: 8px; background: var(--bg-card); font-size: 0.9rem; }
+        .recent-match .rm-date { color: var(--text-faint); font-size: 0.75rem; }
+        .recent-match .rm-win { color: var(--accent-primary); font-weight: 600; }
+        .recent-match .rm-score { font-weight: 600; margin-left: 6px; }
+    </style>
+</head>
+<body>
+    <div class="viewer">
+        <div class="viewer-header">
+            <h1>🏸 <span id="event-title">Leaderboard</span></h1>
+            <button class="btn btn-icon" id="btn-theme-toggle" title="Toggle Theme">🌙</button>
+        </div>
+        <div class="viewer-meta">
+            <span id="viewer-live" class="viewer-live">Connecting…</span>
+            <span id="viewer-updated"></span>
+        </div>
+
+        <div id="viewer-status" class="viewer-status">Loading leaderboard…</div>
+
+        <div id="viewer-content" class="hidden">
+            <div id="leaderboard-content" class="leaderboard-content"></div>
+            <h3>📊 Player Performance</h3>
+            <div id="leaderboard-performance" class="leaderboard-content"></div>
+            <h3>🕒 Recent Matches</h3>
+            <div id="recent-matches"></div>
+        </div>
+    </div>
+
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+    <script src="leaderboard-core.js"></script>
+    <script src="firebase-config.js"></script>
+    <script src="view.js"></script>
+</body>
+</html>
