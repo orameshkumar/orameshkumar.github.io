@@ -274,7 +274,23 @@ class FirebaseSync {
         try {
             const key = em.getMatchHistoryKey(eventId);
             const raw = localStorage.getItem(key);
-            const history = raw ? JSON.parse(raw) : [];
+            const local = raw ? JSON.parse(raw) : [];
+
+            // This device may only hold recent matches, so merge in everything
+            // stored in the cloud for the event (matched by id; local wins).
+            const byId = new Map();
+            try {
+                const snap = await this.db.collection('events').doc(eventId).collection('matches').get();
+                snap.forEach(doc => {
+                    const m = doc.data();
+                    if (m) byId.set(String(m.id != null ? m.id : doc.id), m);
+                });
+            } catch (e) {
+                console.warn('[FirebaseSync] Could not read cloud matches for public summary:', e);
+            }
+            local.forEach(m => { if (m && m.id != null) byId.set(String(m.id), m); });
+            const history = Array.from(byId.values());
+
             const summary = LeaderboardCore.buildPublicSummary(event, history);
             await this.db.collection('publicEvents').doc(event.shareToken).set(summary);
             return true;

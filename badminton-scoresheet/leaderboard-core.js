@@ -107,7 +107,8 @@
                 date: m.date || '',
                 teamA: m.teamA.players.slice(0, 2),
                 teamB: m.teamB.players.slice(0, 2),
-                sets: (m.sets || []).map(s => [s.scoreA || 0, s.scoreB || 0]),
+                // Objects, not [a, b] pairs: Firestore rejects nested arrays
+                sets: (m.sets || []).map(s => ({ a: s.scoreA || 0, b: s.scoreB || 0 })),
                 winner: m.winner || ''
             }));
     }

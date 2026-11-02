@@ -102,7 +102,7 @@
         }
         $('recent-matches').innerHTML = matches.map(m => {
             const date = m.date ? new Date(m.date).toLocaleString() : '';
-            const score = (m.sets || []).map(s => `${esc(s[0])}-${esc(s[1])}`).join(', ');
+            const score = (m.sets || []).map(s => `${esc(s.a)}-${esc(s.b)}`).join(', ');
             const a = (m.teamA || []).map(esc).join(' &amp; ');
             const b = (m.teamB || []).map(esc).join(' &amp; ');
             const aw = m.winner === 'A' ? ' class="rm-win"' : '';
